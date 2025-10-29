@@ -273,10 +273,24 @@
 - Dev server starts successfully on port 5175
 - Project builds successfully: `npm run build` ✓
 
-**🎯 Next Session Priorities:**
-- TASK-022: Complete M1 verification (git init, test in browser)
-- TASK-007: Unit test SeededRandom determinism
-- TASK-005: Review if utility types are still needed (may skip)
+**🎯 Next Session Priorities (Week 2-3):**
+1. **Generation Engine Implementation** (Critical Path)
+   - TASK: Create name-generator.ts (~30min)
+   - TASK: Create star-generator.ts (~2hrs)
+   - TASK: Create planet-generator.ts (~3hrs)
+   - TASK: Create moon-generator.ts (~2hrs)
+   - TASK: Create resource-distributor.ts (~1hr)
+   - TASK: Update system-store.ts generateSystem action (~1hr)
+
+2. **Testing & Verification**
+   - TASK-007: Unit test SeededRandom determinism (~30min)
+   - Test generation with known seeds (12345, 99999)
+   - Verify spectral type distribution matches probabilities
+
+3. **Optional Polish**
+   - TASK-005: Review if utility types needed (likely skip)
+   - Add Material Design Icons to UI components
+   - Consider basic loading states for generation
 
 ---
 
