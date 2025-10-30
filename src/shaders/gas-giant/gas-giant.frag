@@ -69,8 +69,8 @@ void main() {
   vec3 lightDir = normalize(vec3(1.0, 0.5, 0.5));
   float diffuse = max(dot(vNormal, lightDir), 0.0);
 
-  // Ambient + diffuse
-  float lighting = 0.4 + diffuse * 0.6;
+  // Ambient + diffuse (higher ambient for visibility)
+  float lighting = 0.5 + diffuse * 0.5;
   finalColor *= lighting;
 
   // Clamp to valid range

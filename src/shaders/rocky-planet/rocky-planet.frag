@@ -36,48 +36,59 @@ void main() {
   // Normalize to 0.0-1.0 range (terrain is elevation)
   terrain = terrain * 0.5 + 0.5;
 
-  // === WATER LEVEL ===
-  // Water appears at low elevations if waterCoverage > 0.3
-  vec3 waterColor = vec3(0.0, 0.4, 0.7); // Deep blue
-
-  // Determine if this fragment is underwater
-  // Water level threshold based on waterCoverage (0.3 = 30% water, 0.7 = 70% water)
-  float waterLevel = 1.0 - u_waterCoverage;
-  bool isWater = u_waterCoverage > 0.3 && terrain < waterLevel;
-
   // === TERRAIN COLOR ===
   vec3 finalColor;
 
-  if (isWater) {
-    // Water regions: blend between deep and shallow water
-    float depth = (waterLevel - terrain) / u_waterCoverage;
+  // Check if planet has water
+  if (u_waterCoverage > 0.3) {
+    // Planet with water: show oceans at low elevations
+    vec3 waterColor = vec3(0.0, 0.4, 0.7); // Deep blue
     vec3 shallowWater = vec3(0.1, 0.6, 0.9); // Lighter blue
-    finalColor = mix(shallowWater, waterColor, depth);
+
+    float waterLevel = 1.0 - u_waterCoverage;
+    bool isWater = terrain < waterLevel;
+
+    if (isWater) {
+      // Water regions: blend between deep and shallow water
+      float depth = clamp((waterLevel - terrain) / u_waterCoverage, 0.0, 1.0);
+      finalColor = mix(shallowWater, waterColor, depth);
+    } else {
+      // Land regions: vary color based on elevation
+      float landElevation = clamp((terrain - waterLevel) / (1.0 - waterLevel), 0.0, 1.0);
+
+      vec3 lowlandColor = u_baseColor * 0.7;      // Darker lowlands
+      vec3 midlandColor = u_baseColor;            // Base color
+      vec3 highlandColor = u_baseColor * 1.3;     // Lighter highlands
+
+      if (landElevation < 0.4) {
+        finalColor = mix(lowlandColor, midlandColor, landElevation / 0.4);
+      } else if (landElevation < 0.7) {
+        finalColor = midlandColor;
+      } else {
+        finalColor = mix(midlandColor, highlandColor, (landElevation - 0.7) / 0.3);
+      }
+
+      // Add small-scale texture variation
+      float microDetail = simplex3D(normPos * 20.0) * 0.08;
+      finalColor += microDetail;
+    }
   } else {
-    // Land regions: vary color based on elevation
-    // Low elevations (near water) - darker terrain
-    // Mid elevations - base terrain color
-    // High elevations - lighter/rocky color
-
-    float landElevation = (terrain - waterLevel) / (1.0 - waterLevel);
-
-    vec3 lowlandColor = u_baseColor * 0.7;      // Darker lowlands
+    // Barren/dry planet: no water, just terrain elevation variation
+    vec3 lowlandColor = u_baseColor * 0.6;      // Darker lowlands
     vec3 midlandColor = u_baseColor;            // Base color
-    vec3 highlandColor = u_baseColor * 1.3;     // Lighter highlands
+    vec3 highlandColor = u_baseColor * 1.4;     // Lighter highlands
 
-    if (landElevation < 0.4) {
-      // Lowlands: dark to base color
-      finalColor = mix(lowlandColor, midlandColor, landElevation / 0.4);
-    } else if (landElevation < 0.7) {
-      // Midlands: base color
+    // Use terrain directly (0.0-1.0) for elevation
+    if (terrain < 0.4) {
+      finalColor = mix(lowlandColor, midlandColor, terrain / 0.4);
+    } else if (terrain < 0.7) {
       finalColor = midlandColor;
     } else {
-      // Highlands: base to light color
-      finalColor = mix(midlandColor, highlandColor, (landElevation - 0.7) / 0.3);
+      finalColor = mix(midlandColor, highlandColor, (terrain - 0.7) / 0.3);
     }
 
     // Add small-scale texture variation
-    float microDetail = simplex3D(normPos * 20.0) * 0.1;
+    float microDetail = simplex3D(normPos * 20.0) * 0.08;
     finalColor += microDetail;
   }
 
@@ -86,8 +97,8 @@ void main() {
   vec3 lightDir = normalize(vec3(1.0, 1.0, 0.5));
   float diffuse = max(dot(vNormal, lightDir), 0.0);
 
-  // Ambient + diffuse
-  float lighting = 0.3 + diffuse * 0.7;
+  // Ambient + diffuse (higher ambient to prevent black planets)
+  float lighting = 0.5 + diffuse * 0.5;
   finalColor *= lighting;
 
   // === ATMOSPHERE GLOW (Fresnel) ===
