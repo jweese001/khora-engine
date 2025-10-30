@@ -35,15 +35,15 @@ interface LODLevel {
  * Three levels of detail for celestial bodies
  * Distances are in scene units (1 AU ≈ 50 units with ORBIT_SCALE)
  *
- * Updated for improved visual quality:
- * - High: Subdivision 5 (10,242 triangles) - Beautiful close-up detail
- * - Medium: Subdivision 3 (2,562 triangles) - Smooth at distance
- * - Low: Subdivision 1 (642 triangles) - Recognizable spheres, not too boxy
+ * Updated for maximum visual quality:
+ * - High: Subdivision 6 (81,920 triangles) - Nearly perfect spheres
+ * - Medium: Subdivision 4 (5,120 triangles) - Very smooth at distance
+ * - Low: Subdivision 2 (320 triangles) - Smooth spheres, good background detail
  */
 const LOD_LEVELS: LODLevel[] = [
-  { subdivision: 5, distance: 0, name: 'high' },     // High detail: close up
-  { subdivision: 3, distance: 75, name: 'medium' },  // Medium: middle distance
-  { subdivision: 1, distance: 250, name: 'low' }     // Low detail: far away
+  { subdivision: 6, distance: 0, name: 'high' },     // High detail: close up
+  { subdivision: 4, distance: 75, name: 'medium' },  // Medium: middle distance
+  { subdivision: 2, distance: 250, name: 'low' }     // Low detail: far away
 ];
 
 // ============================================================================

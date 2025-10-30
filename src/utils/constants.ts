@@ -284,12 +284,12 @@ export const PLANETARY_RADIUS_TO_SCENE_UNITS = 2;
  * LOD (Level of Detail) distance thresholds
  * Distances in scene units from camera
  *
- * Updated for improved visual quality (balanced performance/quality)
+ * Updated for maximum visual quality
  */
 export const LOD_LEVELS = {
-  HIGH: 0,      // 0-75 units: High detail (subdivision 5, 10,242 triangles)
-  MEDIUM: 75,   // 75-250 units: Medium detail (subdivision 3, 2,562 triangles)
-  LOW: 250      // 250+ units: Low detail (subdivision 1, 642 triangles)
+  HIGH: 0,      // 0-75 units: High detail (subdivision 6, 81,920 triangles)
+  MEDIUM: 75,   // 75-250 units: Medium detail (subdivision 4, 5,120 triangles)
+  LOW: 250      // 250+ units: Low detail (subdivision 2, 320 triangles)
 } as const;
 
 /**
