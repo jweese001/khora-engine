@@ -8,6 +8,11 @@
 import { create } from 'zustand';
 import type * as THREE from 'three';
 import type { StarSystem } from '../types/celestial-bodies';
+import { SeededRandom } from '../utils/random';
+import { generateStar } from '../generation/star-generator';
+import { generatePlanets } from '../generation/planet-generator';
+import { generateMoons } from '../generation/moon-generator';
+import { distributePlanetResources, distributeMoonResources } from '../generation/resource-distributor';
 
 // ============================================================================
 // Store State Interface
@@ -121,28 +126,51 @@ export const useSystemStore = create<SystemStore>((set, get) => ({
     set({ isGenerating: true, generationError: null });
 
     try {
-      // TODO: Implement actual generation in Weeks 2-3
-      // For now, just log the seed
-      console.log(`[STUB] generateSystem called with seed: ${seed}`);
+      console.log(`[Store] Generating system with seed: ${seed}`);
 
-      // Placeholder: In real implementation, this will call:
-      // const star = generateStar(seed);
-      // const system: StarSystem = {
-      //   id: `system-${seed}`,
-      //   name: star.name,
-      //   seed,
-      //   star,
-      //   generatedAt: new Date()
-      // };
+      // Create RNG for this system
+      const rng = new SeededRandom(seed);
 
-      // For now, set to null (no generation yet)
+      // Generate star
+      const star = generateStar(seed);
+      console.log(`[Store] Generated star: ${star.name} (${star.spectralType}-type)`);
+
+      // Generate planets
+      star.planets = generatePlanets(star, rng);
+      console.log(`[Store] Generated ${star.planets.length} planets`);
+
+      // Generate moons and resources for each planet
+      star.planets.forEach((planet, i) => {
+        // Generate moons
+        planet.moons = generateMoons(planet, star.mass, rng);
+        console.log(`[Store] Planet ${i} (${planet.name}): ${planet.moons.length} moons`);
+
+        // Distribute planet resources
+        planet.resources = distributePlanetResources(planet, rng);
+
+        // Distribute moon resources
+        planet.moons.forEach(moon => {
+          moon.resources = distributeMoonResources(moon, planet, rng);
+        });
+      });
+
+      // Create complete star system
+      const system: StarSystem = {
+        id: `system-${seed}`,
+        name: star.name,
+        seed,
+        star,
+        generatedAt: new Date()
+      };
+
+      // Update state
       set({
-        currentSystem: null,
+        currentSystem: system,
         isGenerating: false,
         generationError: null
       });
 
-      console.log('[Store] System generation complete (stub)');
+      console.log('[Store] System generation complete:', system);
     } catch (error) {
       console.error('[Store] System generation failed:', error);
       set({

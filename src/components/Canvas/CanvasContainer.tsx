@@ -18,15 +18,15 @@ export function CanvasContainer() {
 
   // Get store state and actions
   const currentSystem = useSystemStore((state) => state.currentSystem);
-  const setScene = useSystemStore((state) => state.setScene);
-  const setCamera = useSystemStore((state) => state.setCamera);
-  const selectObject = useSystemStore((state) => state.selectObject);
 
   // Initialize ThreeSceneManager on mount
   useEffect(() => {
     if (!containerRef.current) return;
 
     console.log('[CanvasContainer] Initializing ThreeSceneManager');
+
+    // Get store actions inside effect to avoid re-render issues
+    const { setScene, setCamera, selectObject } = useSystemStore.getState();
 
     // Create scene manager
     sceneManagerRef.current = new ThreeSceneManager(

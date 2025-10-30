@@ -10,6 +10,10 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import type { StarSystem } from '../../types/celestial-bodies';
+import { createStarObject, calculateSceneUnitsPerSolarRadius } from '../../rendering/StarRenderer';
+import { createPlanetObject } from '../../rendering/PlanetRenderer';
+import { createMoonsForPlanet } from '../../rendering/MoonRenderer';
+import { createTypedOrbitLine } from '../../rendering/OrbitRenderer';
 
 // ============================================================================
 // ThreeSceneManager Class
@@ -91,6 +95,13 @@ export class ThreeSceneManager {
 
     // Dark space background
     scene.background = new THREE.Color(0x000510);
+
+    // Add ambient light so we can see objects even in shadow
+    // This simulates scattered starlight and ensures visibility
+    // Very low intensity (0.05) to preserve star colors and planet colors
+    // Directional lights from star provide most of the illumination
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.05);
+    scene.add(ambientLight);
 
     // Optional: Add fog for depth perception (disabled for space)
     // scene.fog = new THREE.Fog(0x000510, 100, 1000);
@@ -317,24 +328,89 @@ export class ThreeSceneManager {
     // Clear existing system objects
     this.clearSystemObjects();
 
-    // TODO (Week 4-5): Implement actual system rendering
-    // - Create star mesh (StarRenderer.createStarMesh)
-    // - Create planet meshes (PlanetRenderer.createPlanetMesh)
-    // - Create moon meshes (MoonRenderer.createMoonMesh)
-    // - Create orbit lines (OrbitRenderer.createOrbit)
-    // - Position objects with AU_TO_SCENE_UNITS scaling
+    // Star-relative scaling system:
+    // Calculate scaling factor from star size (scene units per solar radius)
+    // All other objects scale relative to this
+    const sceneUnitsPerSolarRadius = calculateSceneUnitsPerSolarRadius(system.star);
 
-    // Placeholder: Add a simple sphere to show system center
-    const placeholderGeometry = new THREE.SphereGeometry(5, 32, 32);
-    const placeholderMaterial = new THREE.MeshBasicMaterial({
-      color: 0xff9900,
-      wireframe: true
+    // Constants for other scaling
+    const ORBIT_SCALE = 50.0; // AU to scene units
+    // Moon orbits now calculated from planet visual size (no scale constant needed)
+
+    // Create star
+    const starObject = createStarObject(system.star, 1.0, true, true);
+    starObject.name = 'star';
+    this.scene.add(starObject);
+
+    console.log(`[ThreeSceneManager] Added star: ${system.star.name} (scaling: ${sceneUnitsPerSolarRadius.toFixed(2)} units/solar radius)`);
+
+    // Create planets, their orbits, and moons
+    system.star.planets.forEach((planet, planetIndex) => {
+      // Create orbit line
+      const orbitLine = createTypedOrbitLine(
+        planet.orbitDistance * ORBIT_SCALE,
+        planet.type
+      );
+      orbitLine.name = `orbit-planet-${planetIndex}`;
+      this.scene.add(orbitLine);
+
+      // Create planet object with star-relative scaling
+      const planetObject = createPlanetObject(planet, sceneUnitsPerSolarRadius, ORBIT_SCALE);
+      planetObject.name = `planet-${planetIndex}`;
+      this.scene.add(planetObject);
+
+      // Create moons for this planet and add as children (not to scene directly)
+      // Moons are positioned relative to planet's visual size automatically
+      const moons = createMoonsForPlanet(
+        planet,
+        planetObject.position, // Legacy parameter, not used
+        sceneUnitsPerSolarRadius
+      );
+
+      moons.forEach((moonGroup, moonIndex) => {
+        moonGroup.name = `moon-${planetIndex}-${moonIndex}`;
+        planetObject.add(moonGroup); // Add as child of planet, not scene
+      });
+
+      console.log(
+        `[ThreeSceneManager] Added planet ${planetIndex + 1}/${system.star.planets.length}: ${planet.name} (${planet.moons.length} moons)`
+      );
     });
-    const placeholder = new THREE.Mesh(placeholderGeometry, placeholderMaterial);
-    placeholder.name = 'system-placeholder';
-    this.scene.add(placeholder);
 
-    console.log('[ThreeSceneManager] System rendered (placeholder)');
+    // Adjust camera to view the whole system
+    this.focusOnSystem(system);
+
+    console.log('[ThreeSceneManager] System rendered successfully');
+  }
+
+  /**
+   * Adjust camera to view the entire system
+   */
+  private focusOnSystem(system: StarSystem): void {
+    const ORBIT_SCALE = 50.0;
+
+    // Find the outermost planet
+    let maxOrbitDistance = 0;
+    system.star.planets.forEach((planet) => {
+      if (planet.orbitDistance > maxOrbitDistance) {
+        maxOrbitDistance = planet.orbitDistance;
+      }
+    });
+
+    // Position camera to view the whole system
+    const systemRadius = maxOrbitDistance * ORBIT_SCALE;
+    const cameraDistance = systemRadius * 2.5; // View from a comfortable distance
+
+    this.camera.position.set(cameraDistance * 0.5, cameraDistance * 0.5, cameraDistance);
+    this.camera.lookAt(0, 0, 0);
+
+    // Update controls target
+    this.controls.target.set(0, 0, 0);
+    this.controls.update();
+
+    console.log(
+      `[ThreeSceneManager] Camera focused on system (radius: ${systemRadius.toFixed(2)} units)`
+    );
   }
 
   /**
@@ -343,19 +419,33 @@ export class ThreeSceneManager {
   private clearSystemObjects(): void {
     const objectsToRemove: THREE.Object3D[] = [];
 
-    this.scene.traverse((object) => {
-      if (object.name !== 'starfield' && object !== this.scene) {
+    // Only collect DIRECT children of scene (not nested objects like moons)
+    this.scene.children.forEach((object) => {
+      if (object.name !== 'starfield') {
         objectsToRemove.push(object);
       }
     });
 
-    // Remove and dispose
+    // Remove and recursively dispose
     objectsToRemove.forEach((object) => {
       this.scene.remove(object);
-      this.disposeObject(object);
+      this.disposeObjectRecursive(object);
     });
 
     console.log('[ThreeSceneManager] System objects cleared');
+  }
+
+  /**
+   * Recursively dispose of object and all its children
+   */
+  private disposeObjectRecursive(object: THREE.Object3D): void {
+    // Dispose children first
+    object.children.forEach((child) => {
+      this.disposeObjectRecursive(child);
+    });
+
+    // Then dispose this object
+    this.disposeObject(object);
   }
 
   /**

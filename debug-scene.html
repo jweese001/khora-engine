@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Khora Debug Scene</title>
+  <style>
+    body { margin: 0; overflow: hidden; background: #000; }
+    canvas { display: block; }
+    #info {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      color: white;
+      font-family: monospace;
+      background: rgba(0,0,0,0.7);
+      padding: 10px;
+      border-radius: 5px;
+      font-size: 12px;
+      max-width: 400px;
+    }
+  </style>
+</head>
+<body>
+  <div id="info">
+    <div id="stats"></div>
+    <div id="selected"></div>
+  </div>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+      }
+    }
+  </script>
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+    // Scene setup
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x000510);
+
+    // Camera
+    const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 10000);
+    camera.position.set(0, 50, 100);
+
+    // Renderer
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    document.body.appendChild(renderer.domElement);
+
+    // Controls
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.05;
+
+    // Ambient light (reduced from 2.0 to 0.3 to see star colors)
+    const ambient = new THREE.AmbientLight(0xffffff, 0.3);
+    scene.add(ambient);
+
+    // Test star with temperature-based color
+    const starTemp = 5778; // Sun-like G-type
+    const starColor = temperatureToColor(starTemp);
+    const starGeo = new THREE.SphereGeometry(40, 32, 32);
+    const starMat = new THREE.MeshBasicMaterial({ color: starColor });
+    const star = new THREE.Mesh(starGeo, starMat);
+    star.userData = { type: 'star', temp: starTemp };
+    scene.add(star);
+
+    // Directional lights from star
+    const dirs = [
+      new THREE.Vector3(1, 0, 0), new THREE.Vector3(-1, 0, 0),
+      new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, -1, 0),
+      new THREE.Vector3(0, 0, 1), new THREE.Vector3(0, 0, -1),
+    ];
+    dirs.forEach(dir => {
+      const light = new THREE.DirectionalLight(starColor, 3.0);
+      light.position.copy(dir).multiplyScalar(100);
+      scene.add(light);
+    });
+
+    // Test rocky planet
+    const planet1 = new THREE.Mesh(
+      new THREE.IcosahedronGeometry(5, 3),
+      new THREE.MeshBasicMaterial({ color: 0x8B7355 })
+    );
+    planet1.position.set(150, 0, 0);
+    planet1.userData = { type: 'planet', name: 'Rocky Test' };
+    scene.add(planet1);
+
+    // Test gas giant
+    const planet2 = new THREE.Mesh(
+      new THREE.IcosahedronGeometry(20, 3),
+      new THREE.MeshBasicMaterial({ color: 0xFFA500 })
+    );
+    planet2.position.set(300, 0, 0);
+    planet2.userData = { type: 'planet', name: 'Gas Giant Test' };
+    scene.add(planet2);
+
+    // Test moons around gas giant
+    for (let i = 0; i < 4; i++) {
+      const angle = (i / 4) * Math.PI * 2;
+      const moonDist = 30 + i * 5; // 30-45 units from planet
+      const moon = new THREE.Mesh(
+        new THREE.IcosahedronGeometry(3, 1),
+        new THREE.MeshBasicMaterial({ color: 0x606060 })
+      );
+      const x = planet2.position.x + Math.cos(angle) * moonDist;
+      const z = planet2.position.z + Math.sin(angle) * moonDist;
+      moon.position.set(x, 0, z);
+      moon.userData = { type: 'moon', name: `Moon ${i}`, parent: 'Gas Giant Test' };
+      scene.add(moon);
+    }
+
+    // Orbit lines
+    function createOrbit(radius, color) {
+      const points = [];
+      const segments = 128;
+      for (let i = 0; i <= segments; i++) {
+        const angle = (i / segments) * Math.PI * 2;
+        points.push(new THREE.Vector3(Math.cos(angle) * radius, 0, Math.sin(angle) * radius));
+      }
+      const geo = new THREE.BufferGeometry().setFromPoints(points);
+      const mat = new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.3 });
+      return new THREE.Line(geo, mat);
+    }
+
+    scene.add(createOrbit(150, 0x8B7355));
+    scene.add(createOrbit(300, 0xFFA500));
+
+    // Temperature to color function
+    function temperatureToColor(temp) {
+      let r, g, b;
+      if (temp < 3500) {
+        r = 1.0; g = 0.3 + (temp - 2000) / 1500 * 0.4; b = 0.0;
+      } else if (temp < 5000) {
+        r = 1.0; g = 0.5 + (temp - 3500) / 1500 * 0.4; b = 0.1 + (temp - 3500) / 1500 * 0.2;
+      } else if (temp < 6000) {
+        r = 1.0; g = 0.9 + (temp - 5000) / 1000 * 0.1; b = 0.4 + (temp - 5000) / 1000 * 0.3;
+      } else if (temp < 7500) {
+        r = 0.9 + (temp - 6000) / 1500 * 0.1; g = 0.9 + (temp - 6000) / 1500 * 0.1; b = 0.8 + (temp - 6000) / 1500 * 0.2;
+      } else if (temp < 10000) {
+        r = 0.95; g = 0.95; b = 1.0;
+      } else if (temp < 30000) {
+        const blend = (temp - 10000) / 20000;
+        r = 0.9 - blend * 0.2; g = 0.9 - blend * 0.2; b = 1.0;
+      } else {
+        r = 0.6; g = 0.7; b = 1.0;
+      }
+      return new THREE.Color(r, g, b);
+    }
+
+    // Raycasting for selection
+    const raycaster = new THREE.Raycaster();
+    const mouse = new THREE.Vector2();
+
+    renderer.domElement.addEventListener('click', (event) => {
+      mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+      mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+      
+      raycaster.setFromCamera(mouse, camera);
+      const intersects = raycaster.intersectObjects(scene.children);
+      
+      if (intersects.length > 0) {
+        const obj = intersects[0].object;
+        if (obj.userData?.type) {
+          document.getElementById('selected').innerHTML = `
+            <strong>Selected:</strong><br>
+            Type: ${obj.userData.type}<br>
+            ${obj.userData.name ? `Name: ${obj.userData.name}<br>` : ''}
+            ${obj.userData.temp ? `Temp: ${obj.userData.temp}K<br>` : ''}
+            ${obj.userData.parent ? `Parent: ${obj.userData.parent}<br>` : ''}
+            Position: (${obj.position.x.toFixed(1)}, ${obj.position.y.toFixed(1)}, ${obj.position.z.toFixed(1)})
+          `;
+        }
+      }
+    });
+
+    // Animation
+    function animate() {
+      requestAnimationFrame(animate);
+      controls.update();
+      
+      // Update stats
+      document.getElementById('stats').innerHTML = `
+        <strong>Debug Scene</strong><br>
+        Camera: (${camera.position.x.toFixed(1)}, ${camera.position.y.toFixed(1)}, ${camera.position.z.toFixed(1)})<br>
+        Objects: ${scene.children.length}<br>
+        <br>
+        <strong>Legend:</strong><br>
+        - Center: Star (should be yellow, temp=${starTemp}K)<br>
+        - 150 units: Rocky planet (brown)<br>
+        - 300 units: Gas giant (orange) with 4 moons
+      `;
+      
+      renderer.render(scene, camera);
+    }
+    animate();
+
+    // Window resize
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+  </script>
+</body>
+</html>

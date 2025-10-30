@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Moon Visibility Test</title>
+  <style>
+    body { margin: 0; background: #000; color: #fff; font-family: monospace; }
+    canvas { display: block; }
+    #info {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      background: rgba(0,0,0,0.8);
+      padding: 15px;
+      border-radius: 5px;
+      font-size: 14px;
+      max-width: 500px;
+    }
+  </style>
+</head>
+<body>
+  <div id="info">
+    <h3 style="margin-top: 0;">Moon Visibility Test</h3>
+    <div id="status">Loading...</div>
+  </div>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+      }
+    }
+  </script>
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x000510);
+
+    const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 10000);
+    camera.position.set(0, 100, 200);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    document.body.appendChild(renderer.domElement);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+
+    // LOW ambient light (0.3) to test star color visibility
+    const ambient = new THREE.AmbientLight(0xffffff, 0.3);
+    scene.add(ambient);
+
+    // Test configurations
+    const configs = [
+      { name: 'Small Rocky', planetRadius: 3, planetColor: 0x8B7355, moonSizes: [0.3, 0.45, 0.6, 0.75] },
+      { name: 'Gas Giant', planetRadius: 25, planetColor: 0xFFA500, moonSizes: [2.5, 3.75, 5.0, 6.25] }
+    ];
+
+    let statusHtml = '<strong>Test Configuration:</strong><br>';
+    statusHtml += 'Ambient Light: 0.3 (to see star colors)<br>';
+    statusHtml += 'Moon sizes: 10%, 15%, 20%, 25% of planet radius<br><br>';
+
+    configs.forEach((config, idx) => {
+      const xOffset = idx * 200 - 100;
+      
+      // Create planet
+      const planet = new THREE.Mesh(
+        new THREE.IcosahedronGeometry(config.planetRadius, 3),
+        new THREE.MeshBasicMaterial({ color: config.planetColor })
+      );
+      planet.position.set(xOffset, 0, 0);
+      scene.add(planet);
+
+      // Add label
+      statusHtml += `<strong>${config.name}</strong>: Planet radius ${config.planetRadius}<br>`;
+
+      // Create moons at 10%, 15%, 20%, 25% of planet size
+      config.moonSizes.forEach((moonSize, moonIdx) => {
+        const angle = (moonIdx / config.moonSizes.length) * Math.PI * 2;
+        const orbitRadius = config.planetRadius * (2 + moonIdx * 0.5); // 2-3.5× planet radius
+        
+        const moon = new THREE.Mesh(
+          new THREE.IcosahedronGeometry(moonSize, 1),
+          new THREE.MeshBasicMaterial({ color: 0x606060 })
+        );
+        
+        const x = xOffset + Math.cos(angle) * orbitRadius;
+        const z = Math.sin(angle) * orbitRadius;
+        moon.position.set(x, 0, z);
+        scene.add(moon);
+
+        const percentage = (moonSize / config.planetRadius * 100).toFixed(0);
+        statusHtml += `  Moon ${moonIdx + 1}: ${moonSize.toFixed(2)} units (${percentage}% of planet)<br>`;
+      });
+
+      // Orbit line
+      const points = [];
+      for (let i = 0; i <= 64; i++) {
+        const a = (i / 64) * Math.PI * 2;
+        const r = config.planetRadius * 3;
+        points.push(new THREE.Vector3(xOffset + Math.cos(a) * r, 0, Math.sin(a) * r));
+      }
+      const orbitLine = new THREE.Line(
+        new THREE.BufferGeometry().setFromPoints(points),
+        new THREE.LineBasicMaterial({ color: config.planetColor, transparent: true, opacity: 0.3 })
+      );
+      scene.add(orbitLine);
+
+      statusHtml += '<br>';
+    });
+
+    // Test star colors
+    const starTemps = [3000, 5778, 10000];
+    const starNames = ['M-type (Red)', 'G-type (Yellow)', 'A-type (Blue-white)'];
+    
+    statusHtml += '<strong>Star Colors:</strong><br>';
+    starTemps.forEach((temp, idx) => {
+      const star = new THREE.Mesh(
+        new THREE.SphereGeometry(15, 32, 32),
+        new THREE.MeshBasicMaterial({ color: temperatureToColor(temp) })
+      );
+      star.position.set(-150 + idx * 150, 100, -100);
+      scene.add(star);
+      statusHtml += `${starNames[idx]}: ${temp}K<br>`;
+    });
+
+    document.getElementById('status').innerHTML = statusHtml;
+
+    function temperatureToColor(temp) {
+      let r, g, b;
+      if (temp < 3500) {
+        r = 1.0; g = 0.3 + (temp - 2000) / 1500 * 0.4; b = 0.0;
+      } else if (temp < 5000) {
+        r = 1.0; g = 0.5 + (temp - 3500) / 1500 * 0.4; b = 0.1 + (temp - 3500) / 1500 * 0.2;
+      } else if (temp < 6000) {
+        r = 1.0; g = 0.9 + (temp - 5000) / 1000 * 0.1; b = 0.4 + (temp - 5000) / 1000 * 0.3;
+      } else if (temp < 7500) {
+        r = 0.9 + (temp - 6000) / 1500 * 0.1; g = 0.9 + (temp - 6000) / 1500 * 0.1; b = 0.8 + (temp - 6000) / 1500 * 0.2;
+      } else if (temp < 10000) {
+        r = 0.95; g = 0.95; b = 1.0;
+      } else if (temp < 30000) {
+        const blend = (temp - 10000) / 20000;
+        r = 0.9 - blend * 0.2; g = 0.9 - blend * 0.2; b = 1.0;
+      } else {
+        r = 0.6; g = 0.7; b = 1.0;
+      }
+      return new THREE.Color(r, g, b);
+    }
+
+    function animate() {
+      requestAnimationFrame(animate);
+      controls.update();
+      renderer.render(scene, camera);
+    }
+    animate();
+
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+  </script>
+</body>
+</html>

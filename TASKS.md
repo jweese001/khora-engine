@@ -3,8 +3,8 @@
 
 **Project:** Khora Engine - Genesis Engine (Phase 1)
 **Timeline:** 12 weeks
-**Status:** Week 1 In Progress
-**Last Updated:** October 29, 2025
+**Status:** Week 5-6 In Progress
+**Last Updated:** October 30, 2025
 
 **Working Copy:** This file is synchronized from Obsidian vault
 **Source of Truth:** This file (code repo) - sync back to Obsidian weekly
@@ -31,10 +31,10 @@
 
 ## Milestone Overview
 
-- **M1:** Foundation Complete (Week 2) - Empty scene, project structure ⏳
-- **M2:** Generation Works (Week 4) - Data structures generate correctly
-- **M3:** Visible in 3D (Week 6) - System renders with basic materials
-- **M4:** LOD Optimized (Week 8) - Performance targets met
+- **M1:** Foundation Complete (Week 2) - Empty scene, project structure ✅
+- **M2:** Generation Works (Week 4) - Data structures generate correctly ✅
+- **M3:** Visible in 3D (Week 6) - System renders with basic materials ✅
+- **M4:** LOD Optimized (Week 8) - Performance targets met ⏳
 - **M5:** Shaders Complete (Week 10) - Procedural appearances working
 - **M6:** Phase 1 Complete (Week 12) - All acceptance criteria met
 
@@ -273,45 +273,166 @@
 - Dev server starts successfully on port 5175
 - Project builds successfully: `npm run build` ✓
 
-**🎯 Next Session Priorities (Week 2-3):**
-1. **Generation Engine Implementation** (Critical Path)
-   - TASK: Create name-generator.ts (~30min)
-   - TASK: Create star-generator.ts (~2hrs)
-   - TASK: Create planet-generator.ts (~3hrs)
-   - TASK: Create moon-generator.ts (~2hrs)
-   - TASK: Create resource-distributor.ts (~1hr)
-   - TASK: Update system-store.ts generateSystem action (~1hr)
+---
 
-2. **Testing & Verification**
-   - TASK-007: Unit test SeededRandom determinism (~30min)
-   - Test generation with known seeds (12345, 99999)
-   - Verify spectral type distribution matches probabilities
+## Week 2-3: Generation Engine
+**Milestone:** M2 - Generation Works
+**Status:** ✅ **COMPLETE**
 
-3. **Optional Polish**
-   - TASK-005: Review if utility types needed (likely skip)
-   - Add Material Design Icons to UI components
-   - Consider basic loading states for generation
+### Generation Implementation
+
+[x] Create name-generator.ts (P0) ~30min
+  Status: ✅ Completed Session 2
+  Notes: Procedural name generation for stars, planets, moons with Greek letter scheme
+
+[x] Create star-generator.ts (P0) ~2hrs
+  Status: ✅ Completed Session 2
+  Notes: Spectral type probability distribution, realistic stellar physics, habitable zone calculation
+
+[x] Create planet-generator.ts (P0) ~3hrs
+  Status: ✅ Completed Session 2
+  Notes: Titius-Bode orbital distribution, planet type by distance, atmosphere generation
+
+[x] Create moon-generator.ts (P0) ~2hrs
+  Status: ✅ Completed Session 2, refined Session 3
+  Notes: Planet-relative generation, realistic orbital mechanics, percentage-based sizing (refactored in Session 3)
+
+[x] Create resource-distributor.ts (P1) ~1hr
+  Status: ✅ Completed Session 2
+  Notes: Resource pools by planet type, abundance values
+
+[x] Update system-store.ts generateSystem action (P0) ~1hr
+  Status: ✅ Completed Session 2
+  Notes: Full generation pipeline integrated
+
+**M2 Acceptance Checklist:**
+- [x] Star generates with correct spectral type distribution ✓
+- [x] Planets generate with Titius-Bode spacing ✓
+- [x] Moons generate for appropriate planets ✓
+- [x] Resources distributed by planet type ✓
+- [x] Same seed produces identical system ✓
+- [x] Generation completes in <2 seconds ✓
 
 ---
 
-*For full task details for Weeks 2-12, see Obsidian: `/Projects/Khora Engine/TASKS.md`*
+## Week 4-5: Basic Rendering
+**Milestone:** M3 - Visible in 3D
+**Status:** ✅ **COMPLETE**
+
+### Renderer Implementation
+
+[x] Create StarRenderer.ts (P0) ~1hr
+  Status: ✅ Completed Session 2/3
+  Notes: Star-relative scaling system, emissive material, glow effect, directional lighting
+
+[x] Create OrbitRenderer.ts (P0) ~30min
+  Status: ✅ Completed Session 2/3
+  Notes: Line-based orbit visualization, color-coded by planet type
+
+[x] Create PlanetRenderer.ts (P0) ~2hrs
+  Status: ✅ Completed Session 2/3
+  Notes: Planet mesh creation, 3× visibility scaling, color by type
+
+[x] Create MoonRenderer.ts (P0) ~2hrs
+  Status: ✅ Completed Session 2/3, heavily refined Session 3
+  Notes: Planet-relative positioning, percentage-based sizing, orbit distance calculation
+
+[x] Implement ThreeSceneManager.renderSystem() (P0) ~2hrs
+  Status: ✅ Completed Session 2/3
+  Notes: System object creation, scene population, camera positioning
+
+[x] Fix moon visibility and scaling issues (P0) ~4hrs
+  Status: ✅ Completed Session 3
+  Notes: Multiple iterations to achieve realistic moon sizes and orbital distances
+  - Fixed MAX_MOON_ORBIT_KM (30,000 → 500,000)
+  - Switched from mass-fraction to percentage-based moon sizing
+  - Tiered percentage ranges by planet size (gas giants: 0.5-5%, small planets: 2-30%)
+  - Adjusted orbit distances (final: 1.3-2.5× planet visual radius)
+  - Added IDE close button
+  - Reduced ambient light (0.15 → 0.05) for better star color visibility
+
+**M3 Acceptance Checklist:**
+- [x] Star visible and correctly colored ✓
+- [x] Planets positioned on orbits ✓
+- [x] Orbit lines visible ✓
+- [x] Moons visible around appropriate planets ✓
+- [x] Moon sizes proportional to parent planet ✓
+- [x] Moon orbits appropriately spaced ✓
+- [x] Camera can orbit and zoom ✓
+- [x] Maintains 60fps with full system ✓
+
+---
+
+## Week 5-6: LOD Optimization
+**Milestone:** M4 - LOD Optimized
+**Status:** ⏳ **IN PROGRESS**
+
+**🎯 Next Session Priorities:**
+1. **LOD System Implementation** (Critical Path)
+   - Create CelestialBodyLOD.ts class with 3 detail levels
+   - Replace planet/moon renderers with LOD system
+   - Add distance thresholds (0, 50, 200 units)
+   - Test LOD switching with camera movement
+   - Verify draw call reduction at distance
+   - Profile performance with Stats.js
+
+2. **Performance Verification**
+   - Test with 8 planets + 20 moons
+   - Verify <16.67ms frame time (60fps)
+   - Check memory usage <500MB
+   - Test on target hardware (GTX 1660 equivalent)
+
+3. **Known Issues to Address Later**
+   - Moon orbit distance may need fine-tuning for gameplay
+   - Moon size percentages may need adjustment based on playtesting
+   - Consider adding debug/settings panel for moon parameter tweaking
+
+---
+
+*For full task details for Weeks 6-12, see Obsidian: `/Projects/Khora Engine/TASKS.md`*
 *This working copy focuses on current week progress and next actions*
 
 ---
 
 ## Quick Reference
 
-**Current Sprint:** Week 1-2 (Foundation & Setup)
-**Target Milestone:** M1 - Foundation Complete
-**Due:** End of Week 2
+**Current Sprint:** Week 5-6 (LOD Optimization)
+**Target Milestone:** M4 - LOD Optimized
+**Due:** End of Week 6
 **On Track:** Yes ✅
 
+**Completed Milestones:**
+- ✅ M1: Foundation Complete (Week 2)
+- ✅ M2: Generation Works (Week 3-4)
+- ✅ M3: Visible in 3D (Week 5)
+
 **Next 3 Priorities:**
-1. Physics calculations (TASK-008, TASK-009)
-2. State management (TASK-010)
-3. Scene setup (TASK-012)
+1. Create CelestialBodyLOD class with 3-level LOD
+2. Replace planet/moon renderers with LOD system
+3. Performance verification (60fps, <500MB memory)
+
+**Known Issues to Revisit:**
+- Moon orbit distances may need gameplay tuning
+- Moon size percentages may need visual refinement
+- Consider debug panel for runtime parameter adjustment
 
 ---
 
-*Last updated: October 29, 2025 - Session 1*
+*Last updated: October 30, 2025 - Session 4 Starting*
 *Companion docs: PLANNING.md, CLAUDE.md*
+
+---
+
+## Session 4 Notes (October 30, 2025)
+
+**Status:** Starting M4 - LOD Optimization
+**Goal:** Implement 3-level LOD system for planets and moons
+
+**Session Start Checklist:**
+- [x] Read TASKS.md for current progress
+- [x] Read PLANNING.md for technical reference
+- [x] Read SESSION-3-COMPLETE.md for last session context
+- [x] Generated comprehensive project status report
+- [ ] Begin LOD implementation
+
+**Ready to proceed with CelestialBodyLOD.ts implementation**

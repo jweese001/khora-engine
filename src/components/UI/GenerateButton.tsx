@@ -9,10 +9,8 @@ import { useSystemStore } from '../../store/system-store';
 
 export function GenerateButton() {
   const [seedInput, setSeedInput] = useState('');
-  const { generateSystem, isGenerating } = useSystemStore((state) => ({
-    generateSystem: state.generateSystem,
-    isGenerating: state.isGenerating
-  }));
+  const generateSystem = useSystemStore((state) => state.generateSystem);
+  const isGenerating = useSystemStore((state) => state.isGenerating);
 
   const handleGenerate = () => {
     let seed: number;

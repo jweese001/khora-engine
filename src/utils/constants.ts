@@ -203,7 +203,10 @@ export const MOON_PROBABILITY = 0.6; // 60%
 export const MIN_MOON_ORBIT_KM = 2_000;
 
 /** Maximum moon orbital distance from planet surface (km) */
-export const MAX_MOON_ORBIT_KM = 1_000_000;
+// Set high enough for large gas giants (which can be 50,000+ km radius)
+// Moons need to orbit outside the planet's physical body!
+// Our Moon orbits at 384,400 km, use that as a reasonable max
+export const MAX_MOON_ORBIT_KM = 500_000;
 
 // ============================================================================
 // Atmosphere Generation Constants

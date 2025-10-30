@@ -8,10 +8,8 @@ import { GenerateButton } from './GenerateButton';
 import { useSystemStore } from '../../store/system-store';
 
 export function UIControls() {
-  const { ideOpen, toggleIDE } = useSystemStore((state) => ({
-    ideOpen: state.ideOpen,
-    toggleIDE: state.toggleIDE
-  }));
+  const ideOpen = useSystemStore((state) => state.ideOpen);
+  const toggleIDE = useSystemStore((state) => state.toggleIDE);
 
   return (
     <div style={styles.container}>

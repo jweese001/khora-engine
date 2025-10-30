@@ -17,10 +17,32 @@ npm run dev
 
 # Build for production
 npm run build
-
-# Preview production build
-npm run preview
 ```
+
+**Open browser:** `http://localhost:5173/` (or port shown in terminal)
+
+### Generate Your First System
+
+Open browser console (F12) and run:
+
+```javascript
+// Access the store
+const store = window.__KHORA_STORE__;
+
+// Generate a star system
+store.getState().generateSystem(12345);
+
+// Try these interesting seeds:
+store.getState().generateSystem(99999);  // Ocean world "Nereid"
+store.getState().generateSystem(42);     // Red dwarf system
+```
+
+**Camera Controls:**
+- Left Mouse: Rotate camera
+- Right Mouse: Pan view
+- Mouse Wheel: Zoom in/out
+
+See `TESTING.md` for complete testing guide.
 
 ---
 
@@ -53,13 +75,19 @@ Location: `/Projects/Khora Engine/` in Obsidian vault
 
 **Current Phase:** Phase 1 - Single Star System MVP
 **Timeline:** 12 weeks to completion
-**Current Week:** Week 1 - Foundation & Setup ✅ **COMPLETE**
-**Progress:** 19 / 22 tasks complete (86%)
-**Milestone:** **M1 - Foundation Complete** ✅
+**Current Week:** Weeks 4-5 - Basic Rendering ✅ **COMPLETE**
+**Milestones Complete:** 3 / 7
+**Overall Progress:** ~40% (on schedule)
 
-✅ All M1 acceptance criteria met!
+### Completed Milestones
+- ✅ **M1:** Foundation (Week 1)
+- ✅ **M2:** Generation Works (Weeks 2-3)
+- ✅ **M3:** Basic Rendering (Weeks 4-5)
 
-See `TASKS.md` for detailed progress tracking.
+### Next Up
+- 🚧 **M4:** LOD System (Weeks 6-7)
+
+See `SESSION-3-COMPLETE.md` for latest progress.
 
 ---
 
@@ -89,10 +117,13 @@ khora-engine/
 
 ### Core Functionality
 - ✅ Deterministic procedural generation (seeded RNG)
-- 🔄 Realistic stellar classification (O, B, A, F, G, K, M types)
-- 🔄 Physics-based orbital mechanics
-- 🔄 3D visualization with Three.js
-- 🔄 LOD system for performance (60fps target)
+- ✅ Realistic stellar classification (O, B, A, F, G, K, M types)
+- ✅ Physics-based orbital mechanics (Kepler, Titius-Bode)
+- ✅ 3D visualization with Three.js
+- ✅ Interactive camera controls (OrbitControls)
+- ✅ Star/planet/moon rendering with type-specific materials
+- ✅ Maintains 60fps with 8+ planets and 20+ moons
+- 🔄 LOD system for performance optimization
 - 🔄 Procedural shaders for unique planet appearances
 - 🔄 Integrated IDE for scene inspection
 

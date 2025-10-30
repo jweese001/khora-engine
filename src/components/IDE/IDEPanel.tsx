@@ -9,16 +9,26 @@
 import { useSystemStore } from '../../store/system-store';
 
 export function IDEPanel() {
-  const { ideOpen, selectedObject } = useSystemStore((state) => ({
-    ideOpen: state.ideOpen,
-    selectedObject: state.selectedObject
-  }));
+  const ideOpen = useSystemStore((state) => state.ideOpen);
+  const toggleIDE = useSystemStore((state) => state.toggleIDE);
+  const selectedObject = useSystemStore((state) => state.selectedObject);
 
   return (
     <div style={ideOpen ? { ...styles.container, ...styles.containerOpen } : styles.container}>
       <div style={styles.header}>
-        <h2 style={styles.title}>Scene Inspector</h2>
-        <span style={styles.subtitle}>Read-only view</span>
+        <div style={styles.headerContent}>
+          <div>
+            <h2 style={styles.title}>Scene Inspector</h2>
+            <span style={styles.subtitle}>Read-only view</span>
+          </div>
+          <button
+            style={styles.closeButton}
+            onClick={toggleIDE}
+            title="Close Inspector"
+          >
+            ✕
+          </button>
+        </div>
       </div>
 
       <div style={styles.content}>
@@ -67,6 +77,22 @@ const styles = {
   header: {
     padding: '20px',
     borderBottom: '1px solid #1a2332'
+  } as React.CSSProperties,
+  headerContent: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start'
+  } as React.CSSProperties,
+  closeButton: {
+    background: 'transparent',
+    border: 'none',
+    color: '#6b7a8f',
+    fontSize: '20px',
+    cursor: 'pointer',
+    padding: '4px 8px',
+    lineHeight: '1',
+    transition: 'color 0.2s',
+    outline: 'none'
   } as React.CSSProperties,
   title: {
     margin: '0 0 4px 0',
