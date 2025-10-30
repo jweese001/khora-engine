@@ -1,12 +1,14 @@
 /**
  * Khora Engine - Star Renderer
  *
- * Creates Three.js meshes for stars with temperature-based coloring.
- * Phase 1: Basic emissive sphere with glow sprite.
+ * Creates Three.js meshes for stars with procedural shader rendering.
+ * Uses custom star shader with emissive surface activity and bloom.
  */
 
 import * as THREE from 'three';
 import type { Star } from '../types/celestial-bodies';
+import starVertShader from '../shaders/star/star.vert?raw';
+import starFragShader from '../shaders/star/star.frag?raw';
 
 // ============================================================================
 // Star-Relative Scaling System
@@ -94,10 +96,13 @@ function temperatureToColor(temperature: number): THREE.Color {
 // ============================================================================
 
 /**
- * Create a star mesh with emissive material
+ * Create a star mesh with procedural shader material
  *
- * Phase 1: Simple sphere with emissive color.
- * Future: Add corona, surface detail, solar flares.
+ * Uses custom star shader with:
+ * - Emissive radial gradient (brighter at center)
+ * - Procedural surface activity (noise-based turbulence)
+ * - Temperature-based coloring and brightness
+ * - Bloom-ready output (values > 1.0 for glow effect)
  *
  * @param star - Star data
  * @param scale - Visual scale factor (default: 1.0)
@@ -119,11 +124,38 @@ export function createStarMesh(star: Star, scale: number = 1.0): THREE.Mesh {
   const color = temperatureToColor(star.temperature);
   console.log(`[StarRenderer] Star ${star.name}: temp=${star.temperature}K, color=rgb(${(color.r*255).toFixed(0)}, ${(color.g*255).toFixed(0)}, ${(color.b*255).toFixed(0)})`);
 
-  // Create emissive material
-  // Stars emit light - use MeshBasicMaterial which is always fully bright
-  const material = new THREE.MeshBasicMaterial({
-    color: color
+  // Derive seed from star ID (for determinism)
+  // Convert star ID to a numeric seed
+  const seed = star.id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0) % 10000;
+
+  // Derive activity level from star properties (deterministic)
+  // Hotter, more luminous stars tend to be more active
+  // Use seed for variation within type ranges
+  // O, B, A types: high activity (0.7-1.0)
+  // F, G types: medium activity (0.4-0.7)
+  // K, M types: low activity (0.0-0.4)
+  const seedFraction = (seed % 100) / 100; // 0.0-1.0 from seed
+  const activityLevel = star.temperature > 7500 ? 0.7 + seedFraction * 0.3 :
+                        star.temperature > 5000 ? 0.4 + seedFraction * 0.3 :
+                        seedFraction * 0.4;
+
+  // Create ShaderMaterial with custom star shader
+  const material = new THREE.ShaderMaterial({
+    vertexShader: starVertShader,
+    fragmentShader: starFragShader,
+    uniforms: {
+      u_starColor: { value: new THREE.Vector3(color.r, color.g, color.b) },
+      u_temperature: { value: star.temperature },
+      u_activityLevel: { value: activityLevel },
+      u_time: { value: 0.0 }, // For future animation
+      u_seed: { value: seed }
+    },
+    // No lights needed - shader is fully emissive
+    side: THREE.FrontSide,
+    transparent: false
   });
+
+  console.log(`[StarRenderer] Star shader uniforms: temp=${star.temperature}K, activity=${activityLevel.toFixed(2)}, seed=${seed}`);
 
   // Create mesh
   const mesh = new THREE.Mesh(geometry, material);
@@ -134,7 +166,7 @@ export function createStarMesh(star: Star, scale: number = 1.0): THREE.Mesh {
     data: star
   };
 
-  // Stars don't cast shadows in Phase 1 (they ARE the light source)
+  // Stars don't cast shadows (they ARE the light source)
   mesh.castShadow = false;
   mesh.receiveShadow = false;
 
