@@ -417,10 +417,22 @@
 - [x] All unused variables cleaned up
 - [x] Git committed (commit 400103f)
 
+### Critical Bug Fix (Post-Implementation)
+- [x] **FIXED: LOD distance calculation from actual geometry position**
+  - Problem: LOD was calculating distance from scene center (0,0,0) for all objects
+  - All planets showed same LOD level regardless of individual camera distance
+  - Root cause: World matrices not updated before LOD.update() call
+  - Solution: Added `scene.updateMatrixWorld()` before LOD calculations
+  - Updated LODDebug to use `getWorldPosition()` for consistency
+  - Impact: Each planet/moon now independently switches LOD based on camera distance
+  - Commit: 6e734fd
+
 ### Manual Testing
 **Visual Verification:**
 - [x] User confirmed smooth geometry at all distances
 - [x] User confirmed LOD debug overlay working
+- [x] User identified and reported LOD distance calculation bug
+- [x] LOD distance bug fixed - now calculates from actual geometry position
 - [ ] Performance testing (60fps with full system) - pending hardware test
 - [ ] Draw call reduction measurement - pending
 - [ ] Memory leak testing (regeneration cycles) - pending
@@ -498,6 +510,15 @@
 - [x] Modified ThreeSceneManager.tsx to store camera in scene.userData
 - [x] Added LODDebug component to App.tsx
 - [x] Committed all changes (commit 400103f)
+
+### Phase 4: Critical Bug Fix
+- [x] **FIXED: LOD distance calculation from actual geometry position**
+  - User identified: LOD was calculating from scene center, not from individual objects
+  - Root cause: World matrices not updated before LOD.update() call
+  - Solution: Added `scene.updateMatrixWorld()` in animation loop before LOD updates
+  - Updated LODDebug to use `getWorldPosition()` for accurate distance display
+  - Verified build success (741.03 KB bundle)
+  - Committed fix (commit 6e734fd)
 
 **Final LOD Configuration:**
 - **High Detail:** Subdivision 6, distance 0-75 units, 81,920 triangles
