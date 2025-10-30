@@ -9,6 +9,9 @@
 
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import type { StarSystem } from '../../types/celestial-bodies';
 import { createStarObject, calculateSceneUnitsPerSolarRadius } from '../../rendering/StarRenderer';
 import { createTypedOrbitLine } from '../../rendering/OrbitRenderer';
@@ -23,6 +26,7 @@ export class ThreeSceneManager {
   private scene: THREE.Scene;
   private camera: THREE.PerspectiveCamera;
   private renderer: THREE.WebGLRenderer;
+  private composer: EffectComposer;
   private controls: OrbitControls;
 
   // Animation loop
@@ -66,6 +70,9 @@ export class ThreeSceneManager {
 
     // Create renderer
     this.renderer = this.createRenderer();
+
+    // Create post-processing composer with bloom
+    this.composer = this.createComposer();
 
     // Create controls
     this.controls = this.createControls();
@@ -157,6 +164,33 @@ export class ThreeSceneManager {
   }
 
   /**
+   * Create post-processing composer with bloom effect
+   */
+  private createComposer(): EffectComposer {
+    const composer = new EffectComposer(this.renderer);
+
+    // Add render pass (renders the scene)
+    const renderPass = new RenderPass(this.scene, this.camera);
+    composer.addPass(renderPass);
+
+    // Add bloom pass for star glow
+    // threshold: 0.85 - only objects with brightness > 0.85 will bloom
+    // strength: 1.5 - intensity of bloom effect
+    // radius: 0.4 - spread of bloom glow
+    const bloomPass = new UnrealBloomPass(
+      new THREE.Vector2(window.innerWidth, window.innerHeight),
+      1.5,  // strength
+      0.4,  // radius
+      0.85  // threshold
+    );
+    composer.addPass(bloomPass);
+
+    console.log('[ThreeSceneManager] Post-processing composer initialized with bloom');
+
+    return composer;
+  }
+
+  /**
    * Create orbit controls for camera manipulation
    */
   private createControls(): OrbitControls {
@@ -238,7 +272,7 @@ export class ThreeSceneManager {
   }
 
   /**
-   * Handle window resize - update camera and renderer
+   * Handle window resize - update camera, renderer, and composer
    */
   private handleResize = (): void => {
     const width = this.container.clientWidth;
@@ -250,6 +284,9 @@ export class ThreeSceneManager {
 
     // Update renderer
     this.renderer.setSize(width, height);
+
+    // Update composer (for bloom pass)
+    this.composer.setSize(width, height);
   };
 
   /**
@@ -316,8 +353,8 @@ export class ThreeSceneManager {
       }
     });
 
-    // Render scene
-    this.renderer.render(this.scene, this.camera);
+    // Render scene with post-processing (bloom)
+    this.composer.render();
   };
 
   // ==========================================================================
