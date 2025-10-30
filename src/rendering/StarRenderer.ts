@@ -7,8 +7,8 @@
 
 import * as THREE from 'three';
 import type { Star } from '../types/celestial-bodies';
-import starVertShader from '../shaders/star/star.vert?raw';
-import starFragShader from '../shaders/star/star.frag?raw';
+import starVertShader from '../shaders/star/star.vert';
+import starFragShader from '../shaders/star/star.frag';
 
 // ============================================================================
 // Star-Relative Scaling System
