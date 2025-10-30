@@ -479,22 +479,23 @@
 
 ## Week 8-9: Procedural Shaders (M5)
 **Milestone:** M5 - Shaders Complete
-**Status:** ⏳ **IN PROGRESS** (38% - Bug Fixed, Testing Phase)
+**Status:** ⏳ **IN PROGRESS** (48% - Star Shader Complete!)
 
-### Session 5 Status (October 30, 2025)
+### Session 6 Status (October 30, 2025)
 
-**Critical Bug Fixed:** ✅
-- Issue: Infinite loop when generating systems with star shader
-- Root cause: Incorrect #include syntax in star.frag
-- Fix: Changed `#include <common/noise.glsl>` to `#include "../common/noise.glsl"`
-- Commits: 716c816, b59887d
-- Status: Fix committed, awaiting user testing
+**🎉 STAR SHADER COMPLETE!** ✅
+- Status: Fully working with visible surface texture and bloom glow
+- Final approach: Limb darkening + high-contrast procedural noise (100% variation range)
+- Bloom settings: threshold 0.5, strength 0.9, radius 0.7
+- Visual result: Beautiful luminous star with surface detail visible at edges
+- Iterations: ~15 attempts to find the right balance
+- Commit: 607702d
 
-**Progress:** 8 / 21 tasks (38%)
+**Progress:** 10 / 21 tasks (48%)
 
 ### Shader Implementation Tasks
 
-**Phase 1: Star Shader** ✅ (Awaiting Test)
+**Phase 1: Star Shader** ✅ **COMPLETE**
 - [x] Install vite-plugin-glsl for shader #include support
 - [x] Configure vite.config.ts to use glsl plugin
 - [x] Create src/shaders/ directory structure
@@ -504,7 +505,8 @@
 - [x] Integrate EffectComposer + UnrealBloomPass for star glow
 - [x] Refactor StarRenderer to use star ShaderMaterial
 - [x] **BUG FIX:** Correct shader #include syntax (infinite loop resolved)
-- [ ] **TEST:** Verify star shader works without infinite loop ⚠️ **NEXT**
+- [x] **POLISH:** Iterate on visual appearance (limb darkening + noise balance)
+- [x] **VERIFIED:** Star shader working with visible texture and bloom ✅
 
 **Phase 2: Rocky Planet Shader** (Next)
 - [ ] Implement rocky-planet.frag with terrain + water + atmosphere features
