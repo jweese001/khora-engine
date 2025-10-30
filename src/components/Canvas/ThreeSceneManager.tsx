@@ -11,9 +11,8 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import type { StarSystem } from '../../types/celestial-bodies';
 import { createStarObject, calculateSceneUnitsPerSolarRadius } from '../../rendering/StarRenderer';
-import { createPlanetObject } from '../../rendering/PlanetRenderer';
-import { createMoonsForPlanet } from '../../rendering/MoonRenderer';
 import { createTypedOrbitLine } from '../../rendering/OrbitRenderer';
+import { CelestialBodyLOD } from '../../rendering/CelestialBodyLOD';
 
 // ============================================================================
 // ThreeSceneManager Class
@@ -344,7 +343,7 @@ export class ThreeSceneManager {
 
     console.log(`[ThreeSceneManager] Added star: ${system.star.name} (scaling: ${sceneUnitsPerSolarRadius.toFixed(2)} units/solar radius)`);
 
-    // Create planets, their orbits, and moons
+    // Create planets, their orbits, and moons (with LOD)
     system.star.planets.forEach((planet, planetIndex) => {
       // Create orbit line
       const orbitLine = createTypedOrbitLine(
@@ -354,26 +353,59 @@ export class ThreeSceneManager {
       orbitLine.name = `orbit-planet-${planetIndex}`;
       this.scene.add(orbitLine);
 
-      // Create planet object with star-relative scaling
-      const planetObject = createPlanetObject(planet, sceneUnitsPerSolarRadius, ORBIT_SCALE);
-      planetObject.name = `planet-${planetIndex}`;
-      this.scene.add(planetObject);
+      // Create container group for planet + moons
+      // This allows moons to be in planet's local space
+      const planetSystemGroup = new THREE.Group();
+      planetSystemGroup.name = `planet-system-${planetIndex}`;
 
-      // Create moons for this planet and add as children (not to scene directly)
-      // Moons are positioned relative to planet's visual size automatically
-      const moons = createMoonsForPlanet(
+      // Position the group at the planet's orbital location
+      planetSystemGroup.position.set(planet.orbitDistance * ORBIT_SCALE, 0, 0);
+
+      // Store planet data on group for raycasting
+      planetSystemGroup.userData = {
+        type: 'planet',
+        data: planet
+      };
+
+      // Create planet with LOD
+      const planetLOD = new CelestialBodyLOD(
         planet,
-        planetObject.position, // Legacy parameter, not used
+        'planet',
         sceneUnitsPerSolarRadius
       );
+      planetLOD.object.name = `planet-${planetIndex}`;
+      planetSystemGroup.add(planetLOD.object);
 
-      moons.forEach((moonGroup, moonIndex) => {
-        moonGroup.name = `moon-${planetIndex}-${moonIndex}`;
-        planetObject.add(moonGroup); // Add as child of planet, not scene
+      // Create moons with LOD and add as children
+      planet.moons.forEach((moon, moonIndex) => {
+        const moonLOD = new CelestialBodyLOD(
+          moon,
+          'moon',
+          sceneUnitsPerSolarRadius,
+          planet // Parent planet required for moon renderer
+        );
+
+        moonLOD.object.name = `moon-${planetIndex}-${moonIndex}`;
+
+        // Position moon at its orbital distance from planet center
+        // Moon orbit distance is already in scene units from MoonRenderer
+        const angle = (moonIndex / planet.moons.length) * Math.PI * 2; // Distribute evenly
+        const distance = moon.orbitDistance; // Already in scene units
+        moonLOD.object.position.set(
+          Math.cos(angle) * distance,
+          0,
+          Math.sin(angle) * distance
+        );
+
+        planetSystemGroup.add(moonLOD.object);
       });
 
+      // Add the complete planet system to scene
+      this.scene.add(planetSystemGroup);
+
       console.log(
-        `[ThreeSceneManager] Added planet ${planetIndex + 1}/${system.star.planets.length}: ${planet.name} (${planet.moons.length} moons)`
+        `[ThreeSceneManager] Added planet ${planetIndex + 1}/${system.star.planets.length}: ` +
+        `${planet.name} with ${planet.moons.length} moons (LOD enabled)`
       );
     });
 
