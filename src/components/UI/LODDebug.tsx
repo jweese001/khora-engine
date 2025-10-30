@@ -45,7 +45,12 @@ export function LODDebug() {
 
       scene.traverse((object) => {
         if (object instanceof THREE.LOD && object.userData.lodEnabled) {
-          const distance = camera.position.distanceTo(object.position);
+          // Use getWorldPosition to get actual position in 3D space
+          // (not local position which would be relative to parent group)
+          const worldPos = new THREE.Vector3();
+          object.getWorldPosition(worldPos);
+          const distance = camera.position.distanceTo(worldPos);
+
           lodObjects.push({
             lod: object,
             distance,

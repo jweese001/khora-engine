@@ -304,7 +304,12 @@ export class ThreeSceneManager {
     // Update controls (damping requires update every frame)
     this.controls.update();
 
-    // Update LOD levels (will be used in Week 6-7)
+    // CRITICAL: Update world matrices before LOD calculations
+    // This ensures LOD distance is calculated from actual geometry position,
+    // not from (0,0,0). Without this, all planets use the same LOD level.
+    this.scene.updateMatrixWorld();
+
+    // Update LOD levels based on camera distance to each object's world position
     this.scene.traverse((object) => {
       if (object instanceof THREE.LOD) {
         object.update(this.camera);
