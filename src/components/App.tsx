@@ -7,6 +7,7 @@
 import { CanvasContainer } from './Canvas/CanvasContainer';
 import { UIControls } from './UI/UIControls';
 import { IDEPanel } from './IDE/IDEPanel';
+import { LODDebug } from './UI/LODDebug';
 
 export function App() {
   return (
@@ -21,6 +22,9 @@ export function App() {
 
       {/* IDE panel (slides in from right) */}
       <IDEPanel />
+
+      {/* LOD Debug overlay (press L to toggle) */}
+      <LODDebug />
     </div>
   );
 }

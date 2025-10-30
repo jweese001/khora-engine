@@ -61,6 +61,9 @@ export class ThreeSceneManager {
     // Create camera
     this.camera = this.createCamera();
 
+    // Store camera reference in scene for LODDebug component
+    this.scene.userData.camera = this.camera;
+
     // Create renderer
     this.renderer = this.createRenderer();
 
