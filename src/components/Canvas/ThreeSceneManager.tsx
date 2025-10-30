@@ -174,14 +174,12 @@ export class ThreeSceneManager {
     composer.addPass(renderPass);
 
     // Add bloom pass for star glow
-    // threshold: 0.85 - only objects with brightness > 0.85 will bloom
-    // strength: 1.5 - intensity of bloom effect
-    // radius: 0.4 - spread of bloom glow
+    // VERY LOW threshold + moderate strength
     const bloomPass = new UnrealBloomPass(
       new THREE.Vector2(window.innerWidth, window.innerHeight),
-      1.5,  // strength
-      0.4,  // radius
-      0.85  // threshold
+      0.9,  // strength - moderate
+      0.7,  // radius
+      0.5   // threshold - VERY LOW (even dim areas will glow slightly)
     );
     composer.addPass(bloomPass);
 

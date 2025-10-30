@@ -12,52 +12,46 @@ uniform float u_time;            // For animated surface movement (optional)
 uniform float u_seed;            // Deterministic noise offset
 
 varying vec3 vPosition;
+varying vec3 vNormal;
+varying vec3 vWorldPosition;
 varying vec2 vUv;
 
 void main() {
-  // Use normalized position (center of sphere = 0,0,0) for radial gradient
-  // This avoids UV pole artifacts
-  float distFromCenter = length(vPosition);
+  // Add subtle radial dimming (limb darkening) to help texture show
+  // Calculate distance from center in normalized space
+  vec3 normPos = normalize(vPosition);
+  float distFromCenter = length(normPos);
 
-  // Normalize to 0-1 range (sphere radius is 1.0 in normalized coordinates)
-  // Invert so center is bright, edges are dim
-  float radialGradient = 1.0 - clamp(distFromCenter, 0.0, 1.0);
-
-  // Apply gentle power curve for smooth falloff
-  radialGradient = pow(radialGradient, 0.6);
+  // Very gentle radial falloff (edges slightly dimmer)
+  float radialDim = 1.0 - pow(distFromCenter * 0.5, 2.0); // 0.75-1.0 range
 
   // Surface activity using simplex noise
-  // Use finer noise scale for subtle surface detail (not large blotches)
-  vec3 noisePos = normalize(vPosition) * 8.0 + vec3(u_seed * 0.1);
-
-  // Optional: Add slow time-based animation
-  // noisePos += vec3(u_time * 0.05, 0.0, 0.0);
+  vec3 noisePos = normPos * 2.5 + vec3(u_seed * 0.1);
 
   // Two-octave noise for surface turbulence
   float surfaceNoise = fbm2(noisePos);
 
-  // Normalize noise to subtle variation range
-  // fbm2 returns roughly -1.0 to 1.0, map to 0.9-1.1 range for fine detail
+  // Normalize noise to visible range
   surfaceNoise = surfaceNoise * 0.5 + 0.5; // Now 0.0-1.0
-  surfaceNoise = 0.9 + surfaceNoise * 0.2; // Now 0.9-1.1 (subtle)
+
+  // Stronger variation: 0.5-1.5 (100% range)
+  surfaceNoise = 0.5 + surfaceNoise * 1.0;
 
   // Mix surface activity based on u_activityLevel
-  float surface = mix(1.0, surfaceNoise, u_activityLevel * 0.5);
+  float surface = mix(1.0, surfaceNoise, u_activityLevel);
 
-  // Combine radial gradient with surface activity
-  float brightness = radialGradient * surface;
+  // Combine surface texture with radial dimming
+  float brightness = surface * radialDim;
 
-  // Temperature affects overall intensity (hotter = brighter)
-  // Normalize temperature: assume 3000-50000K range
+  // Temperature affects overall intensity
   float tempNormalized = clamp((u_temperature - 3000.0) / 47000.0, 0.0, 1.0);
-  float temperatureBoost = 0.8 + tempNormalized * 1.2;
+  float temperatureBoost = 0.7 + tempNormalized * 0.6; // Brighter
 
-  // Final star color with brightness
+  // Final star color
   vec3 finalColor = u_starColor * brightness * temperatureBoost;
 
-  // CRITICAL: Output values > 1.0 for bloom effect
-  // Bloom threshold is 0.85, so we want bright stars to exceed this
-  finalColor *= 2.0; // Boost to ensure bloom activation
+  // Boost to ensure bloom activation
+  finalColor *= 1.5;
 
   gl_FragColor = vec4(finalColor, 1.0);
 }
