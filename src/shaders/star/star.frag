@@ -3,7 +3,7 @@
 // Emissive star with surface activity and bloom
 //
 
-#include <common/noise.glsl>
+#include "../common/noise.glsl"
 
 uniform vec3 u_starColor;        // Spectral type color (O=blue, G=yellow, M=red)
 uniform float u_temperature;     // Temperature affects intensity
