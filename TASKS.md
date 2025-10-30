@@ -3,8 +3,8 @@
 
 **Project:** Khora Engine - Genesis Engine (Phase 1)
 **Timeline:** 12 weeks
-**Status:** Week 5-6 In Progress
-**Last Updated:** October 30, 2025
+**Status:** Week 8-9 In Progress (M5 - Procedural Shaders)
+**Last Updated:** October 30, 2025 - Session 5 Recovery
 
 **Working Copy:** This file is synchronized from Obsidian vault
 **Source of Truth:** This file (code repo) - sync back to Obsidian weekly
@@ -35,7 +35,7 @@
 - **M2:** Generation Works (Week 4) - Data structures generate correctly ✅
 - **M3:** Visible in 3D (Week 6) - System renders with basic materials ✅
 - **M4:** LOD Optimized (Week 6) - Cinema-quality LOD with debug tools ✅
-- **M5:** Shaders Complete (Week 10) - Procedural appearances working ⏳
+- **M5:** Shaders Complete (Week 10) - Procedural appearances working ⏳ (38% - Bug Fixed)
 - **M6:** Phase 1 Complete (Week 12) - All acceptance criteria met
 
 ---
@@ -472,8 +472,71 @@
 
 ---
 
-*Last updated: October 30, 2025 - Session 4 Starting*
-*Companion docs: PLANNING.md, CLAUDE.md*
+*Last updated: October 30, 2025 - Session 5 Recovery*
+*Companion docs: PLANNING.md, CLAUDE.md, SESSION-5-RECOVERY.md*
+
+---
+
+## Week 8-9: Procedural Shaders (M5)
+**Milestone:** M5 - Shaders Complete
+**Status:** ⏳ **IN PROGRESS** (38% - Bug Fixed, Testing Phase)
+
+### Session 5 Status (October 30, 2025)
+
+**Critical Bug Fixed:** ✅
+- Issue: Infinite loop when generating systems with star shader
+- Root cause: Incorrect #include syntax in star.frag
+- Fix: Changed `#include <common/noise.glsl>` to `#include "../common/noise.glsl"`
+- Commits: 716c816, b59887d
+- Status: Fix committed, awaiting user testing
+
+**Progress:** 8 / 21 tasks (38%)
+
+### Shader Implementation Tasks
+
+**Phase 1: Star Shader** ✅ (Awaiting Test)
+- [x] Install vite-plugin-glsl for shader #include support
+- [x] Configure vite.config.ts to use glsl plugin
+- [x] Create src/shaders/ directory structure
+- [x] Implement common/noise.glsl (simplex3D, FBM functions)
+- [x] Create common/planet.vert (shared vertex shader)
+- [x] Implement star shader (star.vert + star.frag)
+- [x] Integrate EffectComposer + UnrealBloomPass for star glow
+- [x] Refactor StarRenderer to use star ShaderMaterial
+- [x] **BUG FIX:** Correct shader #include syntax (infinite loop resolved)
+- [ ] **TEST:** Verify star shader works without infinite loop ⚠️ **NEXT**
+
+**Phase 2: Rocky Planet Shader** (Next)
+- [ ] Implement rocky-planet.frag with terrain + water + atmosphere features
+- [ ] Create deriveShaderUniforms() function to convert Planet data to uniforms
+- [ ] Refactor PlanetRenderer to use ShaderMaterial with type-based shader selection
+
+**Phase 3: Other Planet Shaders**
+- [ ] Implement gas-giant.frag with band patterns + turbulence
+- [ ] Implement barren.frag with craters + dead surface texture
+
+**Phase 4: Testing & Polish**
+- [ ] Test determinism: same seed produces identical planet appearances
+- [ ] Performance testing: verify 60fps with 8 planets + 20 moons using shaders
+- [ ] Visual testing: verify Rocky ≠ GasGiant ≠ Barren at a glance
+- [ ] Test bloom selectivity: star glows, planets don't
+- [ ] Polish and tune shader parameters based on visual testing
+
+**Phase 5: Integration**
+- [ ] Update MoonRenderer to reuse planet shaders
+- [ ] Document shader uniforms and visual design decisions
+
+### Testing Protocol
+
+**Immediate Action Required:** User must test shader fix
+
+1. Start dev server: `npm run dev`
+2. Navigate to: `http://localhost:5175/`
+3. Generate system: `window.__KHORA_STORE__.getState().generateSystem(12345);`
+4. **Expected:** Star renders with bloom glow, surface texture, NO infinite loop
+5. **Report results** before continuing
+
+**See:** `SESSION-5-RECOVERY.md` for complete testing protocol
 
 ---
 
