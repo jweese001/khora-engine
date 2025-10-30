@@ -13,7 +13,7 @@ import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import type { StarSystem } from '../../types/celestial-bodies';
-import { createStarObject, calculateSceneUnitsPerSolarRadius } from '../../rendering/StarRenderer';
+import { createStarMesh, createStarLight, calculateSceneUnitsPerSolarRadius } from '../../rendering/StarRenderer';
 import { createTypedOrbitLine } from '../../rendering/OrbitRenderer';
 import { CelestialBodyLOD } from '../../rendering/CelestialBodyLOD';
 
@@ -381,10 +381,15 @@ export class ThreeSceneManager {
     const ORBIT_SCALE = 50.0; // AU to scene units
     // Moon orbits now calculated from planet visual size (no scale constant needed)
 
-    // Create star
-    const starObject = createStarObject(system.star, 1.0, true, true);
-    starObject.name = 'star';
-    this.scene.add(starObject);
+    // Create star (use mesh only - shader handles bloom, no glow sprite needed)
+    const starMesh = createStarMesh(system.star, 1.0);
+    starMesh.name = 'star';
+    this.scene.add(starMesh);
+
+    // Add star lighting for planets
+    const starLights = createStarLight(system.star, 3.0);
+    starLights.name = 'star-lights';
+    this.scene.add(starLights);
 
     console.log(`[ThreeSceneManager] Added star: ${system.star.name} (scaling: ${sceneUnitsPerSolarRadius.toFixed(2)} units/solar radius)`);
 
