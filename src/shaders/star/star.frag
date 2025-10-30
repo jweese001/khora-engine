@@ -21,8 +21,9 @@ void main() {
   float distFromCenter = length(vUv - center);
   float radialGradient = 1.0 - smoothstep(0.0, 0.5, distFromCenter);
 
-  // Core brightness boost (make center VERY bright for bloom)
-  radialGradient = pow(radialGradient, 0.8);
+  // Gentler core brightness (less extreme center)
+  // Changed from 0.8 to 1.2 for smoother gradient
+  radialGradient = pow(radialGradient, 1.2);
 
   // Surface activity using simplex noise
   // Use vPosition (sphere coordinates) for consistent 3D noise
@@ -34,8 +35,13 @@ void main() {
   // Two-octave noise for surface turbulence
   float surfaceNoise = fbm2(noisePos);
 
+  // Normalize noise to 0.0-1.0 range (prevents dark spots)
+  // fbm2 returns roughly -1.0 to 1.0, map to 0.8-1.2 range for subtle variation
+  surfaceNoise = surfaceNoise * 0.5 + 0.5; // Now 0.0-1.0
+  surfaceNoise = 0.8 + surfaceNoise * 0.4; // Now 0.8-1.2
+
   // Mix surface activity based on u_activityLevel
-  float surface = mix(1.0, 1.0 + surfaceNoise * 0.3, u_activityLevel);
+  float surface = mix(1.0, surfaceNoise, u_activityLevel);
 
   // Combine radial gradient with surface activity
   float brightness = radialGradient * surface;
