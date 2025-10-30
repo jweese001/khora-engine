@@ -97,21 +97,29 @@ export class CelestialBodyLOD {
   private readonly bodyType: 'planet' | 'moon';
 
   /**
+   * Camera reference for shader uniforms
+   */
+  private camera?: THREE.Camera;
+
+  /**
    * Create a LOD system for a celestial body
    *
    * @param bodyData - Planet or Moon data
    * @param bodyType - Type identifier ('planet' or 'moon')
    * @param sceneUnitsPerSolarRadius - Scaling factor from star
    * @param parentPlanet - Required for moons, unused for planets
+   * @param camera - Camera for shader view-dependent effects (optional)
    */
   constructor(
     bodyData: Planet | Moon,
     bodyType: 'planet' | 'moon',
     sceneUnitsPerSolarRadius: number,
-    parentPlanet?: Planet
+    parentPlanet?: Planet,
+    camera?: THREE.Camera
   ) {
     this.bodyData = bodyData;
     this.bodyType = bodyType;
+    this.camera = camera;
 
     // Create THREE.LOD container
     this.object = new THREE.LOD();
@@ -171,7 +179,7 @@ export class CelestialBodyLOD {
     if (this.bodyType === 'planet') {
       // Create planet mesh with specified subdivision
       const planet = this.bodyData as Planet;
-      return createPlanetMesh(planet, sceneUnitsPerSolarRadius, subdivision);
+      return createPlanetMesh(planet, sceneUnitsPerSolarRadius, subdivision, this.camera);
     } else {
       // Create moon mesh with specified subdivision
       const moon = this.bodyData as Moon;

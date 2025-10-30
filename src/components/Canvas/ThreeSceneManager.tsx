@@ -415,11 +415,13 @@ export class ThreeSceneManager {
         data: planet
       };
 
-      // Create planet with LOD
+      // Create planet with LOD (pass camera for shader uniforms)
       const planetLOD = new CelestialBodyLOD(
         planet,
         'planet',
-        sceneUnitsPerSolarRadius
+        sceneUnitsPerSolarRadius,
+        undefined, // No parent planet for planets
+        this.camera // Pass camera for atmosphere effects
       );
       planetLOD.object.name = `planet-${planetIndex}`;
       planetSystemGroup.add(planetLOD.object);
@@ -430,7 +432,8 @@ export class ThreeSceneManager {
           moon,
           'moon',
           sceneUnitsPerSolarRadius,
-          planet // Parent planet required for moon renderer
+          planet, // Parent planet required for moon renderer
+          this.camera // Pass camera for shader uniforms
         );
 
         moonLOD.object.name = `moon-${planetIndex}-${moonIndex}`;

@@ -10,6 +10,18 @@ import * as THREE from 'three';
 import type { Planet } from '../types/celestial-bodies';
 import { PlanetType } from '../types/celestial-bodies';
 
+// Import shaders
+import rockyPlanetVertexShader from '../shaders/rocky-planet/rocky-planet.vert';
+import rockyPlanetFragmentShader from '../shaders/rocky-planet/rocky-planet.frag';
+import gasGiantVertexShader from '../shaders/gas-giant/gas-giant.vert';
+import gasGiantFragmentShader from '../shaders/gas-giant/gas-giant.frag';
+
+// Import uniform helpers
+import {
+  deriveRockyPlanetUniforms,
+  deriveGasGiantUniforms
+} from './shaderUniforms';
+
 // ============================================================================
 // Color Schemes by Planet Type
 // ============================================================================
@@ -35,55 +47,46 @@ function getPlanetBaseColor(type: PlanetType): THREE.Color {
   }
 }
 
-/**
- * Modify planet color based on properties
- *
- * @param planet - Planet data
- * @param baseColor - Base color from type
- * @returns Modified color
- */
-function adjustPlanetColor(planet: Planet, baseColor: THREE.Color): THREE.Color {
-  const color = baseColor.clone();
-
-  // Rocky planets with water get blue tint
-  if (planet.type === PlanetType.Rocky && planet.waterCoverage > 0.3) {
-    const waterBlue = new THREE.Color(0x0077BE);
-    color.lerp(waterBlue, planet.waterCoverage * 0.7);
-  }
-
-  // Very cold planets get darker
-  if (planet.surfaceTemperature < 150) {
-    color.multiplyScalar(0.7);
-  }
-
-  // Very hot planets get redder (but not too bright)
-  if (planet.surfaceTemperature > 500) {
-    const hotColor = new THREE.Color(0xCC3300); // Darker red-orange
-    color.lerp(hotColor, Math.min((planet.surfaceTemperature - 500) / 1000, 0.4));
-  }
-
-  return color;
-}
+// Legacy color adjustment function - replaced by shader-based rendering
+// Kept for potential fallback scenarios
+// function adjustPlanetColor(planet: Planet, baseColor: THREE.Color): THREE.Color {
+//   const color = baseColor.clone();
+//   if (planet.type === PlanetType.Rocky && planet.waterCoverage > 0.3) {
+//     const waterBlue = new THREE.Color(0x0077BE);
+//     color.lerp(waterBlue, planet.waterCoverage * 0.7);
+//   }
+//   if (planet.surfaceTemperature < 150) {
+//     color.multiplyScalar(0.7);
+//   }
+//   if (planet.surfaceTemperature > 500) {
+//     const hotColor = new THREE.Color(0xCC3300);
+//     color.lerp(hotColor, Math.min((planet.surfaceTemperature - 500) / 1000, 0.4));
+//   }
+//   return color;
+// }
 
 // ============================================================================
 // Planet Mesh Creation
 // ============================================================================
 
 /**
- * Create a basic planet mesh using star-relative scaling
+ * Create a planet mesh using procedural shaders
  *
- * Phase 1: Simple sphere with MeshBasicMaterial for consistent colors.
- * Uses IcosahedronGeometry for better sphere approximation.
+ * Uses type-based shader selection:
+ * - Rocky/Barren: Terrain shader with elevation, water, atmosphere
+ * - GasGiant/IceGiant: Band pattern shader with turbulence
  *
  * @param planet - Planet data
  * @param sceneUnitsPerSolarRadius - Scaling factor from star (scene units per solar radius)
  * @param subdivision - Geometry subdivision level (default: 3 for smoother appearance)
+ * @param camera - Camera for view-dependent effects (required for atmosphere)
  * @returns THREE.Mesh for the planet
  */
 export function createPlanetMesh(
   planet: Planet,
   sceneUnitsPerSolarRadius: number,
-  subdivision: number = 3
+  subdivision: number = 3,
+  camera?: THREE.Camera
 ): THREE.Mesh {
   // Star-relative scaling:
   // Convert planet radius (Earth radii) to solar radii, then to scene units
@@ -101,16 +104,33 @@ export function createPlanetMesh(
   // IcosahedronGeometry gives better sphere than SphereGeometry
   const geometry = new THREE.IcosahedronGeometry(visualRadius, subdivision);
 
-  // Get planet color
-  const baseColor = getPlanetBaseColor(planet.type);
-  const color = adjustPlanetColor(planet, baseColor);
+  // Create material based on planet type
+  let material: THREE.ShaderMaterial;
 
-  // Phase 1: Use MeshBasicMaterial for consistent color display
-  // MeshBasicMaterial doesn't require lighting and shows colors directly
-  // Phase 2 (Weeks 8-9): Will switch to procedural shaders with proper materials
-  const material = new THREE.MeshBasicMaterial({
-    color: color
-  });
+  if (planet.type === PlanetType.Rocky || planet.type === PlanetType.Barren) {
+    // Rocky/Barren planets use terrain shader
+    const uniforms = deriveRockyPlanetUniforms(
+      planet,
+      camera || new THREE.PerspectiveCamera() // Fallback camera if not provided
+    );
+
+    material = new THREE.ShaderMaterial({
+      vertexShader: rockyPlanetVertexShader,
+      fragmentShader: rockyPlanetFragmentShader,
+      uniforms: uniforms as any, // THREE.js uniforms type compatibility
+      side: THREE.FrontSide,
+    });
+  } else {
+    // Gas giants and ice giants use band pattern shader
+    const uniforms = deriveGasGiantUniforms(planet);
+
+    material = new THREE.ShaderMaterial({
+      vertexShader: gasGiantVertexShader,
+      fragmentShader: gasGiantFragmentShader,
+      uniforms: uniforms as any, // THREE.js uniforms type compatibility
+      side: THREE.FrontSide,
+    });
+  }
 
   // Create mesh
   const mesh = new THREE.Mesh(geometry, material);
@@ -122,7 +142,7 @@ export function createPlanetMesh(
     material: material // Store for shader inspection later
   };
 
-  // Casting shadows disabled in Phase 1 for performance
+  // Casting shadows disabled for performance
   mesh.castShadow = false;
   mesh.receiveShadow = false;
 
