@@ -103,21 +103,21 @@ function getGasGiantBandColors(planet: Planet): [THREE.Vector3, THREE.Vector3, T
     ];
   }
 
-  // Gas giants (Jupiter/Saturn): warm tones
+  // Gas giants (Jupiter/Saturn): warm tones with strong contrast, darker overall
   if (comp.hydrogen && comp.hydrogen > 0.7) {
-    // Jupiter-like: orange/brown/cream
+    // Jupiter-like: orange/brown/cream - darker for more realistic appearance
     return [
-      new THREE.Vector3(0.9, 0.6, 0.3),   // Orange
-      new THREE.Vector3(0.7, 0.5, 0.3),   // Brown
-      new THREE.Vector3(0.95, 0.85, 0.7), // Cream
+      new THREE.Vector3(0.65, 0.35, 0.12),  // Deep orange (darker)
+      new THREE.Vector3(0.40, 0.25, 0.15),  // Dark brown (darker)
+      new THREE.Vector3(0.70, 0.55, 0.40),  // Light tan (darker)
     ];
   }
 
-  // Default gas giant: neutral tones
+  // Default gas giant: neutral tones with contrast, darker
   return [
-    new THREE.Vector3(0.8, 0.7, 0.5),   // Tan
-    new THREE.Vector3(0.6, 0.5, 0.4),   // Brown
-    new THREE.Vector3(0.9, 0.8, 0.7),   // Light tan
+    new THREE.Vector3(0.60, 0.48, 0.32),  // Medium tan (darker)
+    new THREE.Vector3(0.38, 0.30, 0.22),  // Dark brown (darker)
+    new THREE.Vector3(0.68, 0.55, 0.38),  // Light tan (darker)
   ];
 }
 
@@ -168,8 +168,19 @@ export function deriveGasGiantUniforms(planet: Planet): GasGiantUniforms {
   // Band count varies by planet size (larger = more bands)
   const bandCount = 5 + Math.floor(planet.radius * 2); // 5-12 bands typically
 
-  // Turbulence varies by surface temperature (hotter = more turbulent)
-  const turbulence = Math.min(planet.surfaceTemperature / 1000, 1.0);
+  // Turbulence: Gas giants are always turbulent
+  // Use seed to get deterministic but varied turbulence
+  const seedVariation = (seed % 100) / 100; // 0.0-1.0 from seed
+
+  let turbulence = 0.7; // Default high turbulence
+
+  if (planet.type === PlanetType.IceGiant) {
+    // Ice giants: 0.6-0.75 turbulence (cooler, less turbulent)
+    turbulence = 0.6 + seedVariation * 0.15;
+  } else {
+    // Gas giants: 0.7-0.9 turbulence (hotter, very turbulent)
+    turbulence = 0.7 + seedVariation * 0.2;
+  }
 
   return {
     u_bandColor1: { value: color1 },

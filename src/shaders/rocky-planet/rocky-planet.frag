@@ -53,23 +53,25 @@ void main() {
       float depth = clamp((waterLevel - terrain) / u_waterCoverage, 0.0, 1.0);
       finalColor = mix(shallowWater, waterColor, depth);
     } else {
-      // Land regions: vary color based on elevation
+      // Land regions: vary color based on elevation with better contrast
       float landElevation = clamp((terrain - waterLevel) / (1.0 - waterLevel), 0.0, 1.0);
 
-      vec3 lowlandColor = u_baseColor * 0.7;      // Darker lowlands
-      vec3 midlandColor = u_baseColor;            // Base color
-      vec3 highlandColor = u_baseColor * 1.3;     // Lighter highlands
+      vec3 lowlandColor = u_baseColor * 0.6;      // Darker lowlands (coastal areas)
+      vec3 midlandColor = u_baseColor * 0.9;      // Medium elevation
+      vec3 highlandColor = u_baseColor * 1.2;     // Highlands
+      vec3 peakColor = u_baseColor * 1.5;         // Mountain peaks
 
-      if (landElevation < 0.4) {
-        finalColor = mix(lowlandColor, midlandColor, landElevation / 0.4);
-      } else if (landElevation < 0.7) {
-        finalColor = midlandColor;
+      // Smoother elevation-based blending
+      if (landElevation < 0.3) {
+        finalColor = mix(lowlandColor, midlandColor, landElevation / 0.3);
+      } else if (landElevation < 0.6) {
+        finalColor = mix(midlandColor, highlandColor, (landElevation - 0.3) / 0.3);
       } else {
-        finalColor = mix(midlandColor, highlandColor, (landElevation - 0.7) / 0.3);
+        finalColor = mix(highlandColor, peakColor, (landElevation - 0.6) / 0.4);
       }
 
-      // Add small-scale texture variation
-      float microDetail = simplex3D(normPos * 20.0) * 0.08;
+      // Add subtle small-scale texture (reduced from 0.08)
+      float microDetail = simplex3D(normPos * 20.0 + vec3(u_seed * 0.15)) * 0.04;
       finalColor += microDetail;
     }
   } else {
