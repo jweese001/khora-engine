@@ -186,7 +186,9 @@ export class CelestialBodyLOD {
       if (!parentPlanet) {
         throw new Error('Parent planet required for moon mesh creation');
       }
-      return createMoonMesh(moon, parentPlanet, sceneUnitsPerSolarRadius, subdivision);
+      // Create camera fallback if not provided (for backward compatibility)
+      const cameraRef = this.camera || new THREE.PerspectiveCamera();
+      return createMoonMesh(moon, parentPlanet, sceneUnitsPerSolarRadius, cameraRef, subdivision);
     }
   }
 

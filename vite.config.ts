@@ -8,4 +8,7 @@ export default defineConfig({
     react(),
     glsl()
   ],
+  server: {
+    allowedHosts: ['host.docker.internal']
+  }
 })

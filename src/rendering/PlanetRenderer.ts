@@ -10,7 +10,7 @@ import * as THREE from 'three';
 import type { Planet } from '../types/celestial-bodies';
 import { PlanetType } from '../types/celestial-bodies';
 
-// Import shaders
+// Import shaders (CRITICAL FIX: removed seed offsets from noise)
 import rockyPlanetVertexShader from '../shaders/rocky-planet/rocky-planet.vert';
 import rockyPlanetFragmentShader from '../shaders/rocky-planet/rocky-planet.frag';
 import gasGiantVertexShader from '../shaders/gas-giant/gas-giant.vert';

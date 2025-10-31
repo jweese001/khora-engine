@@ -6,8 +6,9 @@
  */
 
 import * as THREE from 'three';
-import type { Planet } from '../types/celestial-bodies';
+import type { Planet, Star, Moon } from '../types/celestial-bodies';
 import { PlanetType } from '../types/celestial-bodies';
+import { SeededRandom } from '../utils/random';
 
 // ============================================================================
 // Type Definitions
@@ -36,6 +37,50 @@ export interface GasGiantUniforms {
   u_bandCount: { value: number };
   u_turbulence: { value: number };
   u_seed: { value: number };
+}
+
+/**
+ * Shader uniforms for enhanced star rendering
+ */
+export interface StarUniforms {
+  // Colors
+  u_starColor: { value: THREE.Vector3 };
+  u_noiseColor: { value: THREE.Vector3 };
+  u_centerColor: { value: THREE.Vector3 };
+  u_temperature: { value: number };
+  u_seed: { value: number };
+
+  // Surface activity
+  u_activityLevel: { value: number };
+  u_activityScale: { value: number };
+  u_activitySpeed: { value: number };
+
+  // Center gradient
+  u_gradientStrength: { value: number };
+  u_gradientFalloff: { value: number };
+  u_gradientOpacity: { value: number };
+
+  // Limb darkening
+  u_limbDarkeningPower: { value: number };
+  u_centerBrightness: { value: number };
+
+  // View-dependent
+  u_cameraPosition: { value: THREE.Vector3 };
+  u_time: { value: number };
+}
+
+/**
+ * Shader uniforms for moons
+ * Reuses rocky planet shader but with no water/atmosphere
+ */
+export interface MoonUniforms {
+  u_baseColor: { value: THREE.Vector3 };
+  u_waterCoverage: { value: number };       // Always 0.0 for moons
+  u_atmosphereDensity: { value: number };   // Always 0.0 for moons
+  u_atmosphereColor: { value: THREE.Vector3 };
+  u_seed: { value: number };
+  u_hasAtmosphere: { value: boolean };      // Always false for moons
+  u_cameraPosition: { value: THREE.Vector3 };
 }
 
 // ============================================================================
@@ -121,6 +166,35 @@ function getGasGiantBandColors(planet: Planet): [THREE.Vector3, THREE.Vector3, T
   ];
 }
 
+/**
+ * Get base terrain color for moons based on parent planet and temperature
+ *
+ * @param moon - Moon data
+ * @param parentPlanet - Parent planet
+ * @returns Base color for moon terrain
+ */
+function getMoonBaseColor(moon: Moon, parentPlanet: Planet): THREE.Vector3 {
+  // Moons of gas/ice giants tend to be icy
+  if (parentPlanet.type === PlanetType.GasGiant || parentPlanet.type === PlanetType.IceGiant) {
+    if (moon.surfaceTemperature < 150) {
+      // Very cold icy moon (Enceladus, Europa-like): lighter blue-gray
+      return new THREE.Vector3(0.55, 0.60, 0.65); // Light blue-gray
+    } else {
+      // Warmer icy moon: darker gray with slight blue tint
+      return new THREE.Vector3(0.48, 0.50, 0.53); // Cool gray
+    }
+  }
+
+  // Moons of rocky planets are rocky/gray
+  if (moon.surfaceTemperature > 300) {
+    // Warm rocky moon (Io-like): brownish
+    return new THREE.Vector3(0.54, 0.45, 0.33); // Brown (like rocky planets)
+  } else {
+    // Cold rocky moon (Luna-like): dark gray
+    return new THREE.Vector3(0.38, 0.38, 0.38); // Dark gray
+  }
+}
+
 // ============================================================================
 // Uniform Generation Functions
 // ============================================================================
@@ -192,9 +266,175 @@ export function deriveGasGiantUniforms(planet: Planet): GasGiantUniforms {
   };
 }
 
+/**
+ * Generate shader uniforms for moons
+ *
+ * Moons use the rocky planet shader but with no water or atmosphere.
+ * Color is determined by parent planet type and surface temperature.
+ *
+ * @param moon - Moon data
+ * @param parentPlanet - Parent planet
+ * @param camera - Camera for view-dependent effects
+ * @returns Uniforms object for moon shader (uses rocky planet shader)
+ */
+export function deriveMoonUniforms(
+  moon: Moon,
+  parentPlanet: Planet,
+  camera: THREE.Camera
+): MoonUniforms {
+  const baseColor = getMoonBaseColor(moon, parentPlanet);
+
+  // Generate seed from moon ID for deterministic noise
+  const seed = hashString(moon.id);
+
+  return {
+    u_baseColor: { value: baseColor },
+    u_waterCoverage: { value: 0.0 },           // Moons have no water
+    u_atmosphereDensity: { value: 0.0 },       // Moons have no atmosphere
+    u_atmosphereColor: { value: new THREE.Vector3(0, 0, 0) },
+    u_seed: { value: seed },
+    u_hasAtmosphere: { value: false },
+    u_cameraPosition: { value: camera.position },
+  };
+}
+
 // ============================================================================
 // Utility Functions
 // ============================================================================
+
+/**
+ * Generate shader uniforms for enhanced star rendering
+ *
+ * Maps spectral types to appropriate color schemes and parameters.
+ * Uses seeded randomization for variation within spectral type ranges.
+ *
+ * @param star - Star data
+ * @param camera - Camera for view-dependent effects
+ * @returns Uniforms object for enhanced star shader
+ */
+export function deriveStarUniforms(
+  star: Star,
+  camera: THREE.Camera
+): StarUniforms {
+  // Generate seed from star ID for deterministic variation
+  const seed = hashString(star.id);
+  const rng = new SeededRandom(seed);
+
+  // Spectral type-based color mapping
+  // Using ranges from the demo settings as baseline for G-type (Sun-like)
+  const spectralColors = {
+    'O': {
+      // Blue stars - very hot (darkened significantly)
+      base: new THREE.Vector3(0.4, 0.5, 0.8),
+      noise: new THREE.Vector3(0.2, 0.3, 0.6),
+      center: new THREE.Vector3(0.6, 0.7, 0.9),
+    },
+    'B': {
+      // Blue-white stars (darkened significantly)
+      base: new THREE.Vector3(0.5, 0.6, 0.8),
+      noise: new THREE.Vector3(0.3, 0.4, 0.7),
+      center: new THREE.Vector3(0.7, 0.8, 0.9),
+    },
+    'A': {
+      // White stars (darkened significantly)
+      base: new THREE.Vector3(0.7, 0.7, 0.8),
+      noise: new THREE.Vector3(0.5, 0.5, 0.6),
+      center: new THREE.Vector3(0.85, 0.85, 0.9),
+    },
+    'F': {
+      // Yellow-white stars (much darker noise for contrast)
+      base: new THREE.Vector3(0.8, 0.75, 0.5),
+      noise: new THREE.Vector3(0.3, 0.2, 0.1),  // Much darker brown spots
+      center: new THREE.Vector3(0.9, 0.85, 0.6),
+    },
+    'G': {
+      // Yellow stars (Sun-like) - using demo settings as baseline (darkened)
+      // Base Color: #ffaa00 -> darker
+      base: new THREE.Vector3(0.8, 0.5, 0.0),
+      // Noise Color: #cc3300 -> keep dark
+      noise: new THREE.Vector3(0.6, 0.15, 0.0),
+      // Center Color: #ffff00 -> darker
+      center: new THREE.Vector3(0.9, 0.9, 0.0),
+    },
+    'K': {
+      // Orange stars (darkened)
+      base: new THREE.Vector3(0.8, 0.5, 0.2),
+      noise: new THREE.Vector3(0.6, 0.3, 0.1),
+      center: new THREE.Vector3(0.9, 0.65, 0.3),
+    },
+    'M': {
+      // Red stars (darkened slightly)
+      base: new THREE.Vector3(0.8, 0.4, 0.2),
+      noise: new THREE.Vector3(0.6, 0.2, 0.05),
+      center: new THREE.Vector3(0.9, 0.6, 0.3),
+    },
+  };
+
+  const colors = spectralColors[star.spectralType] || spectralColors['G'];
+
+  // Temperature normalization (0.5-2.0 range for brightness multiplier)
+  const tempNormalized = Math.max(0.5, Math.min(2.0, star.temperature / 5778)); // 5778K = Sun
+
+  // Activity level varies by spectral type and seed
+  // BOOSTED: Increased all ranges to make surface detail more visible
+  let activityLevel: number;
+  if (star.spectralType === 'M') {
+    // M-type: High activity (flares common)
+    activityLevel = rng.randomFloat(0.5, 0.8);
+  } else if (star.spectralType === 'G') {
+    // G-type (Sun-like): Medium activity - boosted from 0.2-0.4
+    activityLevel = rng.randomFloat(0.4, 0.6);
+  } else if (star.spectralType === 'O' || star.spectralType === 'B') {
+    // Hot stars: Low surface activity (smooth) - boosted from 0.1-0.25
+    activityLevel = rng.randomFloat(0.2, 0.4);
+  } else {
+    // F, A, K: Medium-low activity - boosted from 0.15-0.35
+    activityLevel = rng.randomFloat(0.3, 0.5);
+  }
+
+  // Activity scale (noise frequency) - demo uses ~2.0-3.0 range
+  const activityScale = rng.randomFloat(2.0, 3.5);
+
+  // Activity speed (animation) - demo uses ~0.1-0.2
+  const activitySpeed = rng.randomFloat(0.08, 0.15);
+
+  // Gradient parameters - reduced opacity to not wash out surface detail
+  // Demo: Gradient Strength: 0.24, Falloff: 1.1, Opacity: 0.60
+  const gradientStrength = rng.randomFloat(0.15, 0.25); // Reduced
+  const gradientFalloff = rng.randomFloat(1.0, 1.3);  // Same
+  const gradientOpacity = rng.randomFloat(0.3, 0.5);  // Reduced from 0.5-0.7
+
+  // Limb darkening - demo uses: Power: 1.9, Center Brightness: 1.15
+  const limbDarkeningPower = rng.randomFloat(1.7, 2.1); // Centered on 1.9
+  const centerBrightness = rng.randomFloat(1.0, 1.3);   // Centered on 1.15
+
+  return {
+    // Colors
+    u_starColor: { value: colors.base },
+    u_noiseColor: { value: colors.noise },
+    u_centerColor: { value: colors.center },
+    u_temperature: { value: tempNormalized },
+    u_seed: { value: seed },
+
+    // Surface activity
+    u_activityLevel: { value: activityLevel },
+    u_activityScale: { value: activityScale },
+    u_activitySpeed: { value: activitySpeed },
+
+    // Center gradient
+    u_gradientStrength: { value: gradientStrength },
+    u_gradientFalloff: { value: gradientFalloff },
+    u_gradientOpacity: { value: gradientOpacity },
+
+    // Limb darkening
+    u_limbDarkeningPower: { value: limbDarkeningPower },
+    u_centerBrightness: { value: centerBrightness },
+
+    // View-dependent
+    u_cameraPosition: { value: camera.position },
+    u_time: { value: 0.0 }, // Will be updated in animation loop
+  };
+}
 
 /**
  * Simple string hash function for deterministic seeds

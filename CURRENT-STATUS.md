@@ -1,329 +1,286 @@
-# Khora Engine - Current Status Summary
-
-**Last Updated:** October 30, 2025 - Session 5 Recovery
-**Current Milestone:** M5 - Procedural Shaders (38% Complete)
-**Status:** ✅ Bug Fixed - Ready for User Testing
-
----
-
-## 🎯 Where We Are
-
-### Completed Milestones ✅
-1. **M1 - Foundation** (Week 1-2) ✅
-   - React + TypeScript + Three.js + Zustand
-   - Type system, utilities, state management
-   - Scene manager with starfield
-
-2. **M2 - Generation** (Week 2-3) ✅
-   - Deterministic star/planet/moon generation
-   - SeededRandom for reproducibility
-   - Physics-based calculations
-
-3. **M3 - Basic Rendering** (Week 4-5) ✅
-   - Star, planet, moon renderers
-   - Orbit visualization
-   - Camera controls and raycasting
-
-4. **M4 - LOD System** (Week 5-6) ✅
-   - 3-level LOD (subdivision 6/4/2)
-   - LOD Debug overlay (press 'L')
-   - Performance optimization
-
-### Current Milestone: M5 - Procedural Shaders ⏳
-
-**Progress:** 8 / 21 tasks (38%)
-
-**✅ What's Done:**
-- Shader infrastructure (vite-plugin-glsl)
-- Shader directory structure
-- Simplex noise functions (common/noise.glsl)
-- Star vertex + fragment shaders
-- Bloom post-processing (UnrealBloomPass)
-- StarRenderer refactored to use ShaderMaterial
-- **Bug fixed:** Shader #include syntax
-
-**⏭️ What's Next:**
-- TEST star shader (user action required)
-- Rocky planet shader
-- Gas giant shader
-- Barren planet shader
-- Testing and polish
+# Khora Engine - Current Status
+**Last Updated:** October 31, 2025 - Session 9 Complete
+**Phase:** 1 (Single Star System MVP)
+**Progress:** 83% Complete (5 of 6 milestones done)
 
 ---
 
-## 🚨 What Just Happened
+## 🎯 Milestone Status
 
-### The Crash
-You were testing the star shader and encountered an **infinite loop** that made the application unresponsive. The session crashed before we could complete testing.
+| Milestone | Status | Week | Description |
+|-----------|--------|------|-------------|
+| **M1** | ✅ 100% | 2 | Foundation Complete - Empty scene, project structure |
+| **M2** | ✅ 100% | 4 | Generation Works - Data structures generate correctly |
+| **M3** | ✅ 100% | 6 | Visible in 3D - System renders with basic materials |
+| **M4** | ✅ 100% | 6 | LOD Optimized - Cinema-quality LOD with debug tools |
+| **M5** | ✅ 100% | 10 | **Shaders Complete - All procedural shaders working** |
+| **M6** | ⏳ 0% | 12 | Phase 1 Complete - IDE integration, all acceptance criteria |
 
-### The Bug
-**Root Cause:** Incorrect `#include` syntax in `src/shaders/star/star.frag`
+---
 
-```glsl
-// ❌ WRONG (what we had)
-#include <common/noise.glsl>
+## ✅ What's Working (M1-M5)
 
-// ✅ CORRECT (what we fixed)
-#include "../common/noise.glsl"
+### Procedural Generation
+- ✅ Spectral type distribution (O, B, A, F, G, K, M)
+- ✅ Star properties (mass, radius, temperature, luminosity)
+- ✅ Habitable zone calculation
+- ✅ Titius-Bode orbital distribution for planets
+- ✅ Planet types (Rocky, Barren, GasGiant, IceGiant)
+- ✅ Atmosphere generation (composition, breathability)
+- ✅ Moon generation (multiple per planet)
+- ✅ Resource distribution
+- ✅ Deterministic from seed (100% reproducible)
+- ✅ Name generation (stars, planets, moons)
+
+### 3D Rendering
+- ✅ **Star rendering** with enhanced procedural shader
+  - Spectral type-based color mapping (all 7 types)
+  - Multi-octave noise (3 layers) for surface activity
+  - Center gradient overlay with opacity control
+  - Limb darkening for realistic brightness falloff
+  - Temperature-based brightness multiplier
+- ✅ **Rocky planet shader** with terrain variation
+  - 3-octave FBM for realistic terrain
+  - Water coverage (blue oceans at low elevations)
+  - Atmosphere Fresnel glow (view-dependent)
+  - Elevation-based color blending
+- ✅ **Gas giant shader** with band patterns
+  - Horizontal band structure
+  - Turbulence variation
+  - Ice giants vs gas giants differentiation
+- ✅ **Moon shader** with procedural terrain (NEW!)
+  - Reuses rocky planet shader
+  - Color based on parent planet type + temperature
+  - No water or atmosphere effects
+  - 3-octave noise for surface detail
+- ✅ Orbit line rendering
+- ✅ Post-processing bloom for stars
+- ✅ 3-level LOD system (subdivision 6/4/2)
+- ✅ OrbitControls for camera movement
+
+### State Management
+- ✅ Zustand store with system state
+- ✅ Generation action with seed parameter
+- ✅ Camera reference for shaders
+- ✅ Scene reference for updates
+
+### Development Tools
+- ✅ Hot module replacement
+- ✅ TypeScript type safety
+- ✅ Vite build system
+- ✅ vite-plugin-glsl for shader includes
+- ✅ LOD debug overlay (press 'L')
+- ✅ Console logging for verification
+
+---
+
+## 🎨 Visual Quality (M5 Complete!)
+
+### Stars
+- **Spectral Types:** All 7 types (O, B, A, F, G, K, M) with unique colors
+- **Surface Detail:** Multi-octave noise shows sunspots, flares, chromosphere
+- **Glow Effect:** UnrealBloomPass creates realistic star glow
+- **Color Accuracy:** Darkened by 20-30% to prevent bloom washout
+- **Activity Levels:** M-types show high activity (flares), O/B-types smooth
+
+### Rocky Planets
+- **Terrain:** 3-octave noise creates mountains, valleys, lowlands
+- **Water Worlds:** Blue oceans at low elevations with depth variation
+- **Barren Worlds:** Enhanced geological features (cracks, maria, rust patches)
+- **Atmospheres:** Blue Fresnel glow on breathable worlds
+- **Lighting:** Diffuse + ambient lighting shows form
+
+### Gas Giants
+- **Band Patterns:** 5-12 horizontal bands (more for larger planets)
+- **Turbulence:** Visible storm systems and atmospheric mixing
+- **Color Schemes:**
+  - Jupiter-like: Orange/brown/cream bands
+  - Neptune-like: Blue/cyan tones
+- **Contrast:** Darkened colors for realistic appearance
+
+### Moons (NEW!)
+- **Icy Moons:** Light blue-gray (Europa, Enceladus-like)
+- **Rocky Moons:** Dark gray (Luna-like) or brown (Io-like)
+- **Surface Detail:** Craters and terrain features from 3-octave noise
+- **No Atmosphere:** Airless worlds with no glow effects
+- **Realistic Scale:** 1-7% of parent planet visual radius
+
+---
+
+## 📊 Performance
+
+### Current Metrics
+- **Frame Rate:** ~60 FPS with 8 planets + 20 moons (target met)
+- **LOD Switching:** Smooth transitions at 75 and 250 units
+- **Memory:** <500MB for full system (target met)
+- **Generation Time:** <2 seconds for complete system
+- **Bundle Size:** ~765 KB (production build)
+
+### LOD Configuration
+```
+High Detail (subdivision 6):   0-75 units    (81,920 triangles)
+Medium Detail (subdivision 4):  75-250 units  (5,120 triangles)
+Low Detail (subdivision 2):     250+ units    (320 triangles)
 ```
 
-**Why it caused infinite loop:**
-1. vite-plugin-glsl couldn't process angle-bracket includes
-2. The `fbm2()` noise function remained undefined
-3. Shader compilation failed in Three.js
-4. Animation loop tried to re-render
-5. Each frame → error → re-render → error... **infinite loop**
+---
 
-### The Fix
-**Commits:**
-- `716c816` - Removed `?raw` suffix from imports (partial fix)
-- `b59887d` - Corrected `#include` to use relative path (complete fix)
+## 🔧 Recent Changes (Session 9 - October 31, 2025)
 
-**Status:** ✅ Fix committed and documented
+### Moon Shader Implementation
+**Files Modified:**
+1. `src/rendering/shaderUniforms.ts` (+70 lines)
+   - Added `MoonUniforms` interface
+   - Added `getMoonBaseColor()` function (color by parent planet + temp)
+   - Added `deriveMoonUniforms()` function
+
+2. `src/rendering/MoonRenderer.ts` (refactored)
+   - Removed `getMoonColor()` (replaced by shader system)
+   - Switched from `MeshBasicMaterial` to `ShaderMaterial`
+   - Updated all functions to accept camera parameter
+   - **Critical Fix:** Removed `?raw` from shader imports
+
+3. `src/rendering/CelestialBodyLOD.ts` (updated)
+   - Updated moon LOD creation to pass camera
+
+**Bug Fixed:**
+- Shader imports with `?raw` suffix bypassed vite-plugin-glsl
+- `#include` directives weren't processed
+- Solution: Remove `?raw` to allow plugin processing
+
+**Results:**
+- ✅ All moons now have procedural terrain shaders
+- ✅ Color coded by parent planet type (icy vs rocky)
+- ✅ No console errors, smooth rendering
+- ✅ M5 Milestone 100% complete!
 
 ---
 
-## 🧪 What You Need To Do Now
+## 🎯 Next Steps (M6 - IDE Integration)
 
-### Test the Fix (5-10 minutes)
+### Objective
+Create an interactive IDE panel for inspecting generated systems.
 
-**1. Start the dev server:**
+### Priority Features
+1. **Object Selection (Raycasting)** - Click celestial body → select it
+2. **IDE Panel Component** - Sliding panel with tab system
+3. **Scene Tree View** - Hierarchical display with expand/collapse
+4. **Data Inspector** - Monaco Editor showing JSON data
+5. **Shader Viewer** - Monaco Editor showing GLSL code
+
+### Quick Start
 ```bash
-cd /Users/kraken/Documents/khora/khora-engine
-npm run dev
+# Install Monaco Editor
+npm install @monaco-editor/react
+
+# See detailed plan in:
+# - NEXT-SESSION.md (step-by-step guide)
+# - CLAUDE.md (implementation patterns)
 ```
 
-**2. Open browser:**
-```
-http://localhost:5175/
-```
-
-**3. Open browser console** (press F12)
-
-**4. Generate a test system:**
-```javascript
-window.__KHORA_STORE__.getState().generateSystem(12345);
-```
-
-### Expected Results ✅
-
-**If the fix works:**
-- ✅ Page does NOT freeze
-- ✅ Star appears in center of scene
-- ✅ Star has yellowish color (G-type for seed 12345)
-- ✅ Star has subtle surface texture (procedural noise)
-- ✅ Star has bloom glow effect around it
-- ✅ Console shows NO errors
-- ✅ Camera controls work smoothly
-- ✅ Maintains 60fps
-
-**Visual comparison:**
-- **Before:** Star was solid color with basic material
-- **After:** Star has "alive" surface with subtle turbulence and bloom glow
-
-### What to Report Back
-
-**✅ If it works:**
-Just say: "It works!" and we'll continue with M5 (rocky planet shader)
-
-**⚠️ If it still loops:**
-Say: "Still infinite loop" and share any console errors
-
-**⚠️ If different issue:**
-Share what you see and any console errors
+### Estimated Time
+- Session 10: 4-6 hours (foundation + data display)
+- Session 11: 2-4 hours (shader viewer + polish)
 
 ---
 
-## 📊 Project Status
+## 📚 Documentation Files
 
-### Files & Structure
-```
-khora-engine/
-├── src/
-│   ├── components/        # React components
-│   ├── generation/        # Star/planet/moon generators
-│   ├── rendering/         # Three.js renderers + LOD
-│   ├── shaders/          # GLSL shaders ⭐ NEW
-│   │   ├── common/       # Shared utilities (noise.glsl)
-│   │   └── star/         # Star shaders (vert + frag)
-│   ├── store/            # Zustand state management
-│   ├── types/            # TypeScript definitions
-│   └── utils/            # Random, physics, constants
-├── TASKS.md              # Active task tracking
-├── PLANNING.md           # Technical reference
-├── SESSION-5-RECOVERY.md # This session's incident report
-└── CURRENT-STATUS.md     # This file (quick reference)
-```
-
-### Code Stats
-- **Total Files:** ~40 source files
-- **Lines of Code:** ~8,000+ (production code)
-- **Dependencies:** three, zustand, monaco, react-split, vite-plugin-glsl
-- **Build Size:** ~740 KB (gzipped)
-
-### Git History (Recent)
-```
-bd282f9 📝 Session 5 Recovery - Document bug fix and current status
-b59887d 🐛 FIX: Correct shader #include syntax for vite-plugin-glsl
-716c816 🐛 CRITICAL FIX: Remove ?raw from shader imports
-a4fba76 ✨ M5 Task 8: Refactor StarRenderer to use procedural shader
-3e04989 ✨ M5 Task 7: Integrate bloom post-processing
-a577728 ✨ M5 Task 6: Implement star shader with emissive surface
-54b15d0 🎨 M5 Foundation - Shader infrastructure setup
-```
+| File | Purpose |
+|------|---------|
+| `TASKS.md` | ✅ Updated - Task tracking with Session 9 summary |
+| `SESSION-9-NOTES.md` | ✅ NEW - Detailed session 9 documentation |
+| `NEXT-SESSION.md` | ✅ NEW - Step-by-step guide for M6 |
+| `CURRENT-STATUS.md` | ✅ Updated - This file (quick overview) |
+| `PLANNING.md` | Reference - Complete technical details (Obsidian) |
+| `CLAUDE.md` | Reference - AI development workflow guide |
 
 ---
 
-## 🎯 Next Steps After Testing
+## 🧪 Testing
 
-### If Test Passes ✅
-
-**Continue M5 - Rocky Planet Shader (1-2 hours)**
-
-1. Implement `src/shaders/rocky-planet/rocky-planet.frag`
-   - Simplex noise terrain (3 octaves)
-   - Water at low elevations (if waterCoverage > 0.3)
-   - Atmosphere Fresnel glow
-   - Base color from planet type
-
-2. Create `deriveShaderUniforms()` helper
-   - Convert Planet data → shader uniforms
-   - Handle water coverage, atmosphere, etc.
-
-3. Refactor PlanetRenderer
-   - Use ShaderMaterial instead of MeshStandardMaterial
-   - Type-based shader selection
-   - Pass proper uniforms
-
-4. Test rocky planets visually
-   - Verify terrain looks natural
-   - Check water shows up correctly
-   - Verify atmosphere glow
-
-### If Test Fails ⚠️
-
-We'll debug together:
-1. Share console errors
-2. Check shader compilation
-3. Verify vite-plugin-glsl configuration
-4. Test with simpler shader
-5. Isolate the issue
-
----
-
-## 📚 Key Documentation Files
-
-### Active Session Files (Read These)
-- **CURRENT-STATUS.md** (this file) - Quick status summary
-- **SESSION-5-RECOVERY.md** - Detailed incident report and recovery plan
-- **TASKS.md** - Complete task tracking with progress
-
-### Reference Files (For Deep Dives)
-- **PLANNING.md** - Technical implementation guide
-- **SESSION-NOTES.md** - Session 1 foundation notes
-- **SESSION-3-COMPLETE.md** - Session 3 rendering notes
-- **LOD-TESTING-GUIDE.md** - LOD system testing procedures
-- **M4-QUICK-TEST.md** - Quick LOD verification
-
-### Obsidian Vault (Design Docs)
-Located at: `/Projects/Khora Engine/`
-- **PRD - Khora Engine v2.md** - Complete product requirements
-- **PLANNING.md** (full version) - Complete technical details
-- **CLAUDE.md** - Development workflow guide
-
----
-
-## 💡 Quick Commands
-
-### Development
+### Manual Test Suite
 ```bash
-# Start dev server
+# 1. Start dev server
 npm run dev
 
-# Build for production
-npm run build
+# 2. Open browser console and run:
+window.__KHORA_STORE__.getState().generateSystem(12345)
 
-# Run linter
-npm run lint
+# 3. Verify visuals:
+# ✅ Star has visible surface texture with bloom glow
+# ✅ Rocky planets show terrain variation
+# ✅ Planets with water show blue oceans
+# ✅ Gas giants show band patterns
+# ✅ Moons show procedural terrain (NEW!)
+# ✅ All objects have smooth LOD transitions
+
+# 4. Test LOD system:
+# Press 'L' to toggle debug overlay
+# Zoom in/out to verify LOD switching
+
+# 5. Performance check:
+# Open Chrome DevTools Performance tab
+# Verify: <16.67ms frame time, <500MB memory
 ```
 
-### Console Testing
-```javascript
-// Access store
-const store = window.__KHORA_STORE__;
+### Known Good Seeds
+- `12345` - G-type star with varied planets and moons
+- `99999` - M-type red dwarf
+- `198474` - System with many visible moons
 
-// Generate systems
-store.getState().generateSystem(12345);  // G-type
-store.getState().generateSystem(99999);  // F-type
-store.getState().generateSystem(42);     // M-type
+---
 
-// Inspect system
-console.log(store.getState().currentSystem);
+## 💡 Key Learnings (Sessions 1-9)
 
-// Toggle LOD debug overlay
-// Press 'L' key in browser
+### Shader Development
+1. **Never use `?raw` with vite-plugin-glsl** - Bypasses `#include` processing
+2. **Rotation-based seed variation** - Preserves detail vs offset-based
+3. **Darkened colors for bloom** - Allows detail through glow
 
-// Check scene
-console.log(store.getState().scene);
-```
+### Moon Shaders (Session 9)
+1. **Shader reuse is powerful** - Moons use same shader as rocky planets
+2. **Parent planet type matters** - Better than distance for moon colors
+3. **Import syntax is critical** - `?raw` breaks vite-plugin-glsl
 
-### Git
+---
+
+## 🚀 Phase 1 Timeline
+
+| Week | Focus | Status |
+|------|-------|--------|
+| 1-2 | Foundation & Setup | ✅ Complete |
+| 3-4 | Generation Engine | ✅ Complete |
+| 5 | Basic Rendering | ✅ Complete |
+| 6-7 | LOD Optimization | ✅ Complete |
+| 8-9 | Procedural Shaders | ✅ Complete |
+| **10-11** | **IDE Integration** | **⏳ Next** |
+| 12 | Polish & Testing | 📅 Scheduled |
+
+**Current Week:** Beginning Week 10
+**Days Remaining:** ~14 days
+**On Track:** Yes ✅
+
+---
+
+## 📞 Quick Commands
+
 ```bash
-# Check status
-git status
+# Development
+npm run dev              # Start dev server
+npm run build            # Production build
+npm run preview          # Preview production build
 
-# View recent commits
-git log --oneline -10
+# Testing
+# Open browser console:
+window.__KHORA_STORE__.getState().generateSystem(12345)
 
-# View changes
-git diff
+# Debug LOD
+# Press 'L' in-app to toggle overlay
 ```
 
 ---
 
-## 🎓 Session 5 Learnings
-
-### What We Learned
-1. **vite-plugin-glsl syntax matters** - Always use relative paths, not angle brackets
-2. **Test shaders immediately** - Don't implement multiple before testing
-3. **Shader errors can cause loops** - Failed compilation can trigger re-renders
-4. **Document as you go** - Made recovery much easier
-
-### Technical Insights
-- vite-plugin-glsl processes `#include "../path/file.glsl"`
-- Don't mix `?raw` suffix with vite-plugin-glsl
-- Browser console shows GLSL compilation errors
-- Start simple with shaders, add complexity incrementally
-
----
-
-## ✅ Action Items
-
-### For User (NOW)
-- [ ] **Test shader fix** - Run generateSystem(12345) and verify no loop
-- [ ] **Report results** - Let me know if it works or not
-- [ ] **Take screenshot** (optional) - Show star with bloom if it works
-
-### For Next Session
-- [ ] Continue M5 - Rocky planet shader
-- [ ] Implement gas giant shader
-- [ ] Complete shader testing
-- [ ] Polish visual parameters
-
----
-
-## 🚀 Timeline
-
-**Week 1-2:** Foundation ✅
-**Week 2-3:** Generation ✅
-**Week 4-5:** Basic Rendering ✅
-**Week 5-6:** LOD System ✅
-**Week 8-9:** Shaders ⏳ **← YOU ARE HERE (38%)**
-**Week 10-11:** IDE Integration (pending)
-**Week 12:** Polish & Demo (pending)
-
-**Overall Status:** 🟢 On Track
-
----
-
-*Ready for testing! Let me know the results and we'll continue M5.*
+*Project Status: ON TRACK for Phase 1 completion! 🎉*
+*M5 Complete - All Procedural Shaders Working!*
+*Next: M6 - IDE Integration*

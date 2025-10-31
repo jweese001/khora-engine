@@ -105,6 +105,91 @@ src/
 
 ---
 
+## Phase 3 Vision: Architect Mode
+
+**Key Insight from M5 (Procedural Shaders):**
+
+During shader development, we discovered that developing shaders directly in the engine is difficult and slow. The optimal workflow is:
+
+1. **Develop in isolation** - Create standalone HTML demos with live controls
+2. **Iterate visually** - Use sliders and color pickers for rapid feedback
+3. **Port when perfect** - Only integrate into engine when shader is complete
+
+**Architect Mode Goal:**
+Transform the read-only IDE into an interactive shader editor that allows runtime parameter tuning and system customization.
+
+### Workflow Vision
+
+```
+Generate System (procedural, deterministic)
+    ↓
+Select Planet (click in 3D view)
+    ↓
+Edit Parameters (live shader controls in IDE)
+    ↓
+Save Customizations (override procedural defaults)
+    ↓
+Export/Share (JSON export with custom values)
+```
+
+### Key Features
+
+**Interactive Shader Controls:**
+- Color pickers for all color uniforms (baseColor, rustColor, bandColors, etc.)
+- Range sliders for numeric parameters (scale, intensity, turbulence, etc.)
+- Real-time preview as parameters change
+- Reset to procedural defaults
+- Apply changes to all planets of same type
+
+**Shader Development Mode:**
+- Integrate standalone shader demos into IDE
+- "Shader Lab" tab for experimentation
+- Export/import shader presets
+- Document parameter ranges and visual quality guidelines
+
+**Data Persistence:**
+- Export systems with custom parameters as JSON
+- Import customized systems
+- Save snapshots for comparison
+- Share via URL hash/query params
+
+### Implementation Timeline (8 weeks)
+
+**Weeks 1-2:** IDE enhancement with parameter inspection and controls
+**Weeks 3-4:** Live editing system with real-time uniform updates
+**Weeks 5-6:** Shader development workflow integration
+**Weeks 7-8:** Data persistence and sharing features
+
+### Critical Design Principles (Learned from M5)
+
+**Seed Handling:**
+- ❌ DON'T: Add seed offsets to noise positions (`normPos + vec3(u_seed * 0.1)`)
+- ✅ DO: Use seed for rotation/transformation (`rotation * normPos`)
+- WHY: Offsets can land in uniform regions of noise space, destroying detail
+
+**Shader Development:**
+1. Develop in standalone HTML demos first
+2. Iterate with live visual feedback
+3. Document good parameter ranges
+4. Test edge cases and performance
+5. Port to engine only when visually perfect
+
+**Visual Quality Checklist:**
+- No visible banding or posterization
+- Detail visible at all zoom levels
+- Each planet looks unique with same shader
+- Performance acceptable (60fps)
+- Aesthetically pleasing color palette
+
+---
+
+**Status:** Planning phase - Not scheduled for Phase 1
+**Dependencies:** M6 (Phase 1 Complete), Phase 2 (Multi-system Galaxy)
+**Estimated Effort:** 8 weeks
+**Priority:** High - Critical for creative workflow
+
+---
+
 *[Rest of PLANNING.md content - see Obsidian for full technical details]*
 
 **For complete implementation details, algorithms, and code patterns, refer to:**
@@ -113,6 +198,6 @@ src/
 
 ---
 
-*Last Updated: October 29, 2025*
+*Last Updated: October 31, 2025*
 *Based on: PRD - Khora Engine v2.md*
 *Phase 1 Target: 12 weeks to MVP*

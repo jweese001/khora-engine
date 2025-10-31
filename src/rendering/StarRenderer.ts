@@ -9,6 +9,7 @@ import * as THREE from 'three';
 import type { Star } from '../types/celestial-bodies';
 import starVertShader from '../shaders/star/star.vert';
 import starFragShader from '../shaders/star/star.frag';
+import { deriveStarUniforms } from './shaderUniforms';
 
 // ============================================================================
 // Star-Relative Scaling System
@@ -96,19 +97,27 @@ function temperatureToColor(temperature: number): THREE.Color {
 // ============================================================================
 
 /**
- * Create a star mesh with procedural shader material
+ * Create a star mesh with enhanced procedural shader material
  *
- * Uses custom star shader with:
- * - Emissive radial gradient (brighter at center)
+ * Uses enhanced star shader with:
+ * - Multi-color control (base, noise, center colors)
+ * - Center gradient overlay with opacity control
+ * - Limb darkening for realistic brightness falloff
  * - Procedural surface activity (noise-based turbulence)
  * - Temperature-based coloring and brightness
+ * - Spectral type-based parameter mapping
  * - Bloom-ready output (values > 1.0 for glow effect)
  *
  * @param star - Star data
  * @param scale - Visual scale factor (default: 1.0)
+ * @param camera - Camera for view-dependent effects (required)
  * @returns THREE.Mesh for the star
  */
-export function createStarMesh(star: Star, scale: number = 1.0): THREE.Mesh {
+export function createStarMesh(
+  star: Star,
+  scale: number = 1.0,
+  camera?: THREE.Camera
+): THREE.Mesh {
   // Star-relative scaling system:
   // All celestial body sizes are calculated relative to the star
   // Star gets fixed comfortable visual size, everything else scales from that
@@ -120,50 +129,30 @@ export function createStarMesh(star: Star, scale: number = 1.0): THREE.Mesh {
   // Use higher subdivision for stars since they're always visible and important
   const geometry = new THREE.SphereGeometry(visualRadius, 32, 32);
 
-  // Get star color from temperature
-  const color = temperatureToColor(star.temperature);
-  console.log(`[StarRenderer] Star ${star.name}: temp=${star.temperature}K, color=rgb(${(color.r*255).toFixed(0)}, ${(color.g*255).toFixed(0)}, ${(color.b*255).toFixed(0)})`);
+  // Get enhanced shader uniforms from spectral type mapping
+  const cameraRef = camera || new THREE.PerspectiveCamera(); // Fallback camera
+  const uniforms = deriveStarUniforms(star, cameraRef);
 
-  // Derive seed from star ID (for determinism)
-  // Convert star ID to a numeric seed
-  const seed = star.id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0) % 10000;
+  console.log(`[StarRenderer] Enhanced star ${star.name} (${star.spectralType}-type): temp=${star.temperature}K, activity=${uniforms.u_activityLevel.value.toFixed(2)}`);
 
-  // Derive activity level from star properties (deterministic)
-  // Hotter, more luminous stars tend to be more active
-  // Use seed for variation within type ranges
-  // O, B, A types: high activity (0.7-1.0)
-  // F, G types: medium activity (0.4-0.7)
-  // K, M types: low activity (0.0-0.4)
-  const seedFraction = (seed % 100) / 100; // 0.0-1.0 from seed
-  const activityLevel = star.temperature > 7500 ? 0.7 + seedFraction * 0.3 :
-                        star.temperature > 5000 ? 0.4 + seedFraction * 0.3 :
-                        seedFraction * 0.4;
-
-  // Create ShaderMaterial with custom star shader
+  // Create ShaderMaterial with enhanced star shader
   const material = new THREE.ShaderMaterial({
     vertexShader: starVertShader,
     fragmentShader: starFragShader,
-    uniforms: {
-      u_starColor: { value: new THREE.Vector3(color.r, color.g, color.b) },
-      u_temperature: { value: star.temperature },
-      u_activityLevel: { value: activityLevel },
-      u_time: { value: 0.0 }, // For future animation
-      u_seed: { value: seed }
-    },
+    uniforms: uniforms as any, // THREE.js uniforms type compatibility
     // No lights needed - shader is fully emissive
     side: THREE.FrontSide,
     transparent: false
   });
 
-  console.log(`[StarRenderer] Star shader uniforms: temp=${star.temperature}K, activity=${activityLevel.toFixed(2)}, seed=${seed}`);
-
   // Create mesh
   const mesh = new THREE.Mesh(geometry, material);
 
-  // Store star data in userData for selection/inspection
+  // Store star data and material in userData for selection/inspection/animation
   mesh.userData = {
     type: 'star',
-    data: star
+    data: star,
+    material: material // Store for shader inspection and time updates
   };
 
   // Stars don't cast shadows (they ARE the light source)
@@ -270,6 +259,7 @@ export function createStarLight(star: Star, intensity: number = 3.0): THREE.Grou
  *
  * @param star - Star data
  * @param scale - Visual scale factor
+ * @param camera - Camera for view-dependent shader effects
  * @param includeGlow - Whether to add glow sprite (default: true)
  * @param includeLight - Whether to add point light (default: true)
  * @returns THREE.Group containing all star elements
@@ -277,13 +267,14 @@ export function createStarLight(star: Star, intensity: number = 3.0): THREE.Grou
 export function createStarObject(
   star: Star,
   scale: number = 1.0,
+  camera?: THREE.Camera,
   includeGlow: boolean = true,
   includeLight: boolean = true
 ): THREE.Group {
   const group = new THREE.Group();
 
-  // Add star mesh
-  const mesh = createStarMesh(star, scale);
+  // Add star mesh with enhanced shader
+  const mesh = createStarMesh(star, scale, camera);
   group.add(mesh);
 
   // Add glow sprite

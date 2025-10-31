@@ -3,8 +3,8 @@
 
 **Project:** Khora Engine - Genesis Engine (Phase 1)
 **Timeline:** 12 weeks
-**Status:** Week 8-9 In Progress (M5 - Procedural Shaders)
-**Last Updated:** October 30, 2025 - Session 5 Recovery
+**Status:** Week 10-11 Ready (M6 - IDE Integration)
+**Last Updated:** October 31, 2025 - Session 9 Complete
 
 **Working Copy:** This file is synchronized from Obsidian vault
 **Source of Truth:** This file (code repo) - sync back to Obsidian weekly
@@ -481,7 +481,7 @@
 **Milestone:** M5 - Shaders Complete
 **Status:** ✅ **COMPLETE** (100% - All Shaders Implemented!)
 
-### Session 6-7 Status (October 30, 2025)
+### Session 6-7-8-9 Status (October 30-31, 2025)
 
 **🎉 M5 MILESTONE COMPLETE!** ✅
 
@@ -497,6 +497,42 @@
 - Shader uniform derivation system
 - Type-based shader selection integrated
 - Build verified: 765.58 KB bundle, no errors
+
+**Session 8:** Enhanced Star Shader & Moon Positioning Fix (October 31, 2025) ✅
+- **Enhanced Star Shader:** Ported from standalone demo with spectral type-based color mapping
+  - Multi-color control (base, noise, center colors) for all 7 spectral types (O, B, A, F, G, K, M)
+  - Multi-octave noise (3 layers) for realistic surface variation
+  - Center gradient overlay with opacity control
+  - Limb darkening for realistic brightness falloff
+  - Temperature-based brightness multiplier
+  - Rotation-based seed variation (CRITICAL FIX - preserves noise detail)
+  - Updated standalone demo with same fixes for future shader development
+- **Moon Positioning Fix:** Corrected kilometer-to-scene-units conversion
+  - Problem: Moons positioned at raw kilometer values (39,937-487,463 units)
+  - Fix: Convert using star-relative scaling: `(km / SOLAR_RADIUS_KM) * sceneUnitsPerSolarRadius`
+  - Result: Moons now visible at proper orbital distances around planets
+- **Development Tools:** Configured Vite to allow Playwright Docker host for automated testing
+- **Verified:** M-type star rendering with surface texture, moons visible around planets
+
+**Session 9:** Moon Shader Implementation (October 31, 2025) ✅
+- **Moon Shader System:** Implemented procedural shaders for all moons
+  - Reused rocky planet shader with moon-specific uniforms (no water, no atmosphere)
+  - Added `MoonUniforms` interface and `deriveMoonUniforms()` function
+  - Color mapping based on parent planet type and surface temperature:
+    * Icy moons (gas/ice giant parents, <150K): Light blue-gray (0.55, 0.60, 0.65)
+    * Warmer icy moons (gas/ice giant parents, ≥150K): Cool gray (0.48, 0.50, 0.53)
+    * Warm rocky moons (rocky planet parents, >300K): Brown (0.54, 0.45, 0.33)
+    * Cold rocky moons (rocky planet parents, ≤300K): Dark gray (0.38, 0.38, 0.38)
+  - Updated `MoonRenderer.ts` to use `ShaderMaterial` instead of `MeshBasicMaterial`
+  - Updated `CelestialBodyLOD.ts` to pass camera to moon mesh creation
+  - **CRITICAL FIX:** Removed `?raw` suffix from shader imports to allow vite-plugin-glsl to process `#include` directives
+- **Results:** All moons now have realistic procedural terrain with:
+  - 3-octave noise for surface variation (craters, terrain features)
+  - No water coverage (waterCoverage = 0.0)
+  - No atmosphere effects (hasAtmosphere = false, atmosphereDensity = 0.0)
+  - Diffuse + ambient lighting
+  - Deterministic appearance from seed
+- **Verified:** Seed 12345 shows procedurally shaded moons with no console errors
 
 **Progress:** 21 / 21 tasks (100%)
 
@@ -539,6 +575,19 @@
 - [x] Updated ThreeSceneManager to pass camera to LOD constructors
 - [x] Document shader implementation (SESSION-7-M5-COMPLETE.md)
 - [ ] Update MoonRenderer to reuse planet shaders (deferred to Phase 2+)
+
+**Phase 6: Critical Bug Fixes** ✅ **COMPLETE**
+- [x] **ROOT CAUSE IDENTIFIED:** Seed offset in noise functions causing uniform appearance
+  - Problem: `vec3(u_seed * 0.1)` added to noise positions shifted sampling to uniform regions
+  - All planets appeared with blocky, washed-out, low-detail surfaces
+  - Affected: terrain noise, regional noise, crack noise, micro detail
+- [x] **FIX:** Changed from offset-based to rotation-based seed variation
+  - Implemented rotation matrix using seed angle (preserves noise detail)
+  - Removed ALL seed offsets from simplex3D position parameters
+  - Result: Proper detail restored, each planet still unique
+- [x] **POLISH:** Smoothed color tier transitions to reduce banding
+  - Changed from sharp if/else thresholds to overlapping smoothstep blends
+  - Eliminated horizontal banding artifacts
 
 ### Testing Protocol
 
@@ -621,3 +670,123 @@
 
 **Manual Testing Required:** See LOD-TESTING-GUIDE.md and M4-QUICK-TEST.md
 **Visual Debugging:** Press 'L' in-app to toggle LOD debug overlay
+
+---
+
+## Phase 3 Planning: Architect Mode (Future)
+
+**Note:** This section documents future work identified during M5 (Procedural Shaders) development.
+
+### Key Insight from M5 Development
+
+**Problem Identified:**
+- Shader development in the main engine is difficult and slow
+- Hard to iterate on visual appearance without live parameter controls
+- Some visual issues (like horizontal banding) would be better solved with runtime tuning
+- Current workflow: code → build → view → debug blind → repeat
+
+**Solution: Architect Mode (Phase 3)**
+
+### Architect Mode Vision
+
+**Workflow:**
+1. **Generate System** - Procedural generation from seed (deterministic)
+2. **Select Planet** - Click any celestial body in 3D view
+3. **Edit Shader Parameters** - IDE shows live shader controls:
+   - Color pickers for base colors, rust patches, crack colors
+   - Sliders for noise scales, frequencies, intensities
+   - Toggles for features (cracks, rust, regional variation)
+   - Real-time preview as you adjust
+4. **Save Customizations** - Override procedural defaults with custom values
+5. **Export/Share** - Export customized system data
+
+### Implementation Tasks (Phase 3)
+
+**Prerequisite:** Phase 1 and Phase 2 complete
+
+**Week 1-2: IDE Enhancement**
+- [ ] Add shader parameter inspection to IDE
+- [ ] Display current uniform values in Data tab
+- [ ] Create ShaderControls component with categorized parameter groups
+- [ ] Implement color picker integration (for baseColor, rustColor, etc.)
+- [ ] Implement range sliders for numeric uniforms
+
+**Week 3-4: Live Editing System**
+- [ ] Add uniform override system to planet data structure
+- [ ] Implement real-time shader uniform updates (bypass regeneration)
+- [ ] Create "Reset to Procedural" button to restore generated defaults
+- [ ] Add "Apply to All Planets of Type" feature
+- [ ] Implement undo/redo for parameter changes
+
+**Week 5-6: Shader Development Workflow**
+- [ ] Create shader development mode (separate from main app)
+- [ ] Port all standalone demo files (star, gas-giant, rocky-planet) into IDE
+- [ ] Add "Shader Lab" tab in IDE for experimentation
+- [ ] Implement "Export Shader Preset" feature
+- [ ] Document shader development best practices
+
+**Week 7-8: Data Persistence**
+- [ ] Implement system export (JSON with overrides)
+- [ ] Implement system import (load customized systems)
+- [ ] Add "Save Snapshot" feature for comparisons
+- [ ] Create system gallery/library view
+- [ ] Implement sharing via URL hash/query params
+
+### Key Features
+
+**Shader Parameter Categories:**
+
+**Rocky/Barren Planets:**
+- Color Multipliers: Dark (0.4), Mid (0.8), Light (1.2), Bright (1.6)
+- Geological Features: Region Scale, Crack Scale, Crack Intensity, Crack Brightness
+- Rust/Iron Oxide: Amount (0-1), Color (RGB picker)
+- Lighting: Ambient (0-1), Diffuse (0-1)
+- Base Color: RGB picker
+
+**Gas/Ice Giants:**
+- Band Colors: 3 color pickers (band1, band2, band3)
+- Band Properties: Count (3-15), Turbulence (0-1), Distortion (0-0.5)
+- Lighting: Ambient (0-1), Diffuse (0-1)
+
+**Stars:**
+- Surface Activity: Level (0-1), Scale (1-10), Speed (0-1)
+- Limb Darkening: Power (0.5-5), Center Brightness (0.5-2)
+- Color: RGB picker
+- Temperature Brightness: (0.1-3)
+
+### Lessons Learned from M5
+
+**Critical Design Principles:**
+1. **Develop shaders in isolation first** - Use standalone HTML demos with live controls
+2. **Iterate rapidly with visual feedback** - Sliders and color pickers are essential
+3. **Document parameter ranges** - What looks good vs what breaks
+4. **Test edge cases** - Seed variation, extreme values, performance impact
+5. **Port to engine last** - Only integrate when shader is visually perfect
+
+**Seed Handling Best Practice:**
+- **DON'T:** Add seed offsets to noise positions (`normPos + vec3(u_seed * 0.1)`)
+- **DO:** Use seed for rotation/transformation (`rotation * normPos`)
+- **WHY:** Offset can land in uniform regions of noise space, destroying detail
+
+**Visual Quality Checklist:**
+- [ ] No visible banding or posterization
+- [ ] Detail visible at all zoom levels
+- [ ] Each planet looks unique with same shader
+- [ ] Performance acceptable (60fps)
+- [ ] Aesthetically pleasing color palette
+
+### Future Enhancements
+
+**Phase 4+:**
+- [ ] Shader hot-reloading (edit GLSL code live)
+- [ ] Shader preset library (community sharing)
+- [ ] Procedural variation generators (randomize within acceptable ranges)
+- [ ] AI-assisted shader parameter tuning
+- [ ] Batch operations (apply changes to multiple bodies)
+
+---
+
+**Status:** Planning phase - Not scheduled for Phase 1
+**Dependencies:** M6 (Phase 1 Complete), Phase 2 (Multi-system Galaxy)
+**Estimated Effort:** 8 weeks (Phase 3 scope)
+**Priority:** High - Significantly improves development workflow and user creativity

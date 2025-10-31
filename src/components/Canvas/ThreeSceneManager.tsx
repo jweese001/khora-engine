@@ -299,15 +299,18 @@ export class ThreeSceneManager {
     // Update raycaster
     this.raycaster.setFromCamera(this.mouse, this.camera);
 
-    // Check for intersections (exclude starfield)
+    // Check for intersections (exclude starfield and orbit lines)
     const intersects = this.raycaster.intersectObjects(
-      this.scene.children.filter((obj) => obj.name !== 'starfield'),
+      this.scene.children.filter((obj) =>
+        obj.name !== 'starfield' && !obj.name.startsWith('orbit-')
+      ),
       true // Recursive
     );
 
     if (intersects.length > 0) {
       // Find the first object with userData
       let selectedObject = intersects[0].object;
+      let meshObject = intersects[0].object as THREE.Mesh;
 
       // Walk up the hierarchy to find object with userData
       while (selectedObject && !selectedObject.userData?.type) {
@@ -316,7 +319,14 @@ export class ThreeSceneManager {
 
       if (selectedObject?.userData?.type && this.onObjectSelected) {
         console.log('[ThreeSceneManager] Object selected:', selectedObject.userData);
-        this.onObjectSelected(selectedObject.userData);
+
+        // Get material from the actual mesh
+        const material = (meshObject as THREE.Mesh).material;
+
+        this.onObjectSelected({
+          ...selectedObject.userData,
+          material: material
+        });
       }
     } else {
       // Clicked on empty space - deselect
@@ -379,8 +389,8 @@ export class ThreeSceneManager {
     const ORBIT_SCALE = 50.0; // AU to scene units
     // Moon orbits now calculated from planet visual size (no scale constant needed)
 
-    // Create star (use mesh only - shader handles bloom, no glow sprite needed)
-    const starMesh = createStarMesh(system.star, 1.0);
+    // Create star with enhanced shader (use mesh only - shader handles bloom, no glow sprite needed)
+    const starMesh = createStarMesh(system.star, 1.0, this.camera);
     starMesh.name = 'star';
     this.scene.add(starMesh);
 
@@ -439,13 +449,16 @@ export class ThreeSceneManager {
         moonLOD.object.name = `moon-${planetIndex}-${moonIndex}`;
 
         // Position moon at its orbital distance from planet center
-        // Moon orbit distance is already in scene units from MoonRenderer
+        // Convert moon.orbitDistance (kilometers) to scene units
+        // Use same scaling as planet radius conversion
+        const SOLAR_RADIUS_KM = 695700; // km
+        const moonOrbitSceneUnits = (moon.orbitDistance / SOLAR_RADIUS_KM) * sceneUnitsPerSolarRadius;
+
         const angle = (moonIndex / planet.moons.length) * Math.PI * 2; // Distribute evenly
-        const distance = moon.orbitDistance; // Already in scene units
         moonLOD.object.position.set(
-          Math.cos(angle) * distance,
+          Math.cos(angle) * moonOrbitSceneUnits,
           0,
-          Math.sin(angle) * distance
+          Math.sin(angle) * moonOrbitSceneUnits
         );
 
         planetSystemGroup.add(moonLOD.object);

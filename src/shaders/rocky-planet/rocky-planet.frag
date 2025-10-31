@@ -25,7 +25,17 @@ void main() {
   // === TERRAIN ELEVATION ===
   // Use 3-octave FBM for realistic terrain variation
   vec3 normPos = normalize(vPosition);
-  vec3 noisePos = normPos * 4.0 + vec3(u_seed * 0.1);
+
+  // Use seed to rotate the noise sampling, not offset it
+  // This preserves detail while still making each planet unique
+  float seedAngle = u_seed * 6.28318; // Seed determines rotation angle
+  mat3 rotation = mat3(
+    cos(seedAngle), 0.0, sin(seedAngle),
+    0.0, 1.0, 0.0,
+    -sin(seedAngle), 0.0, cos(seedAngle)
+  );
+  vec3 rotatedPos = rotation * normPos;
+  vec3 noisePos = rotatedPos * 4.0;
 
   // Generate terrain elevation with 3 octaves
   float terrain = 0.0;
@@ -70,24 +80,52 @@ void main() {
         finalColor = mix(highlandColor, peakColor, (landElevation - 0.6) / 0.4);
       }
 
-      // Add subtle small-scale texture (reduced from 0.08)
-      float microDetail = simplex3D(normPos * 20.0 + vec3(u_seed * 0.15)) * 0.04;
+      // Add subtle small-scale texture
+      float microDetail = simplex3D(normPos * 20.0) * 0.08;
       finalColor += microDetail;
     }
   } else {
-    // Barren/dry planet: no water, just terrain elevation variation
-    vec3 lowlandColor = u_baseColor * 0.6;      // Darker lowlands
-    vec3 midlandColor = u_baseColor;            // Base color
-    vec3 highlandColor = u_baseColor * 1.4;     // Lighter highlands
+    // Barren/dry planet: enhanced with geological features
 
-    // Use terrain directly (0.0-1.0) for elevation
-    if (terrain < 0.4) {
-      finalColor = mix(lowlandColor, midlandColor, terrain / 0.4);
-    } else if (terrain < 0.7) {
-      finalColor = midlandColor;
-    } else {
-      finalColor = mix(midlandColor, highlandColor, (terrain - 0.7) / 0.3);
-    }
+    // === LARGE-SCALE REGIONAL VARIATION ===
+    // Create distinct color regions (like rust patches, dark maria, etc.)
+    float regionNoise = simplex3D(normPos * 1.5);
+
+    // Define color palette based on base color
+    vec3 darkRegion = u_baseColor * 0.4;        // Dark maria/lowlands
+    vec3 midRegion = u_baseColor * 0.8;         // Medium terrain
+    vec3 lightRegion = u_baseColor * 1.2;       // Highlands
+    vec3 brightRegion = u_baseColor * 1.6;      // Bright peaks/rims
+
+    // Add color variation (rust/iron oxide patches)
+    vec3 rustColor = vec3(0.6, 0.3, 0.2);       // Reddish-brown
+    float rustAmount = smoothstep(0.3, 0.7, regionNoise) * 0.3;
+
+    // === CRACK/VALLEY FEATURES ===
+    // Create bright "veins" or "cracks" like in reference images
+    float crackNoise = abs(simplex3D(normPos * 8.0));
+    float cracks = smoothstep(0.85, 0.95, crackNoise); // Bright cracks/ridges
+    vec3 crackColor = u_baseColor * 2.0; // Bright exposed material
+
+    // === COMBINE ELEVATION WITH REGIONS ===
+    // Blend terrain elevation with regional variation
+    float combinedTerrain = terrain * 0.7 + regionNoise * 0.3;
+
+    // Use smoothstep for gradual transitions to avoid banding
+    float darkToMid = smoothstep(0.0, 0.4, combinedTerrain);
+    float midToLight = smoothstep(0.25, 0.65, combinedTerrain);
+    float lightToBright = smoothstep(0.55, 1.0, combinedTerrain);
+
+    // Blend colors smoothly
+    finalColor = mix(darkRegion, midRegion, darkToMid);
+    finalColor = mix(finalColor, lightRegion, midToLight);
+    finalColor = mix(finalColor, brightRegion, lightToBright);
+
+    // Add rust-colored patches
+    finalColor = mix(finalColor, rustColor, rustAmount);
+
+    // Add bright cracks/veins
+    finalColor = mix(finalColor, crackColor, cracks * 0.4);
 
     // Add small-scale texture variation
     float microDetail = simplex3D(normPos * 20.0) * 0.08;

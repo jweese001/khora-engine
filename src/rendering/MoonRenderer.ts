@@ -2,59 +2,31 @@
  * Khora Engine - Moon Renderer
  *
  * Creates Three.js meshes for moons (natural satellites).
- * Moons are simpler than planets - mostly rocky/icy bodies.
+ * Moons use the rocky planet shader with no water/atmosphere.
  */
 
 import * as THREE from 'three';
 import type { Moon, Planet } from '../types/celestial-bodies';
-import { PlanetType } from '../types/celestial-bodies';
+import { deriveMoonUniforms } from './shaderUniforms';
 
-// ============================================================================
-// Moon Appearance
-// ============================================================================
-
-/**
- * Get color for moon based on parent planet
- *
- * Moons of rocky planets: gray/brown
- * Moons of gas giants: icy (white/blue)
- *
- * @param moon - Moon data
- * @param parentPlanet - Parent planet
- * @returns THREE.Color for the moon
- */
-function getMoonColor(moon: Moon, parentPlanet: Planet): THREE.Color {
-  // Moons of gas/ice giants tend to be icy
-  if (parentPlanet.type === PlanetType.GasGiant || parentPlanet.type === PlanetType.IceGiant) {
-    // Icy moons - darker blues/grays so they're not mistaken for white
-    if (moon.surfaceTemperature < 150) {
-      return new THREE.Color(0x6B9BD1); // Darker ice blue (clearly blue, not white)
-    } else {
-      return new THREE.Color(0x7A7A8C); // Darker cool gray with slight blue tint
-    }
-  }
-
-  // Moons of rocky planets are rocky/gray
-  // Slight variation based on temperature
-  if (moon.surfaceTemperature > 300) {
-    return new THREE.Color(0x8B7355); // Brown (warmer, like Mars)
-  } else {
-    return new THREE.Color(0x606060); // Dark gray (clearly not white)
-  }
-}
+// Import rocky planet shaders (moons use the same shader)
+// IMPORTANT: NO ?raw suffix - let vite-plugin-glsl process #include directives
+import rockyVertShader from '../shaders/rocky-planet/rocky-planet.vert';
+import rockyFragShader from '../shaders/rocky-planet/rocky-planet.frag';
 
 // ============================================================================
 // Moon Mesh Creation
 // ============================================================================
 
 /**
- * Create a moon mesh using star-relative scaling
+ * Create a moon mesh using star-relative scaling with procedural shaders
  *
- * Simpler than planets - basic sphere with appropriate color.
+ * Moons use the rocky planet shader with no water or atmosphere.
  *
  * @param moon - Moon data
  * @param parentPlanet - Parent planet (for color determination)
  * @param sceneUnitsPerSolarRadius - Scaling factor from star
+ * @param camera - Camera for view-dependent shader effects
  * @param subdivision - Geometry subdivision (default: 1 for small moons)
  * @returns THREE.Mesh for the moon
  */
@@ -62,6 +34,7 @@ export function createMoonMesh(
   moon: Moon,
   parentPlanet: Planet,
   sceneUnitsPerSolarRadius: number,
+  camera: THREE.Camera,
   subdivision: number = 1
 ): THREE.Mesh {
   // Calculate parent planet's visual radius for proportional moon sizing
@@ -116,23 +89,28 @@ export function createMoonMesh(
   // Create geometry
   const geometry = new THREE.IcosahedronGeometry(visualRadius, subdivision);
 
-  // Get moon color
-  const color = getMoonColor(moon, parentPlanet);
+  // Get shader uniforms for moon (uses rocky planet shader with no water/atmosphere)
+  const uniforms = deriveMoonUniforms(moon, parentPlanet, camera);
 
-  // Phase 1: Use MeshBasicMaterial for consistent color display
-  // Phase 2: Will switch to procedural shaders with proper materials
-  const material = new THREE.MeshBasicMaterial({
-    color: color
+  console.log(`[MoonRenderer] Shader-based moon ${moon.name} around ${parentPlanet.name}: temp=${moon.surfaceTemperature.toFixed(0)}K, baseColor=(${uniforms.u_baseColor.value.x.toFixed(2)}, ${uniforms.u_baseColor.value.y.toFixed(2)}, ${uniforms.u_baseColor.value.z.toFixed(2)})`);
+
+  // Create shader material using rocky planet shader
+  const material = new THREE.ShaderMaterial({
+    vertexShader: rockyVertShader,
+    fragmentShader: rockyFragShader,
+    uniforms: uniforms as any,
+    side: THREE.FrontSide,
   });
 
   // Create mesh
   const mesh = new THREE.Mesh(geometry, material);
 
-  // Store moon data
+  // Store moon data and material for shader updates
   mesh.userData = {
     type: 'moon',
     data: moon,
-    parentPlanet: parentPlanet
+    parentPlanet: parentPlanet,
+    material: material // Store for potential uniform updates
   };
 
   mesh.castShadow = false;
@@ -148,18 +126,20 @@ export function createMoonMesh(
  * @param parentPlanet - Parent planet
  * @param planetPosition - Position of parent planet in scene (legacy, not used)
  * @param sceneUnitsPerSolarRadius - Scaling factor from star
+ * @param camera - Camera for view-dependent shader effects
  * @returns THREE.Group with moon
  */
 export function createMoonObject(
   moon: Moon,
   parentPlanet: Planet,
   _planetPosition: THREE.Vector3, // Legacy parameter, not used
-  sceneUnitsPerSolarRadius: number
+  sceneUnitsPerSolarRadius: number,
+  camera: THREE.Camera
 ): THREE.Group {
   const group = new THREE.Group();
 
-  // Create moon mesh
-  const mesh = createMoonMesh(moon, parentPlanet, sceneUnitsPerSolarRadius);
+  // Create moon mesh with shader material
+  const mesh = createMoonMesh(moon, parentPlanet, sceneUnitsPerSolarRadius, camera);
   group.add(mesh);
 
   // Position moon at orbital distance from planet (in local space)
@@ -260,17 +240,19 @@ export function animateMoonRotation(
  * @param planet - Parent planet
  * @param planetPosition - Position of planet in scene (legacy, not used)
  * @param sceneUnitsPerSolarRadius - Scaling factor from star
+ * @param camera - Camera for view-dependent shader effects
  * @returns Array of moon groups
  */
 export function createMoonsForPlanet(
   planet: Planet,
   planetPosition: THREE.Vector3,
-  sceneUnitsPerSolarRadius: number
+  sceneUnitsPerSolarRadius: number,
+  camera: THREE.Camera
 ): THREE.Group[] {
   const moonGroups: THREE.Group[] = [];
 
   planet.moons.forEach((moon) => {
-    const moonGroup = createMoonObject(moon, planet, planetPosition, sceneUnitsPerSolarRadius);
+    const moonGroup = createMoonObject(moon, planet, planetPosition, sceneUnitsPerSolarRadius, camera);
 
     // Moon positioning is now handled inside createMoonObject() using planet-relative scaling
     // No additional positioning needed
