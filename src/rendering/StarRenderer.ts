@@ -12,22 +12,16 @@ import starFragShader from '../shaders/star/star.frag';
 import { deriveStarUniforms } from './shaderUniforms';
 
 // ============================================================================
-// Star-Relative Scaling System
+// Star Scaling Constants
 // ============================================================================
 
 /**
- * Calculate scene units per solar radius for a given star
- *
- * This is the foundation of the star-relative scaling system.
- * All other celestial bodies scale relative to this value.
- *
- * @param star - Star to calculate scaling for
- * @returns Scene units per solar radius
+ * Conversion factor: solar radii to AU
+ * 1 solar radius = 696,000 km
+ * 1 AU = 149,597,871 km
+ * Therefore: 1 solar radius ≈ 0.00465 AU
  */
-export function calculateSceneUnitsPerSolarRadius(star: Star): number {
-  const STAR_BASE_SIZE = 40; // Fixed visual size for stars
-  return STAR_BASE_SIZE / star.radius;
-}
+export const SOLAR_RADII_TO_AU = 0.00465;
 
 // ============================================================================
 // Color Calculation
@@ -109,21 +103,31 @@ function temperatureToColor(temperature: number): THREE.Color {
  * - Bloom-ready output (values > 1.0 for glow effect)
  *
  * @param star - Star data
- * @param scale - Visual scale factor (default: 1.0)
+ * @param orbitScale - Orbital scale factor (AU to scene units, default: 50)
  * @param camera - Camera for view-dependent effects (required)
  * @returns THREE.Mesh for the star
  */
 export function createStarMesh(
   star: Star,
-  scale: number = 1.0,
+  orbitScale: number = 50.0,
   camera?: THREE.Camera
 ): THREE.Mesh {
-  // Star-relative scaling system:
-  // All celestial body sizes are calculated relative to the star
-  // Star gets fixed comfortable visual size, everything else scales from that
-  // This ensures: star > planets > moons, with proper proportions
-  const STAR_BASE_SIZE = 40; // scene units for visual comfort
-  const visualRadius = STAR_BASE_SIZE * scale;
+  // CRITICAL: Star visual size must match its actual radius in scene units
+  // Otherwise planets can appear to be "inside" a visually oversized star
+  //
+  // Convert star radius from solar radii to scene units:
+  // - Star radius is in solar radii (e.g., 1.0 for Sun)
+  // - 1 solar radius = 0.00465 AU (SOLAR_RADII_TO_AU constant)
+  // - Multiply by orbit scale to get scene units
+  const starRadiusAU = star.radius * SOLAR_RADII_TO_AU;
+  const actualStarRadius = starRadiusAU * orbitScale;
+
+  // Apply minimum visual size for tiny stars (visibility)
+  // Small M-dwarfs would be invisible otherwise
+  const MIN_STAR_SIZE = 2.0; // scene units
+  const visualRadius = Math.max(actualStarRadius, MIN_STAR_SIZE);
+
+  console.log(`[StarRenderer] ${star.name}: radius=${star.radius.toFixed(2)} solar radii → ${visualRadius.toFixed(2)} scene units (actual: ${actualStarRadius.toFixed(2)}, min: ${MIN_STAR_SIZE})`);
 
   // Create sphere geometry
   // Use higher subdivision for stars since they're always visible and important
@@ -169,10 +173,10 @@ export function createStarMesh(
  * Creates a billboard sprite with radial gradient for "glow" effect.
  *
  * @param star - Star data
- * @param scale - Visual scale factor
+ * @param orbitScale - Orbital scale factor (AU to scene units)
  * @returns THREE.Sprite for glow effect
  */
-export function createStarGlow(star: Star, scale: number = 1.0): THREE.Sprite {
+export function createStarGlow(star: Star, orbitScale: number = 50.0): THREE.Sprite {
   // Create canvas for glow texture
   const canvas = document.createElement('canvas');
   canvas.width = 128;
@@ -209,8 +213,14 @@ export function createStarGlow(star: Star, scale: number = 1.0): THREE.Sprite {
   // Create sprite
   const sprite = new THREE.Sprite(spriteMaterial);
 
-  // Size based on star luminosity (brighter = bigger glow)
-  const glowSize = Math.max(star.radius * scale * 3, 2.0 * scale) * Math.sqrt(star.luminosity);
+  // Calculate actual star size and scale glow accordingly
+  const starRadiusAU = star.radius * SOLAR_RADII_TO_AU;
+  const actualStarRadius = starRadiusAU * orbitScale;
+  const MIN_STAR_SIZE = 2.0;
+  const starVisualRadius = Math.max(actualStarRadius, MIN_STAR_SIZE);
+
+  // Glow size: 3× star radius, scaled by luminosity
+  const glowSize = starVisualRadius * 3 * Math.sqrt(star.luminosity);
   sprite.scale.set(glowSize, glowSize, 1);
 
   return sprite;
@@ -258,7 +268,7 @@ export function createStarLight(star: Star, intensity: number = 3.0): THREE.Grou
  * Convenience function that creates all star visual elements.
  *
  * @param star - Star data
- * @param scale - Visual scale factor
+ * @param orbitScale - Orbital scale factor (AU to scene units, default: 50)
  * @param camera - Camera for view-dependent shader effects
  * @param includeGlow - Whether to add glow sprite (default: true)
  * @param includeLight - Whether to add point light (default: true)
@@ -266,7 +276,7 @@ export function createStarLight(star: Star, intensity: number = 3.0): THREE.Grou
  */
 export function createStarObject(
   star: Star,
-  scale: number = 1.0,
+  orbitScale: number = 50.0,
   camera?: THREE.Camera,
   includeGlow: boolean = true,
   includeLight: boolean = true
@@ -274,12 +284,12 @@ export function createStarObject(
   const group = new THREE.Group();
 
   // Add star mesh with enhanced shader
-  const mesh = createStarMesh(star, scale, camera);
+  const mesh = createStarMesh(star, orbitScale, camera);
   group.add(mesh);
 
   // Add glow sprite
   if (includeGlow) {
-    const glow = createStarGlow(star, scale);
+    const glow = createStarGlow(star, orbitScale);
     group.add(glow);
   }
 
