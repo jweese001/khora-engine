@@ -221,29 +221,47 @@ export function generateMoons(
   // Scale moon orbits based on PLANET RADIUS for visual coherence
   // Moons should orbit 3-8× planet radius (tight clustering for visibility)
   const planetRadiusKm = planet.radius * 6371; // Earth radii to km
-  const minOrbitKm = planetRadiusKm * 3; // Close moons
-  const maxOrbitKm = Math.min(planetRadiusKm * 8, hillSphereKm / 3, MAX_MOON_ORBIT_KM);
 
   // Generate each moon
   for (let i = 0; i < count; i++) {
-    // Orbital distance from planet surface
+    // Generate physical properties FIRST (we need moon radius for orbit calculation)
+    const { mass, radius } = generateMoonPhysics(planet, rng);
+
+    // Calculate Roche limit (minimum safe orbit to avoid tidal destruction)
+    // Roche limit ≈ 2.46 × planet_radius × (planet_density / moon_density)^(1/3)
+    // Assuming similar densities, simplified to ~2.5× planet radius
+    const rocheLimit = planetRadiusKm * 2.5;
+
+    // CRITICAL: Minimum orbit must clear both planet surface AND moon radius
+    // Distance from planet CENTER = planet radius + gap + moon radius
+    const minGap = planetRadiusKm * 0.5; // Safety gap (50% of planet radius)
+    const minOrbitFromCenter = planetRadiusKm + minGap + radius;
+
+    // Use the larger of Roche limit or surface clearance
+    const minOrbitKm = Math.max(rocheLimit, minOrbitFromCenter);
+    const maxOrbitKm = Math.min(planetRadiusKm * 8, hillSphereKm / 3, MAX_MOON_ORBIT_KM);
+
+    // Orbital distance from planet CENTER (this is key!)
     let orbitDistance: number;
 
     if (i === 0) {
-      // First moon: close orbit using planet-relative distances
-      orbitDistance = rng.randomFloat(minOrbitKm, minOrbitKm * 1.5);
+      // First moon: close but safe orbit
+      orbitDistance = rng.randomFloat(minOrbitKm, minOrbitKm * 1.3);
     } else {
-      // Subsequent moons: spaced out progressively
-      const prevOrbit = moons[i - 1].orbitDistance;
-      orbitDistance = prevOrbit * rng.randomFloat(1.2, 1.5);
+      // Subsequent moons: spaced out with collision prevention
+      const prevMoon = moons[i - 1];
+      const prevMoonRadius = prevMoon.radius;
+
+      // Minimum spacing: previous moon orbit + prev moon radius + gap + current moon radius
+      const minSpacing = prevMoon.orbitDistance + prevMoonRadius + minGap + radius;
+
+      // Add extra spacing for visual clarity
+      orbitDistance = minSpacing * rng.randomFloat(1.1, 1.3);
     }
 
-    // Ensure within safe limits (planet-relative)
+    // Ensure within safe limits
     orbitDistance = Math.min(orbitDistance, maxOrbitKm);
     orbitDistance = Math.max(orbitDistance, minOrbitKm);
-
-    // Generate physical properties
-    const { mass, radius } = generateMoonPhysics(planet, rng);
 
     // Calculate orbital period
     const orbitalPeriod = calculateMoonOrbitalPeriod(orbitDistance, planet.mass);
