@@ -42,44 +42,38 @@ export function createMoonMesh(
   const SOLAR_RADIUS_IN_EARTH_RADII = 109;
   const planetRadiusInSolarRadii = parentPlanet.radius / SOLAR_RADIUS_IN_EARTH_RADII;
   const planetBaseRadius = planetRadiusInSolarRadii * sceneUnitsPerSolarRadius;
-  const PLANET_VISIBILITY_SCALE = 3.0; // Match PlanetRenderer
-  const planetVisualRadius = Math.max(planetBaseRadius * PLANET_VISIBILITY_SCALE, 2.0);
+  const PLANET_VISIBILITY_SCALE = 2.0; // MUST match PlanetRenderer (reduced from 3.0)
+  const MIN_BASE_RADIUS = 0.15; // MUST match PlanetRenderer
+  const planetVisualRadius = Math.max(planetBaseRadius, MIN_BASE_RADIUS) * PLANET_VISIBILITY_SCALE;
 
-  // Star-relative scaling for moons (not used, but kept for reference):
-  // Convert moon radius (km) to solar radii, then to scene units
-  // const SOLAR_RADIUS_KM = 696000;
-  // const moonRadiusInSolarRadii = moon.radius / SOLAR_RADIUS_KM;
-  // const moonBaseRadius = moonRadiusInSolarRadii * sceneUnitsPerSolarRadius;
-
-  // Make moon size proportional to parent planet, but scale down for large planets
-  // Small planets (2-3 units): moons at 12-25%
-  // Large planets (6-8 units): moons at 3-8%
-  // Variable cap based on parent planet (matches moon-generator.ts)
+  // Make moon size proportional to parent planet
+  // Real-world reference: Earth's moon is 27% of Earth's diameter (unusually large!)
+  // Most moons are 1-10% of their planet's size
+  // We'll use conservative scaling to keep moons clearly smaller than planets
   const maxMoonRadiusKm = parentPlanet.mass > 100 ? 2500 : parentPlanet.mass > 10 ? 2000 : 1500;
   const moonSizeFraction = moon.radius / maxMoonRadiusKm; // 0-1 based on moon size
 
-  // Scale down moon percentage for larger planets to prevent huge moons
-  // Use more dramatic variation for gas giants based on actual moon size
+  // Conservative moon scaling - MUCH smaller than before
   let moonScale;
 
-  if (planetVisualRadius > 5.0) {
-    // Large gas giants: Create dramatic size variation
-    // Tiny moons (<500km): 1-2% of planet
-    // Small moons (500-1500km): 2-4% of planet
-    // Large moons (>1500km): 4-7% of planet
+  if (planetVisualRadius > 4.0) {
+    // Large gas giants: Very small moons for clear visual hierarchy
+    // Tiny moons (<500km): 0.5-1% of planet
+    // Small moons (500-1500km): 1-2% of planet
+    // Large moons (>1500km): 2-3% of planet
     if (moon.radius < 500) {
-      moonScale = 0.01 + moonSizeFraction * 0.01; // 1-2%
+      moonScale = 0.005 + moonSizeFraction * 0.005; // 0.5-1%
     } else if (moon.radius < 1500) {
-      moonScale = 0.02 + moonSizeFraction * 0.02; // 2-4%
+      moonScale = 0.01 + moonSizeFraction * 0.01; // 1-2%
     } else {
-      moonScale = 0.04 + moonSizeFraction * 0.03; // 4-7%
+      moonScale = 0.02 + moonSizeFraction * 0.01; // 2-3%
     }
-  } else if (planetVisualRadius > 3.0) {
-    // Medium planets: 8-15% of planet radius
-    moonScale = 0.08 + moonSizeFraction * 0.07;
+  } else if (planetVisualRadius > 2.0) {
+    // Medium planets: 3-6% of planet radius
+    moonScale = 0.03 + moonSizeFraction * 0.03;
   } else {
-    // Small planets: 12-25% of planet radius
-    moonScale = 0.12 + moonSizeFraction * 0.13;
+    // Small planets: 5-10% of planet radius (still smaller than before)
+    moonScale = 0.05 + moonSizeFraction * 0.05;
   }
 
   const visualRadius = planetVisualRadius * moonScale;

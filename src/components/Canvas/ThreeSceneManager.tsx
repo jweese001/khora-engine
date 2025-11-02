@@ -13,7 +13,7 @@ import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import type { StarSystem } from '../../types/celestial-bodies';
-import { createStarMesh, createStarLight } from '../../rendering/StarRenderer';
+import { createStarMesh, createStarLight, calculateSceneUnitsPerSolarRadius } from '../../rendering/StarRenderer';
 import { createTypedOrbitLine } from '../../rendering/OrbitRenderer';
 import { CelestialBodyLOD } from '../../rendering/CelestialBodyLOD';
 
@@ -210,6 +210,7 @@ export class ThreeSceneManager {
 
   /**
    * Add starfield background (5000 point stars)
+   * Extended range for deeper space feel
    */
   private addStarfield(): void {
     const starCount = 5000;
@@ -220,8 +221,9 @@ export class ThreeSceneManager {
     for (let i = 0; i < starCount; i++) {
       const i3 = i * 3;
 
-      // Random position in sphere
-      const radius = Math.random() * 2000 + 1000;
+      // Random position in sphere (extended range: 3000-8000 units)
+      // Pushed farther out to avoid interfering with system view
+      const radius = Math.random() * 5000 + 3000;
       const theta = Math.random() * Math.PI * 2;
       const phi = Math.acos(2 * Math.random() - 1);
 
@@ -240,10 +242,10 @@ export class ThreeSceneManager {
     geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
 
     const material = new THREE.PointsMaterial({
-      size: 2,
+      size: 3, // Slightly larger to compensate for distance
       vertexColors: true,
       transparent: true,
-      opacity: 0.8,
+      opacity: 0.9, // Slightly brighter for visibility at distance
       sizeAttenuation: true
     });
 
@@ -251,7 +253,7 @@ export class ThreeSceneManager {
     stars.name = 'starfield';
     this.scene.add(stars);
 
-    console.log('[ThreeSceneManager] Starfield added (5000 stars)');
+    console.log('[ThreeSceneManager] Starfield added (5000 stars, range: 3000-8000 units)');
   }
 
   // ==========================================================================
@@ -380,13 +382,89 @@ export class ThreeSceneManager {
     // Clear existing system objects
     this.clearSystemObjects();
 
-    // Orbital scaling constant: AU to scene units
-    // All planetary orbits use this scale factor
-    const ORBIT_SCALE = 50.0;
+    // Star-relative scaling system:
+    // Calculate scaling factor from star size (scene units per solar radius)
+    // All other objects scale relative to this
+    const sceneUnitsPerSolarRadius = calculateSceneUnitsPerSolarRadius(system.star);
+
+    // CRITICAL: Calculate ORBIT_SCALE dynamically to ensure:
+    // 1. Innermost planet clears star (no star-planet overlap)
+    // 2. Adjacent planets don't collide with each other (no planet-planet overlap)
+    const STAR_VISUAL_RADIUS = 40; // Must match StarRenderer STAR_BASE_SIZE
+    const CLEARANCE_MARGIN = 8; // Minimum gap between object surfaces
+    const PLANET_VISIBILITY_SCALE = 2.0; // Reduced from 3.0 for more realistic planet sizes
+    const MIN_BASE_RADIUS = 0.15;
+    const SOLAR_RADIUS_IN_EARTH_RADII = 109;
+
+    // Helper function to calculate planet visual radius (matches PlanetRenderer)
+    const calcPlanetVisualRadius = (planet: any) => {
+      const planetRadiusInSolarRadii = planet.radius / SOLAR_RADIUS_IN_EARTH_RADII;
+      const planetBaseRadius = planetRadiusInSolarRadii * sceneUnitsPerSolarRadius;
+      return Math.max(planetBaseRadius, MIN_BASE_RADIUS) * PLANET_VISIBILITY_SCALE;
+    };
+
+    // Find innermost planet
+    const innermostPlanet = system.star.planets.reduce((closest, p) =>
+      p.orbitDistance < closest.orbitDistance ? p : closest
+    );
+    const innermostPlanetVisualRadius = calcPlanetVisualRadius(innermostPlanet);
+
+    // Constraint 1: Innermost planet must clear star
+    const minOrbitClearance = STAR_VISUAL_RADIUS + CLEARANCE_MARGIN + innermostPlanetVisualRadius;
+    let minOrbitScale = minOrbitClearance / innermostPlanet.orbitDistance;
+
+    // Constraint 2: Adjacent planets must not collide
+    // CRITICAL: Must account for MOON ORBITAL SHELLS, not just planet surfaces!
+    // Moons orbit up to 2.5× planet radius, so planets need spacing for:
+    // planet1_radius + moon_orbit1 + margin + moon_orbit2 + planet2_radius
+    const MAX_MOON_ORBIT = 2.5; // Must match ThreeSceneManager moon positioning
+
+    // Sort planets by orbital distance
+    const sortedPlanets = [...system.star.planets].sort((a, b) => a.orbitDistance - b.orbitDistance);
+
+    for (let i = 0; i < sortedPlanets.length - 1; i++) {
+      const planet1 = sortedPlanets[i];
+      const planet2 = sortedPlanets[i + 1];
+      const radius1 = calcPlanetVisualRadius(planet1);
+      const radius2 = calcPlanetVisualRadius(planet2);
+
+      // If planet has moons, account for their orbital extent
+      // Otherwise just use planet radius
+      const extent1 = planet1.moons.length > 0
+        ? radius1 + (radius1 * MAX_MOON_ORBIT) // Planet radius + outermost moon orbit
+        : radius1; // No moons, just planet radius
+
+      const extent2 = planet2.moons.length > 0
+        ? radius2 + (radius2 * MAX_MOON_ORBIT)
+        : radius2;
+
+      // Required center-to-center distance to prevent moon orbit overlap
+      const minCenterDistance = extent1 + CLEARANCE_MARGIN + extent2;
+
+      // Orbital separation in AU
+      const orbitSeparation = planet2.orbitDistance - planet1.orbitDistance;
+
+      // ORBIT_SCALE needed for this pair: orbitSeparation * scale >= minCenterDistance
+      const pairMinScale = minCenterDistance / orbitSeparation;
+
+      if (pairMinScale > minOrbitScale) {
+        minOrbitScale = pairMinScale;
+        const moonInfo = planet1.moons.length > 0 || planet2.moons.length > 0
+          ? ` (accounting for ${planet1.moons.length + planet2.moons.length} moons)`
+          : '';
+        console.log(`[ThreeSceneManager] Planet spacing constraint: ${planet1.name} & ${planet2.name} require scale ${pairMinScale.toFixed(1)}${moonInfo}`);
+      }
+    }
+
+    // Use larger of minimum required or default comfortable scale
+    const ORBIT_SCALE = Math.max(minOrbitScale, 50.0);
+
+    console.log(`[ThreeSceneManager] Orbit scaling: ${ORBIT_SCALE.toFixed(1)} units/AU (star clearance: ${(innermostPlanet.orbitDistance * ORBIT_SCALE - innermostPlanetVisualRadius - STAR_VISUAL_RADIUS).toFixed(1)} units)`);
+
+    // Moon orbits now calculated from planet visual size (no scale constant needed)
 
     // Create star with enhanced shader (use mesh only - shader handles bloom, no glow sprite needed)
-    // Pass ORBIT_SCALE so star visual size matches actual radius in scene units
-    const starMesh = createStarMesh(system.star, ORBIT_SCALE, this.camera);
+    const starMesh = createStarMesh(system.star, 1.0, this.camera);
     starMesh.name = 'star';
     this.scene.add(starMesh);
 
@@ -432,6 +510,9 @@ export class ThreeSceneManager {
       planetLOD.object.name = `planet-${planetIndex}`;
       planetSystemGroup.add(planetLOD.object);
 
+      // Calculate planet visual radius using the helper function (ensures consistency)
+      const planetVisualRadius = calcPlanetVisualRadius(planet);
+
       // Create moons with LOD and add as children
       planet.moons.forEach((moon, moonIndex) => {
         const moonLOD = new CelestialBodyLOD(
@@ -444,13 +525,21 @@ export class ThreeSceneManager {
 
         moonLOD.object.name = `moon-${planetIndex}-${moonIndex}`;
 
-        // Position moon at its orbital distance from planet center
-        // Convert moon.orbitDistance (kilometers) to scene units
-        // Use same scaling as planet radius conversion
-        const SOLAR_RADIUS_KM = 695700; // km
-        const moonOrbitSceneUnits = (moon.orbitDistance / SOLAR_RADIUS_KM) * sceneUnitsPerSolarRadius;
+        // CRITICAL: Keep moons TIGHT around planet (within Hill sphere)
+        // Position moons in concentric shells from 1.5× to 2.5× planet radius
+        // This ensures they stay within planet's gravitational sphere of influence
+        const MIN_MOON_ORBIT = 1.5; // Minimum: 1.5× planet radius (clear of surface)
+        const MAX_MOON_ORBIT = 2.5; // Maximum: 2.5× planet radius (tight clustering)
 
-        const angle = (moonIndex / planet.moons.length) * Math.PI * 2; // Distribute evenly
+        // Distribute moons proportionally from inner to outer shell
+        const orbitMultiplier = planet.moons.length === 1
+          ? (MIN_MOON_ORBIT + MAX_MOON_ORBIT) / 2 // Single moon: middle orbit
+          : MIN_MOON_ORBIT + (moonIndex / (planet.moons.length - 1)) * (MAX_MOON_ORBIT - MIN_MOON_ORBIT);
+
+        const moonOrbitSceneUnits = planetVisualRadius * orbitMultiplier;
+
+        // Distribute moons evenly around planet
+        const angle = (moonIndex / planet.moons.length) * Math.PI * 2;
         moonLOD.object.position.set(
           Math.cos(angle) * moonOrbitSceneUnits,
           0,
@@ -470,17 +559,17 @@ export class ThreeSceneManager {
     });
 
     // Adjust camera to view the whole system
-    this.focusOnSystem(system);
+    this.focusOnSystem(system, ORBIT_SCALE);
 
     console.log('[ThreeSceneManager] System rendered successfully');
   }
 
   /**
    * Adjust camera to view the entire system
+   * @param system - Star system to focus on
+   * @param orbitScale - Scene units per AU (calculated in renderSystem)
    */
-  private focusOnSystem(system: StarSystem): void {
-    const ORBIT_SCALE = 50.0;
-
+  private focusOnSystem(system: StarSystem, orbitScale: number): void {
     // Find the outermost planet
     let maxOrbitDistance = 0;
     system.star.planets.forEach((planet) => {
@@ -490,7 +579,7 @@ export class ThreeSceneManager {
     });
 
     // Position camera to view the whole system
-    const systemRadius = maxOrbitDistance * ORBIT_SCALE;
+    const systemRadius = maxOrbitDistance * orbitScale;
     const cameraDistance = systemRadius * 2.5; // View from a comfortable distance
 
     this.camera.position.set(cameraDistance * 0.5, cameraDistance * 0.5, cameraDistance);

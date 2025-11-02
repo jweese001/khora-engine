@@ -96,9 +96,13 @@ export function createPlanetMesh(
   const baseRadius = planetRadiusInSolarRadii * sceneUnitsPerSolarRadius;
 
   // Apply minimum for visibility and scale up for better viewing
-  // Realistic scale makes planets invisible, so exaggerate sizes
-  const PLANET_VISIBILITY_SCALE = 3.0; // Make planets 3× larger
-  const visualRadius = Math.max(baseRadius * PLANET_VISIBILITY_SCALE, 2.0);
+  // Realistic scale makes planets invisible, so exaggerate sizes (but not too much)
+  const PLANET_VISIBILITY_SCALE = 2.0; // Reduced from 3.0 for more realistic proportions
+
+  // CRITICAL: Apply minimum BEFORE scale to preserve size variation
+  // Otherwise all small planets clamp to same size
+  const MIN_BASE_RADIUS = 0.15; // Minimum before scaling (0.15 × 2 = 0.30 units)
+  const visualRadius = Math.max(baseRadius, MIN_BASE_RADIUS) * PLANET_VISIBILITY_SCALE;
 
   // Create geometry
   // IcosahedronGeometry gives better sphere than SphereGeometry
