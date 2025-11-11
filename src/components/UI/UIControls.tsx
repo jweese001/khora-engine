@@ -2,6 +2,7 @@
  * Khora Engine - UI Controls Container
  *
  * Top bar with system generation controls and IDE toggle.
+ * Now using Khora Design System v1.0
  */
 
 import { GenerateButton } from './GenerateButton';
@@ -13,20 +14,28 @@ export function UIControls() {
 
   return (
     <div style={styles.container}>
+      {/* Left: Branding */}
       <div style={styles.leftSection}>
-        <h1 style={styles.title}>Khora Engine</h1>
-        <span style={styles.subtitle}>Phase 1 - Genesis Engine</span>
+        <div style={styles.brandingGroup}>
+          <span className="mdi mdi-atom" style={styles.icon}></span>
+          <h1 className="system-title" style={styles.title}>Khora Engine</h1>
+        </div>
+        <span className="label-text" style={styles.subtitle}>Phase 1 - Genesis Engine</span>
       </div>
 
+      {/* Center: Generation Controls */}
       <div style={styles.centerSection}>
         <GenerateButton />
       </div>
 
+      {/* Right: IDE Toggle */}
       <div style={styles.rightSection}>
         <button
           onClick={toggleIDE}
-          style={ideOpen ? { ...styles.ideButton, ...styles.ideButtonActive } : styles.ideButton}
+          className={`hud-btn-secondary ${ideOpen ? 'active' : ''}`}
+          style={ideOpen ? { ...styles.ideButton, borderColor: 'var(--accent-cyan)', color: 'var(--accent-cyan)' } : styles.ideButton}
         >
+          <span className={`mdi ${ideOpen ? 'mdi-code-braces' : 'mdi-code-braces-box'}`} style={styles.buttonIcon}></span>
           {ideOpen ? 'Hide IDE' : 'Show IDE'}
         </button>
       </div>
@@ -34,60 +43,57 @@ export function UIControls() {
   );
 }
 
-// Inline styles (will be replaced with proper CSS in TASK-021)
 const styles = {
   container: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: '12px 20px',
-    backgroundColor: '#0f1419',
-    borderBottom: '1px solid #1a2332',
+    padding: '12px 24px',
+    backgroundColor: 'var(--bg-panel)',
+    borderBottom: '1px solid var(--border-light)',
     height: '60px',
-    boxSizing: 'border-box'
-  } as React.CSSProperties,
+    boxSizing: 'border-box' as const,
+    backdropFilter: 'blur(10px)'
+  },
   leftSection: {
     display: 'flex',
-    alignItems: 'baseline',
-    gap: '12px',
+    alignItems: 'center',
+    gap: '16px',
     flex: 1
-  } as React.CSSProperties,
+  },
+  brandingGroup: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px'
+  },
+  icon: {
+    fontSize: '24px',
+    color: 'var(--accent-cyan)'
+  },
   title: {
-    margin: 0,
-    fontSize: '20px',
-    fontWeight: 700,
-    color: '#e0e6ed',
-    letterSpacing: '0.5px'
-  } as React.CSSProperties,
+    margin: 0
+  },
   subtitle: {
-    fontSize: '12px',
-    color: '#6b7a8f',
-    fontWeight: 400
-  } as React.CSSProperties,
+    paddingLeft: '16px',
+    borderLeft: '1px solid var(--border-light)'
+  },
   centerSection: {
     display: 'flex',
     justifyContent: 'center',
     flex: 1
-  } as React.CSSProperties,
+  },
   rightSection: {
     display: 'flex',
     justifyContent: 'flex-end',
+    gap: '12px',
     flex: 1
-  } as React.CSSProperties,
+  },
   ideButton: {
-    padding: '8px 16px',
-    fontSize: '14px',
-    fontWeight: 600,
-    border: '1px solid #3a4a5a',
-    borderRadius: '4px',
-    backgroundColor: '#1a2332',
-    color: '#e0e6ed',
-    cursor: 'pointer',
-    transition: 'all 0.2s'
-  } as React.CSSProperties,
-  ideButtonActive: {
-    backgroundColor: '#2a4a72',
-    borderColor: '#4a90e2',
-    color: '#ffffff'
-  } as React.CSSProperties
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px'
+  },
+  buttonIcon: {
+    fontSize: '16px'
+  }
 };
