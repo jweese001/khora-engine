@@ -2,6 +2,7 @@
  * Khora Engine - Generate System Button
  *
  * Triggers star system generation with random or specified seed.
+ * Now using Khora Design System v1.0 with loading indicator
  */
 
 import { useState } from 'react';
@@ -34,21 +35,34 @@ export function GenerateButton() {
     setSeedInput(seed.toString());
   };
 
+  const handleKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !isGenerating) {
+      handleGenerate();
+    }
+  };
+
   return (
     <div style={styles.container}>
       <input
         type="text"
         value={seedInput}
         onChange={(e) => setSeedInput(e.target.value)}
+        onKeyPress={handleKeyPress}
         placeholder="Enter seed (optional)"
+        className="hud-input"
         style={styles.input}
         disabled={isGenerating}
       />
       <button
         onClick={handleGenerate}
         disabled={isGenerating}
-        style={isGenerating ? { ...styles.button, ...styles.buttonDisabled } : styles.button}
+        className="hud-btn"
+        style={isGenerating ? styles.buttonDisabled : undefined}
       >
+        {isGenerating && (
+          <span className="loading-spinner" style={styles.spinner}></span>
+        )}
+        <span className="mdi mdi-atom-variant" style={styles.buttonIcon}></span>
         {isGenerating ? 'Generating...' : 'Generate System'}
       </button>
     </div>
@@ -68,38 +82,24 @@ function hashString(str: string): number {
   return Math.abs(hash);
 }
 
-// Inline styles (will be replaced with proper CSS in TASK-021)
 const styles = {
   container: {
     display: 'flex',
-    gap: '10px',
+    gap: '12px',
     alignItems: 'center'
   },
   input: {
-    padding: '8px 12px',
-    fontSize: '14px',
-    border: '1px solid #3a4a5a',
-    borderRadius: '4px',
-    backgroundColor: '#1a2332',
-    color: '#e0e6ed',
-    outline: 'none',
-    width: '200px'
-  } as React.CSSProperties,
-  button: {
-    padding: '8px 16px',
-    fontSize: '14px',
-    fontWeight: 600,
-    border: 'none',
-    borderRadius: '4px',
-    backgroundColor: '#4a90e2',
-    color: '#ffffff',
-    cursor: 'pointer',
-    transition: 'background-color 0.2s',
-    whiteSpace: 'nowrap'
-  } as React.CSSProperties,
+    width: '220px'
+  },
+  buttonIcon: {
+    fontSize: '16px',
+    marginRight: '4px'
+  },
+  spinner: {
+    marginRight: '8px'
+  },
   buttonDisabled: {
-    backgroundColor: '#2a4a72',
-    cursor: 'not-allowed',
-    opacity: 0.6
-  } as React.CSSProperties
+    opacity: 0.7,
+    cursor: 'not-allowed'
+  }
 };

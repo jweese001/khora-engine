@@ -10,6 +10,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@mdi/font": "^7.4.47",
     "@monaco-editor/react": "^4.7.0",
     "@types/three": "^0.180.0",
     "react": "^19.1.1",
