@@ -81,6 +81,8 @@ export function DiceRollerScene({ onRollComplete }: DiceRollerSceneProps) {
   useEffect(() => {
     if (!containerRef.current) return;
 
+    console.log('[DiceRollerScene] Initializing...');
+
     // Setup scene
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(BACKGROUND_COLOR);
@@ -134,10 +136,12 @@ export function DiceRollerScene({ onRollComplete }: DiceRollerSceneProps) {
     window.addEventListener('resize', handleResize);
 
     // Start animation
+    console.log('[DiceRollerScene] Starting animation loop...');
     animate();
 
     // Cleanup
     return () => {
+      console.log('[DiceRollerScene] Cleaning up...');
       window.removeEventListener('resize', handleResize);
       if (animationIdRef.current) {
         cancelAnimationFrame(animationIdRef.current);
@@ -282,6 +286,7 @@ export function DiceRollerScene({ onRollComplete }: DiceRollerSceneProps) {
             // Add to landed cubes
             setLandedCubes(prev => {
               if (!prev.includes(shape.userData.index)) {
+                console.log('[DiceRollerScene] Cube landed:', shape.userData.index + 1);
                 return [...prev, shape.userData.index];
               }
               return prev;
@@ -306,6 +311,7 @@ export function DiceRollerScene({ onRollComplete }: DiceRollerSceneProps) {
 
     // Check if roll complete
     if (allSolidCubesLanded && !rollCompleteRef.current && landedCubes.length === 16) {
+      console.log('[DiceRollerScene] Roll complete! All 16 cubes landed.');
       rollCompleteRef.current = true;
       calculateAndReportResult();
     }
@@ -404,7 +410,7 @@ export function DiceRollerScene({ onRollComplete }: DiceRollerSceneProps) {
           </span>
         </div>
 
-        {/* Bottom: Running Total */}
+        {/* Bottom: Running Total and Cube Numbers */}
         <div style={styles.bottomBar}>
           <div style={styles.totalDisplay}>
             <span className="label-text" style={styles.smallLabel}>
@@ -413,14 +419,26 @@ export function DiceRollerScene({ onRollComplete }: DiceRollerSceneProps) {
             <div style={styles.budgetNumber}>
               {runningTotal.toLocaleString()}
             </div>
-          </div>
-
-          {/* Landed cube count */}
-          <div style={styles.cubeCount}>
             <span className="label-text" style={styles.smallLabel}>
               Cubes: {landedCubes.length}/16
             </span>
           </div>
+
+          {/* Landed cube numbers */}
+          {landedCubes.length > 0 && (
+            <div style={styles.cubeNumbersContainer}>
+              {landedCubes.slice(-8).map((idx, i) => (
+                <span key={i} className="label-text" style={styles.cubeNumber}>
+                  {idx + 1}
+                </span>
+              ))}
+              {landedCubes.length > 8 && (
+                <span className="label-text" style={styles.cubeNumber}>
+                  +{landedCubes.length - 8} more
+                </span>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -470,13 +488,14 @@ const styles = {
   },
   bottomBar: {
     display: 'flex',
-    gap: '24px',
-    alignItems: 'flex-end',
+    flexDirection: 'column' as const,
+    gap: '12px',
     backgroundColor: 'rgba(0, 0, 0, 0.6)',
     padding: '16px 24px',
     borderRadius: '4px',
     backdropFilter: 'blur(10px)',
-    alignSelf: 'flex-start'
+    alignSelf: 'flex-start',
+    maxWidth: '400px'
   },
   totalDisplay: {
     display: 'flex',
@@ -497,8 +516,18 @@ const styles = {
     fontFamily: 'monospace',
     lineHeight: 1
   },
-  cubeCount: {
+  cubeNumbersContainer: {
     display: 'flex',
-    alignItems: 'center'
+    gap: '6px',
+    flexWrap: 'wrap' as const
+  },
+  cubeNumber: {
+    padding: '2px 8px',
+    backgroundColor: 'rgba(255, 20, 147, 0.2)',
+    border: '1px solid rgba(255, 20, 147, 0.4)',
+    borderRadius: '3px',
+    fontSize: '11px',
+    fontFamily: 'monospace',
+    margin: 0
   }
 };

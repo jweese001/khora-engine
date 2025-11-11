@@ -37,6 +37,7 @@ export function DiceRollerFlow() {
   const canReroll = currentTry < maxTries;
 
   const handleStartRoll = () => {
+    console.log('[DiceRollerFlow] Starting roll, try:', currentTry);
     setShowStartScreen(false);
     setIsRolling(true);
     setShowResult(false);
@@ -44,6 +45,7 @@ export function DiceRollerFlow() {
   };
 
   const handleRollComplete = (result: DiceRollResult) => {
+    console.log('[DiceRollerFlow] Roll complete, showing result screen', result);
     setCurrentRoll(result);
     setShowResult(true);
     setIsRolling(false);
