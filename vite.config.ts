@@ -9,6 +9,8 @@ export default defineConfig({
     glsl()
   ],
   server: {
+    host: '0.0.0.0', // Expose to Docker
+    port: 5173,
     allowedHosts: ['host.docker.internal']
   }
 })
