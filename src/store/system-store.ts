@@ -36,9 +36,22 @@ interface SelectedObject {
 export type ViewMode = 'system' | 'galaxy';
 
 /**
+ * App mode for phase selection
+ */
+export type AppMode = 'landing' | 'diceRoll' | 'architect' | 'explorer';
+
+/**
  * Main application state
  */
 interface SystemStore {
+  // ===== App Mode (Phase 2 - Landing Page) =====
+
+  /** Current application mode */
+  appMode: AppMode;
+
+  /** Resource budget from dice roll (null if not yet rolled) */
+  resourceBudget: number | null;
+
   // ===== Star System State (Phase 1) =====
 
   /** Currently generated star system (null if none generated) */
@@ -78,6 +91,18 @@ interface SystemStore {
   camera: THREE.Camera | null;
 
   // ===== Actions =====
+
+  /**
+   * Set the application mode (landing, architect, explorer)
+   * @param mode - App mode to switch to
+   */
+  setAppMode: (mode: AppMode) => void;
+
+  /**
+   * Set the resource budget from dice roll
+   * @param budget - Total resource points available
+   */
+  setResourceBudget: (budget: number) => void;
 
   /**
    * Generate a new star system from seed (Phase 1)
@@ -154,6 +179,8 @@ interface SystemStore {
 
 export const useSystemStore = create<SystemStore>((set, get) => ({
   // Initial state
+  appMode: 'landing',
+  resourceBudget: null,
   currentSystem: null,
   isGenerating: false,
   generationError: null,
@@ -166,6 +193,16 @@ export const useSystemStore = create<SystemStore>((set, get) => ({
   camera: null,
 
   // Actions
+
+  setAppMode: (mode: AppMode) => {
+    console.log(`[Store] Switching app mode to: ${mode}`);
+    set({ appMode: mode });
+  },
+
+  setResourceBudget: (budget: number) => {
+    console.log(`[Store] Setting resource budget: ${budget} points`);
+    set({ resourceBudget: budget });
+  },
 
   generateSystem: (seed: number) => {
     // Mark as generating
