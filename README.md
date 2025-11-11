@@ -73,6 +73,30 @@ Location: `/Projects/Khora Engine/` in Obsidian vault
 - **`Khora Assets.md`** - Master asset catalog
 - **`Architect Mode and the IDE.md`** - IDE architecture details
 
+### Design Assets
+Location: `/Users/kraken/Documents/khora/`
+
+- **`Khora-Style-Guide-V01.md`** - Complete UI design system
+  - Color palette (with WCAG contrast ratios)
+  - Typography system (Inter font, spacing, hierarchy)
+  - 8px grid spacing system
+  - Component library specifications
+  - Layout patterns and guidelines
+  - Animation standards
+  - Accessibility requirements (WCAG 2.1 Level AA)
+  - React implementation notes
+
+- **`Khora-Mock-V01.html`** - Interactive HTML mockup
+  - All 11 UI screens (HUD, Data Panel, IDE, Architect Mode, System Map, Marketplace)
+  - Material Design Icons integration
+  - Complete CSS design system implementation
+  - Interactive navigation and components
+  - Reference implementation for React conversion
+
+- **`Khora-Style-Guide-V01.md`** (Obsidian copy) - Also available in vault at `Projects/Khora Engine/`
+
+**Note:** These design assets will be used for future UI development phases (Phase 2+) when implementing the full user interface over the current 3D visualization.
+
 ---
 
 ## 🎯 Phase 1 Status

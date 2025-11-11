@@ -81,6 +81,18 @@
 - ✅ PLANNING.md - Technical implementation reference
 - ✅ TASKS.md - Complete development history
 
+**Design Assets (for Future Phases):**
+- ✅ Khora-Style-Guide-V01.md - Complete UI design system
+  - Color palette, typography, spacing, component specs
+  - WCAG 2.1 Level AA accessibility standards
+  - React implementation guidelines
+- ✅ Khora-Mock-V01.html - Interactive HTML mockup
+  - All 11 UI screens (HUD, IDE, Architect Mode, System Map, Marketplace)
+  - Material Design Icons integration
+  - Reference implementation for React conversion
+- ✅ Design assets available in both filesystem and Obsidian vault
+- **Note:** These will be used for Phase 2+ UI development over the current 3D engine
+
 **Phase 1 Complete - Ready for Phase 2 Planning**
 
 ---

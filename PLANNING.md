@@ -190,6 +190,65 @@ Export/Share (JSON export with custom values)
 
 ---
 
+## UI/UX Design References
+
+**Location:** `/Users/kraken/Documents/khora/`
+
+### Style Guide (Khora-Style-Guide-V01.md)
+Complete design system documentation for all future UI development:
+
+**Design System:**
+- Color Palette: #000510 (space), #1a1a1a (panels), #00ffff (cyan), #ffd700 (gold), #ff1493 (magenta)
+- Typography: Inter (UI), Courier New (code), size scale (11px-18px)
+- Spacing: 8px grid system (8px, 16px, 24px multiples)
+- WCAG 2.1 Level AA compliance (all contrast ratios tested)
+
+**Component Library:**
+- Buttons (primary, secondary, ghost)
+- Sliders (range controls with handles)
+- Panels (semi-transparent overlays)
+- Tabs (navigation, content switching)
+- Accordions (collapsible sections)
+- Tree views (hierarchical data)
+- Dropdowns, color pickers, input fields
+
+**Layout Patterns:**
+- Panel widths: Data Panel (400px), IDE Panel (640px), Nav Panel (200px)
+- Glow effects: `box-shadow: 0 0 20px rgba(0, 255, 255, 0.4)`
+- Animations: `cubic-bezier(0.4, 0.0, 0.2, 1)` for panels
+
+### HTML Mockup (Khora-Mock-V01.html)
+Interactive reference implementation of all UI screens:
+
+**Screens Included:**
+- 1.1: Main HUD
+- 1.2: Data Panel (quick inspector)
+- 1.3-1.6: IDE Panel (Scene Tree, Data Inspector, Shader Viewer)
+- 3.1-3.3: Architect Mode Workbench (Star Editor, Planet Editor)
+- 4.1: System Map (strategic view)
+- 4.2: Marketplace (economic interface)
+
+**Features:**
+- Material Design Icons: https://pictogrammers.com/library/mdi/
+- CSS Custom Properties (full design system)
+- Interactive JavaScript (accordions, tabs, tree navigation)
+- Responsive layout patterns
+- Ready for React component conversion
+
+**Usage:**
+- Reference for UI component implementation
+- Visual testing of design system
+- Pattern library for future development
+- Demonstrates complete user experience flow
+
+**When to Use:**
+- Phase 2+: Multi-system UI development
+- Phase 3: Architect Mode implementation
+- Phase 4: System Map and Marketplace features
+- Any UI/UX implementation work
+
+---
+
 *[Rest of PLANNING.md content - see Obsidian for full technical details]*
 
 **For complete implementation details, algorithms, and code patterns, refer to:**
