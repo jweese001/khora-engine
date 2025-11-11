@@ -3,16 +3,19 @@
  *
  * Zustand store for managing star system state, IDE state, and scene references.
  * Phase 1: Basic system generation and selection only (no save/load).
+ * Phase 2: Galaxy generation with multiple star systems.
  */
 
 import { create } from 'zustand';
 import type * as THREE from 'three';
 import type { StarSystem } from '../types/celestial-bodies';
+import type { Galaxy } from '../types/galaxy';
 import { SeededRandom } from '../utils/random';
 import { generateStar } from '../generation/star-generator';
 import { generatePlanets } from '../generation/planet-generator';
 import { generateMoons } from '../generation/moon-generator';
 import { distributePlanetResources, distributeMoonResources } from '../generation/resource-distributor';
+import { generateGalaxy } from '../generation/galaxy-generator';
 
 // ============================================================================
 // Store State Interface
@@ -28,10 +31,15 @@ interface SelectedObject {
 }
 
 /**
+ * View mode for the application
+ */
+export type ViewMode = 'system' | 'galaxy';
+
+/**
  * Main application state
  */
 interface SystemStore {
-  // ===== Star System State =====
+  // ===== Star System State (Phase 1) =====
 
   /** Currently generated star system (null if none generated) */
   currentSystem: StarSystem | null;
@@ -41,6 +49,17 @@ interface SystemStore {
 
   /** Last error during generation (null if no error) */
   generationError: string | null;
+
+  // ===== Galaxy State (Phase 2) =====
+
+  /** Currently generated galaxy (null if none generated) */
+  currentGalaxy: Galaxy | null;
+
+  /** Current view mode: 'system' for single system view, 'galaxy' for multi-system view */
+  viewMode: ViewMode;
+
+  /** Currently focused system within galaxy (for system-detail view) */
+  focusedSystemIndex: number | null;
 
   // ===== IDE State =====
 
@@ -61,7 +80,7 @@ interface SystemStore {
   // ===== Actions =====
 
   /**
-   * Generate a new star system from seed
+   * Generate a new star system from seed (Phase 1)
    * @param seed - Random seed for deterministic generation
    */
   generateSystem: (seed: number) => void;
@@ -70,6 +89,30 @@ interface SystemStore {
    * Clear current system and reset state
    */
   clearSystem: () => void;
+
+  /**
+   * Generate a new galaxy with multiple star systems (Phase 2)
+   * @param seed - Random seed for deterministic generation
+   * @param systemCount - Number of star systems to generate (default: 12)
+   */
+  generateGalaxy: (seed: number, systemCount?: number) => void;
+
+  /**
+   * Clear current galaxy and reset to system view
+   */
+  clearGalaxy: () => void;
+
+  /**
+   * Switch view mode between system and galaxy
+   * @param mode - View mode to switch to
+   */
+  setViewMode: (mode: ViewMode) => void;
+
+  /**
+   * Focus on a specific system within the galaxy
+   * @param index - Index of the system in galaxy.systems array (null to unfocus)
+   */
+  focusSystem: (index: number | null) => void;
 
   /**
    * Toggle IDE panel open/closed
@@ -114,6 +157,9 @@ export const useSystemStore = create<SystemStore>((set, get) => ({
   currentSystem: null,
   isGenerating: false,
   generationError: null,
+  currentGalaxy: null,
+  viewMode: 'system',
+  focusedSystemIndex: null,
   ideOpen: false,
   selectedObject: null,
   scene: null,
@@ -227,6 +273,89 @@ export const useSystemStore = create<SystemStore>((set, get) => ({
   setCamera: (camera: THREE.Camera | null) => {
     console.log('[Store] Camera reference updated');
     set({ camera });
+  },
+
+  // ===== Phase 2: Galaxy Actions =====
+
+  generateGalaxy: (seed: number, systemCount = 12) => {
+    // Mark as generating
+    set({ isGenerating: true, generationError: null });
+
+    try {
+      console.log(`[Store] Generating galaxy with seed: ${seed}, ${systemCount} systems`);
+
+      // Generate the galaxy
+      const galaxy = generateGalaxy({ seed, systemCount });
+
+      console.log(`[Store] Generated galaxy: ${galaxy.name} (${galaxy.type})`);
+      console.log(`[Store] ${galaxy.systems.length} star systems generated`);
+
+      // Update state
+      set({
+        currentGalaxy: galaxy,
+        viewMode: 'galaxy',
+        focusedSystemIndex: null,
+        currentSystem: null, // Clear single system when viewing galaxy
+        isGenerating: false,
+        generationError: null
+      });
+
+      console.log('[Store] Galaxy generation complete:', galaxy);
+    } catch (error) {
+      console.error('[Store] Galaxy generation failed:', error);
+      set({
+        isGenerating: false,
+        generationError: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  },
+
+  clearGalaxy: () => {
+    console.log('[Store] Clearing current galaxy');
+    set({
+      currentGalaxy: null,
+      viewMode: 'system',
+      focusedSystemIndex: null,
+      selectedObject: null,
+      generationError: null
+    });
+  },
+
+  setViewMode: (mode: ViewMode) => {
+    console.log(`[Store] Switching view mode to: ${mode}`);
+    set({ viewMode: mode });
+
+    // If switching to system view and no current system, unfocus any galaxy system
+    if (mode === 'system' && !get().currentSystem) {
+      set({ focusedSystemIndex: null });
+    }
+  },
+
+  focusSystem: (index: number | null) => {
+    const { currentGalaxy } = get();
+
+    if (index !== null && currentGalaxy) {
+      if (index < 0 || index >= currentGalaxy.systems.length) {
+        console.error(`[Store] Invalid system index: ${index}`);
+        return;
+      }
+
+      const system = currentGalaxy.systems[index].system;
+      console.log(`[Store] Focusing on system ${index}: ${system.name}`);
+
+      set({
+        focusedSystemIndex: index,
+        currentSystem: system,
+        viewMode: 'system'
+      });
+    } else {
+      console.log('[Store] Unfocusing system, returning to galaxy view');
+      set({
+        focusedSystemIndex: null,
+        currentSystem: null,
+        viewMode: 'galaxy'
+      });
+    }
   }
 }));
 
@@ -255,11 +384,30 @@ export const useSelectedObject = () => useSystemStore((state) => state.selectedO
 export const useIsGenerating = () => useSystemStore((state) => state.isGenerating);
 
 /**
+ * Hook to get current galaxy
+ */
+export const useCurrentGalaxy = () => useSystemStore((state) => state.currentGalaxy);
+
+/**
+ * Hook to get view mode
+ */
+export const useViewMode = () => useSystemStore((state) => state.viewMode);
+
+/**
+ * Hook to get focused system index
+ */
+export const useFocusedSystemIndex = () => useSystemStore((state) => state.focusedSystemIndex);
+
+/**
  * Hook to get all store actions
  */
 export const useSystemActions = () => useSystemStore((state) => ({
   generateSystem: state.generateSystem,
   clearSystem: state.clearSystem,
+  generateGalaxy: state.generateGalaxy,
+  clearGalaxy: state.clearGalaxy,
+  setViewMode: state.setViewMode,
+  focusSystem: state.focusSystem,
   toggleIDE: state.toggleIDE,
   openIDE: state.openIDE,
   closeIDE: state.closeIDE,
