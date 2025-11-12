@@ -13,9 +13,11 @@ import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import type { StarSystem } from '../../types/celestial-bodies';
+import type { Galaxy } from '../../types/galaxy';
 import { createStarMesh, createStarLight, calculateSceneUnitsPerSolarRadius } from '../../rendering/StarRenderer';
 import { createTypedOrbitLine } from '../../rendering/OrbitRenderer';
 import { CelestialBodyLOD } from '../../rendering/CelestialBodyLOD';
+import { GalaxyRenderer } from '../../rendering/GalaxyRenderer';
 
 // ============================================================================
 // ThreeSceneManager Class
@@ -41,6 +43,10 @@ export class ThreeSceneManager {
   // Raycasting for object selection
   private raycaster: THREE.Raycaster;
   private mouse: THREE.Vector2;
+
+  // Galaxy rendering (Phase 2)
+  private galaxyRenderer: GalaxyRenderer;
+  private currentViewMode: 'system' | 'galaxy' = 'system';
 
   /**
    * Initialize Three.js scene manager
@@ -76,6 +82,9 @@ export class ThreeSceneManager {
 
     // Create controls
     this.controls = this.createControls();
+
+    // Initialize galaxy renderer (Phase 2)
+    this.galaxyRenderer = new GalaxyRenderer();
 
     // Add starfield background
     this.addStarfield();
@@ -301,6 +310,20 @@ export class ThreeSceneManager {
     // Update raycaster
     this.raycaster.setFromCamera(this.mouse, this.camera);
 
+    // In galaxy view, raycast against galaxy system markers
+    if (this.currentViewMode === 'galaxy') {
+      const systemObjects = this.galaxyRenderer.getSystemObjects();
+      const intersects = this.raycaster.intersectObjects(systemObjects, false);
+
+      if (intersects.length > 0 && this.onObjectSelected) {
+        const selectedObject = intersects[0].object;
+        console.log('[ThreeSceneManager] Galaxy system selected:', selectedObject.userData);
+        this.onObjectSelected(selectedObject.userData);
+      }
+      return;
+    }
+
+    // In system view, raycast against celestial bodies
     // Check for intersections (exclude starfield and orbit lines)
     const intersects = this.raycaster.intersectObjects(
       this.scene.children.filter((obj) =>
@@ -594,6 +617,104 @@ export class ThreeSceneManager {
     );
   }
 
+  // ==========================================================================
+  // Galaxy Rendering (Phase 2)
+  // ==========================================================================
+
+  /**
+   * Render a galaxy in the scene (Phase 2)
+   * Switches to galaxy view mode
+   *
+   * @param galaxy - Galaxy to render
+   */
+  public renderGalaxy(galaxy: Galaxy): void {
+    console.log('[ThreeSceneManager] Rendering galaxy:', galaxy.name, `(${galaxy.systemCount} systems)`);
+
+    // Clear existing system objects (keep starfield)
+    this.clearSystemObjects();
+
+    // Clear previous galaxy rendering
+    const previousGalaxyGroup = this.scene.getObjectByName('GalaxyGroup');
+    if (previousGalaxyGroup) {
+      this.scene.remove(previousGalaxyGroup);
+    }
+
+    // Render galaxy
+    this.galaxyRenderer.renderGalaxy(galaxy);
+
+    // Add galaxy group to scene
+    const galaxyGroup = this.galaxyRenderer.getGroup();
+    this.scene.add(galaxyGroup);
+
+    // Switch to galaxy view mode
+    this.currentViewMode = 'galaxy';
+
+    // Position camera to view entire galaxy
+    this.focusOnGalaxy(galaxy);
+
+    console.log('[ThreeSceneManager] Galaxy rendered successfully');
+  }
+
+  /**
+   * Adjust camera to view the entire galaxy
+   * @param galaxy - Galaxy to focus on
+   */
+  private focusOnGalaxy(galaxy: Galaxy): void {
+    // Determine galaxy bounding radius based on type
+    let galaxyRadius = 100; // Default
+
+    if (galaxy.spiralParams) {
+      galaxyRadius = galaxy.spiralParams.diskRadius;
+    } else if (galaxy.ellipticalParams) {
+      galaxyRadius = galaxy.ellipticalParams.majorAxis;
+    } else if (galaxy.irregularParams) {
+      galaxyRadius = galaxy.irregularParams.boundingRadius;
+    }
+
+    // Position camera to view the whole galaxy
+    const cameraDistance = galaxyRadius * 2.5;
+
+    this.camera.position.set(
+      cameraDistance * 0.5,
+      cameraDistance * 0.8, // Higher angle for better overview
+      cameraDistance
+    );
+    this.camera.lookAt(0, 0, 0);
+
+    // Update controls target and limits for galaxy scale
+    this.controls.target.set(0, 0, 0);
+    this.controls.minDistance = galaxyRadius * 0.1;
+    this.controls.maxDistance = galaxyRadius * 5;
+    this.controls.update();
+
+    console.log(
+      `[ThreeSceneManager] Camera focused on galaxy (radius: ${galaxyRadius.toFixed(2)} light-years)`
+    );
+  }
+
+  /**
+   * Switch back from galaxy view to system view
+   */
+  public switchToSystemView(): void {
+    console.log('[ThreeSceneManager] Switching to system view');
+
+    // Clear galaxy rendering
+    const galaxyGroup = this.scene.getObjectByName('GalaxyGroup');
+    if (galaxyGroup) {
+      this.scene.remove(galaxyGroup);
+    }
+    this.galaxyRenderer.clear();
+
+    // Reset camera controls for system scale
+    this.controls.minDistance = 5;
+    this.controls.maxDistance = 5000;
+
+    // Switch view mode
+    this.currentViewMode = 'system';
+
+    console.log('[ThreeSceneManager] Switched to system view');
+  }
+
   /**
    * Clear all system objects from scene (keep starfield)
    */
@@ -672,6 +793,13 @@ export class ThreeSceneManager {
   }
 
   /**
+   * Get current view mode (system or galaxy)
+   */
+  public getViewMode(): 'system' | 'galaxy' {
+    return this.currentViewMode;
+  }
+
+  /**
    * Dispose of scene manager - clean up resources
    */
   public dispose(): void {
@@ -689,6 +817,9 @@ export class ThreeSceneManager {
 
     // Dispose controls
     this.controls.dispose();
+
+    // Dispose galaxy renderer (Phase 2)
+    this.galaxyRenderer.dispose();
 
     // Clear scene
     this.clearSystemObjects();

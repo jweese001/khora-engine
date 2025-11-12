@@ -16,9 +16,19 @@ export function UIControls() {
   const generateGalaxy = useSystemStore((state) => state.generateGalaxy);
   const isGenerating = useSystemStore((state) => state.isGenerating);
   const currentGalaxy = useSystemStore((state) => state.currentGalaxy);
+  const viewMode = useSystemStore((state) => state.viewMode);
+  const focusSystem = useSystemStore((state) => state.focusSystem);
 
   const [galaxySeedInput, setGalaxySeedInput] = useState('');
   const [systemCount, setSystemCount] = useState('12');
+
+  // Show "Back to Galaxy" button when viewing a system that's part of a galaxy
+  const showBackButton = currentGalaxy !== null && viewMode === 'system';
+
+  const handleBackToGalaxy = () => {
+    console.log('[UIControls] Returning to galaxy view');
+    focusSystem(null); // Unfocus system, return to galaxy view
+  };
 
   const handleGenerateGalaxy = () => {
     let seed: number;
@@ -108,8 +118,18 @@ export function UIControls() {
         </div>
       </div>
 
-      {/* Right: IDE Toggle */}
+      {/* Right: Navigation + IDE Toggle */}
       <div style={styles.rightSection}>
+        {showBackButton && (
+          <button
+            onClick={handleBackToGalaxy}
+            className="hud-btn-secondary"
+            style={styles.backButton}
+          >
+            <span className="mdi mdi-arrow-left" style={styles.buttonIcon}></span>
+            Back to Galaxy
+          </button>
+        )}
         <button
           onClick={toggleIDE}
           className={`hud-btn-secondary ${ideOpen ? 'active' : ''}`}
@@ -212,6 +232,11 @@ const styles = {
     justifyContent: 'flex-end',
     gap: '12px',
     flex: 1
+  },
+  backButton: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px'
   },
   ideButton: {
     display: 'flex',

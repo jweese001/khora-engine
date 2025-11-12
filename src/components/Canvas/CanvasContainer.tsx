@@ -18,6 +18,8 @@ export function CanvasContainer() {
 
   // Get store state and actions
   const currentSystem = useSystemStore((state) => state.currentSystem);
+  const currentGalaxy = useSystemStore((state) => state.currentGalaxy);
+  const viewMode = useSystemStore((state) => state.viewMode);
 
   // Initialize ThreeSceneManager on mount
   useEffect(() => {
@@ -26,7 +28,7 @@ export function CanvasContainer() {
     console.log('[CanvasContainer] Initializing ThreeSceneManager');
 
     // Get store actions inside effect to avoid re-render issues
-    const { setScene, setCamera, selectObject } = useSystemStore.getState();
+    const { setScene, setCamera, selectObject, focusSystem } = useSystemStore.getState();
 
     // Create scene manager
     sceneManagerRef.current = new ThreeSceneManager(
@@ -34,6 +36,14 @@ export function CanvasContainer() {
       (userData) => {
         // Object selected callback
         if (userData) {
+          // Handle galaxy system selection
+          if (userData.type === 'galaxy-system') {
+            console.log('[CanvasContainer] Galaxy system selected, focusing on system:', userData.systemIndex);
+            focusSystem(userData.systemIndex);
+            return;
+          }
+
+          // Handle regular object selection (planets, moons, stars)
           selectObject({
             type: userData.type,
             data: userData.data,
@@ -64,6 +74,7 @@ export function CanvasContainer() {
   // Update scene when currentSystem changes
   useEffect(() => {
     if (!sceneManagerRef.current) return;
+    if (viewMode !== 'system') return; // Only render in system view mode
 
     if (currentSystem) {
       console.log('[CanvasContainer] Rendering system:', currentSystem.name);
@@ -71,7 +82,20 @@ export function CanvasContainer() {
     } else {
       console.log('[CanvasContainer] No system to render');
     }
-  }, [currentSystem]);
+  }, [currentSystem, viewMode]);
+
+  // Update scene when currentGalaxy changes (Phase 2)
+  useEffect(() => {
+    if (!sceneManagerRef.current) return;
+    if (viewMode !== 'galaxy') return; // Only render in galaxy view mode
+
+    if (currentGalaxy) {
+      console.log('[CanvasContainer] Rendering galaxy:', currentGalaxy.name);
+      sceneManagerRef.current.renderGalaxy(currentGalaxy);
+    } else {
+      console.log('[CanvasContainer] No galaxy to render');
+    }
+  }, [currentGalaxy, viewMode]);
 
   return (
     <div
