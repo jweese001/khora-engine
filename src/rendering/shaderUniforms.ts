@@ -118,7 +118,7 @@ export interface MoonUniforms {
 /**
  * Get base terrain color for rocky/barren planets
  */
-function getTerrainColor(planet: Planet): THREE.Vector3 {
+function getTerrainColor(planet: Planet, rng: SeededRandom): THREE.Vector3 {
   switch (planet.type) {
     case PlanetType.Rocky:
       // Brownish terrain (Earth-like or Mars-like)
@@ -126,10 +126,52 @@ function getTerrainColor(planet: Planet): THREE.Vector3 {
     case PlanetType.Barren:
       // Gray rocky surface
       return new THREE.Vector3(0.412, 0.412, 0.412); // RGB(105, 105, 105) = #696969
+    case PlanetType.GasGiant:
+      // Gas giants: Warm tones (Jupiter, Saturn-like)
+      // Varied oranges, browns, creams, tans
+      const gasHue = rng.random() * 0.15; // 0.0-0.15 (orange to yellow range)
+      const gasSat = 0.4 + rng.random() * 0.4; // 0.4-0.8 saturation
+      const gasBright = 0.5 + rng.random() * 0.3; // 0.5-0.8 brightness
+      return hslToRgb(gasHue, gasSat, gasBright);
+    case PlanetType.IceGiant:
+      // Ice giants: Cool tones (Uranus, Neptune-like)
+      // Varied blues, cyans, teals
+      const iceHue = 0.5 + rng.random() * 0.15; // 0.5-0.65 (cyan to blue range)
+      const iceSat = 0.5 + rng.random() * 0.3; // 0.5-0.8 saturation
+      const iceBright = 0.5 + rng.random() * 0.25; // 0.5-0.75 brightness
+      return hslToRgb(iceHue, iceSat, iceBright);
     default:
       // Fallback gray
       return new THREE.Vector3(0.5, 0.5, 0.5);
   }
+}
+
+/**
+ * Convert HSL to RGB (helper for varied color generation)
+ */
+function hslToRgb(h: number, s: number, l: number): THREE.Vector3 {
+  let r, g, b;
+
+  if (s === 0) {
+    r = g = b = l;
+  } else {
+    const hue2rgb = (p: number, q: number, t: number) => {
+      if (t < 0) t += 1;
+      if (t > 1) t -= 1;
+      if (t < 1/6) return p + (q - p) * 6 * t;
+      if (t < 1/2) return q;
+      if (t < 2/3) return p + (q - p) * (2/3 - t) * 6;
+      return p;
+    };
+
+    const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+    const p = 2 * l - q;
+    r = hue2rgb(p, q, h + 1/3);
+    g = hue2rgb(p, q, h);
+    b = hue2rgb(p, q, h - 1/3);
+  }
+
+  return new THREE.Vector3(r, g, b);
 }
 
 /**
@@ -305,7 +347,7 @@ export function derivePlanetUniforms(
   // Colors
   // ========================================================================
 
-  const baseColor = getTerrainColor(planet);
+  const baseColor = getTerrainColor(planet, rng);
   const atmosphereColor = getAtmosphereColor(planet);
   // Band colors not used in unified shader (gas giants use their own color logic)
 
@@ -408,31 +450,75 @@ export function derivePlanetUniforms(
   let stormColor = new THREE.Vector3(0.5, 0.5, 0.5);
 
   if (planetMode === 1) {
-    // Gas Giant
-    bandCount = 5 + Math.floor(planet.radius * 2); // Larger = more bands (5-15)
-    turbulence = 0.7 + rng.random() * 0.2; // 0.7-0.9 (very turbulent)
-    bandSpeed = 0.08 + rng.random() * 0.04; // 0.08-0.12 (band animation speed)
-    stormIntensity = 0.4 + rng.random() * 0.3; // 0.4-0.7 (active storms)
+    // Gas Giant - More varied appearance
+    // Band count: 6-20 (more variation based on size + random factor)
+    bandCount = 6 + Math.floor(planet.radius * 2 + rng.random() * 6);
+    // Turbulence: 0.5-0.95 (wider range for more variety)
+    turbulence = 0.5 + rng.random() * 0.45;
+    // Band speed: 0.05-0.15 (wider range)
+    bandSpeed = 0.05 + rng.random() * 0.1;
+    // Storm intensity: 0.2-0.8 (much wider range)
+    stormIntensity = 0.2 + rng.random() * 0.6;
 
-    // Storm color: reddish/orange for gas giants (Great Red Spot style)
-    stormColor = new THREE.Vector3(
-      0.7 + rng.random() * 0.2,  // 0.7-0.9 red
-      0.3 + rng.random() * 0.2,  // 0.3-0.5 green
-      0.2 + rng.random() * 0.1   // 0.2-0.3 blue
-    );
+    // Storm color: More varied reddish/orange/yellow for gas giants
+    const stormVariation = rng.random();
+    if (stormVariation < 0.33) {
+      // Red spots (Jupiter-like)
+      stormColor = new THREE.Vector3(
+        0.7 + rng.random() * 0.25,  // 0.7-0.95 red
+        0.25 + rng.random() * 0.25, // 0.25-0.5 green
+        0.15 + rng.random() * 0.15  // 0.15-0.3 blue
+      );
+    } else if (stormVariation < 0.66) {
+      // Orange/amber spots
+      stormColor = new THREE.Vector3(
+        0.8 + rng.random() * 0.15,  // 0.8-0.95 red
+        0.5 + rng.random() * 0.2,   // 0.5-0.7 green
+        0.2 + rng.random() * 0.2    // 0.2-0.4 blue
+      );
+    } else {
+      // Cream/pale yellow spots
+      stormColor = new THREE.Vector3(
+        0.85 + rng.random() * 0.1,  // 0.85-0.95 red
+        0.7 + rng.random() * 0.15,  // 0.7-0.85 green
+        0.4 + rng.random() * 0.2    // 0.4-0.6 blue
+      );
+    }
   } else if (planetMode === 2) {
-    // Ice Giant
-    bandCount = 5 + Math.floor(planet.radius * 1.5); // Fewer bands (5-12)
-    turbulence = 0.3 + rng.random() * 0.2; // 0.3-0.5 (calmer)
-    bandSpeed = 0.04 + rng.random() * 0.02; // 0.04-0.06 (slower than gas giants)
-    stormIntensity = 0.2 + rng.random() * 0.2; // 0.2-0.4 (subtle storms)
+    // Ice Giant - More varied appearance
+    // Band count: 4-16 (more variation)
+    bandCount = 4 + Math.floor(planet.radius * 1.5 + rng.random() * 5);
+    // Turbulence: 0.15-0.6 (wider range)
+    turbulence = 0.15 + rng.random() * 0.45;
+    // Band speed: 0.02-0.08 (wider range)
+    bandSpeed = 0.02 + rng.random() * 0.06;
+    // Storm intensity: 0.1-0.6 (wider range)
+    stormIntensity = 0.1 + rng.random() * 0.5;
 
-    // Storm color: dark blue/gray for ice giants (Great Dark Spot style)
-    stormColor = new THREE.Vector3(
-      0.1 + rng.random() * 0.1,  // 0.1-0.2 red (darker)
-      0.2 + rng.random() * 0.15, // 0.2-0.35 green
-      0.3 + rng.random() * 0.2   // 0.3-0.5 blue
-    );
+    // Storm color: More varied dark blues/teals for ice giants
+    const stormVariation = rng.random();
+    if (stormVariation < 0.33) {
+      // Very dark blue (Neptune-like Great Dark Spot)
+      stormColor = new THREE.Vector3(
+        0.05 + rng.random() * 0.1,  // 0.05-0.15 red (very dark)
+        0.1 + rng.random() * 0.15,  // 0.1-0.25 green
+        0.2 + rng.random() * 0.25   // 0.2-0.45 blue
+      );
+    } else if (stormVariation < 0.66) {
+      // Teal/cyan dark spots
+      stormColor = new THREE.Vector3(
+        0.1 + rng.random() * 0.15,  // 0.1-0.25 red
+        0.25 + rng.random() * 0.2,  // 0.25-0.45 green
+        0.35 + rng.random() * 0.25  // 0.35-0.6 blue
+      );
+    } else {
+      // Gray-blue spots
+      stormColor = new THREE.Vector3(
+        0.15 + rng.random() * 0.15, // 0.15-0.3 red
+        0.2 + rng.random() * 0.2,   // 0.2-0.4 green
+        0.3 + rng.random() * 0.2    // 0.3-0.5 blue
+      );
+    }
   }
 
   // ========================================================================
