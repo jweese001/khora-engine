@@ -928,9 +928,154 @@ server: {
 
 ---
 
-## Phase 3 Planning: Architect Mode (Future)
+## Phase 3: Architect Mode Implementation (November 11, 2025)
 
-**Note:** This section documents future work identified during M5 (Procedural Shaders) development.
+**Status:** ✅ **COMPLETE** - Live Shader Parameter Editing System Implemented
+
+### Session Summary
+
+**Goal:** Implement live shader parameter editing without regenerating systems
+
+**Completed:**
+- ✅ Analyzed shader uniform system and identified all editable parameters
+- ✅ Installed `react-colorful` color picker library
+- ✅ Created `ShaderControls.tsx` component with categorized controls
+- ✅ Implemented uniform override system in store (`uniformOverrides` Map)
+- ✅ Added 'Controls' tab to IDE panel
+- ✅ Implemented real-time uniform updates in ThreeSceneManager
+- ✅ Connected store changes to automatic scene updates via CanvasContainer
+- ✅ Added material registry to track LOD objects and direct materials
+- ✅ Automatic hex color conversion to THREE.Vector3
+
+### Implementation Details
+
+#### 1. ShaderControls Component (`src/components/IDE/ShaderControls.tsx`)
+- **Type-specific controls:** Different UIs for stars, rocky planets, gas giants, and moons
+- **Control types:** Color pickers (HexColorPicker), range sliders, numeric inputs
+- **Categorized sections:** Surface Activity, Center Gradient, Limb Darkening (stars), Surface Properties, Water/Atmosphere (planets), Band Colors (gas giants)
+- **Real-time preview:** Changes applied instantly as sliders/colors are adjusted
+- **Reset button:** Revert to procedural defaults
+
+#### 2. Store Integration (`src/store/system-store.ts`)
+- Added `uniformOverrides: Map<string, UniformOverrides>` to track custom uniform values per object
+- Implemented three new actions:
+  - `updateUniform(objectId, uniformName, value)` - Store custom value
+  - `resetObjectUniforms(objectId)` - Clear all overrides
+  - `getObjectUniforms(objectId)` - Retrieve current overrides
+
+#### 3. Material Registry System (`src/components/Canvas/ThreeSceneManager.tsx`)
+- Added `private materialRegistry: Map<string, THREE.Material>` to track all celestial body materials
+- **Star materials:** Registered during `renderSystem()` as direct THREE.Material references
+- **Planet/Moon materials:** Registered as `CelestialBodyLOD` objects (handles all 3 LOD levels)
+- **Auto-cleanup:** Registry cleared when system changes
+- Implemented `updateObjectUniforms()` method that:
+  - Finds material/LOD object in registry
+  - Updates uniforms for LOD objects (all 3 detail levels) or direct materials (stars)
+  - Handles automatic hex color string to THREE.Vector3 conversion
+
+#### 4. LOD Material Updates (`src/rendering/CelestialBodyLOD.ts`)
+- Added `private materials: THREE.Material[]` to store all LOD level materials
+- Modified constructor to capture material references during LOD level creation
+- Implemented two new public methods:
+  - `getMaterials()` - Access all materials for inspection
+  - `updateUniform(uniformName, value)` - Update uniform across all LOD levels with color conversion
+
+#### 5. Real-time Updates (`src/components/Canvas/CanvasContainer.tsx`)
+- Added `useEffect` hook watching `uniformOverrides` Map from store
+- Automatically applies all uniform changes to scene materials
+- Iterates through objects with overrides and calls `sceneManager.updateObjectUniforms()`
+
+### Editable Shader Parameters
+
+**Star Shaders:**
+- Surface Activity: `u_activityLevel` (0-1), `u_activityScale` (1-10), `u_activitySpeed` (0-1)
+- Center Gradient: `u_gradientStrength` (0-2), `u_gradientFalloff` (0.5-3), `u_gradientOpacity` (0-1), `u_centerColor` (RGB)
+- Limb Darkening: `u_limbDarkeningPower` (0.5-5), `u_centerBrightness` (0.5-2)
+- Colors: `u_starColor` (RGB), `u_noiseColor` (RGB)
+
+**Rocky/Barren Planets:**
+- Surface: `u_baseColor` (RGB)
+- Water: `u_waterCoverage` (0-1)
+- Atmosphere: `u_atmosphereDensity` (0-1), `u_atmosphereColor` (RGB)
+
+**Gas/Ice Giants:**
+- Bands: `u_bandColor1` (RGB), `u_bandColor2` (RGB), `u_bandColor3` (RGB)
+- Structure: `u_bandCount` (3-15), `u_turbulence` (0-1)
+
+**Moons:**
+- Surface: `u_baseColor` (RGB)
+
+### Technical Architecture
+
+**Data Flow:**
+1. User adjusts slider/color in ShaderControls → `onUniformChange(uniformName, value)`
+2. IDEPanel handler → calls store's `updateUniform(objectId, uniformName, value)`
+3. Store updates → modifies `uniformOverrides` Map, triggers React re-render
+4. CanvasContainer effect → detects Map change, calls `sceneManager.updateObjectUniforms()`
+5. ThreeSceneManager → finds material/LOD in registry, applies uniform update
+   - For LOD objects: updates all 3 detail levels via `CelestialBodyLOD.updateUniform()`
+   - For direct materials: updates THREE.ShaderMaterial uniforms directly
+6. Three.js → renders next frame with new values (instant visual feedback)
+
+**Key Features:**
+- **LOD consistency:** All 3 detail levels updated simultaneously, no visual popping
+- **Automatic color conversion:** Hex strings from color picker automatically converted to THREE.Vector3
+- **Type safety:** Proper handling of both LOD objects and direct materials
+- **Performance:** Only updates changed uniforms, minimal overhead
+- **Memory management:** Registry cleared when system changes
+
+### Files Modified/Created
+
+**Created:**
+- `src/components/IDE/ShaderControls.tsx` (500+ lines) - Main UI component
+
+**Modified:**
+- `src/store/system-store.ts` - Added uniform override state and actions
+- `src/components/IDE/IDEPanel.tsx` - Added Controls tab and wrapper component
+- `src/rendering/CelestialBodyLOD.ts` - Added material tracking and update methods
+- `src/components/Canvas/ThreeSceneManager.tsx` - Added material registry and update system
+- `src/components/Canvas/CanvasContainer.tsx` - Connected store to scene updates
+- `package.json` - Installed react-colorful dependency
+
+### Success Criteria
+
+- ✅ Click celestial body → IDE shows relevant shader parameters
+- ✅ Adjust slider → shader updates in real-time (no regeneration needed)
+- ✅ Change color → color updates instantly across all LOD levels
+- ✅ Reset button → reverts to procedural defaults
+- ✅ Works for all object types (stars, planets, moons, gas giants)
+- ✅ No visual artifacts or LOD popping during updates
+- ✅ Performance maintained (uniform updates are fast)
+
+### Benefits
+
+**Development Workflow:**
+- Dramatically faster shader iteration (no code recompile needed)
+- Visual feedback is instant (see changes as you adjust)
+- Can explore parameter space interactively
+- Easy to find "sweet spot" values for visual quality
+
+**User Experience:**
+- Creative control over procedural systems
+- Can customize planets while preserving deterministic base
+- Overrides saved per object (don't affect other planets)
+- Non-destructive editing (reset anytime)
+
+### Future Enhancements (Phase 3+)
+
+**Potential additions:**
+- [ ] Save/load customized systems with overrides
+- [ ] Export shader presets (share parameter sets)
+- [ ] "Apply to All" button (apply settings to all similar objects)
+- [ ] Undo/redo system for parameter changes
+- [ ] Shader preset library
+- [ ] Parameter randomization within safe ranges
+
+---
+
+## Phase 3 Planning: Architect Mode (Original Vision)
+
+**Note:** This section documents the original vision identified during M5 (Procedural Shaders) development. The core implementation is now complete (see above).
 
 ### Key Insight from M5 Development
 

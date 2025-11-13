@@ -41,6 +41,13 @@ export type ViewMode = 'system' | 'galaxy';
 export type AppMode = 'landing' | 'diceRoll' | 'architect' | 'explorer';
 
 /**
+ * Uniform override for a celestial body (Phase 3: Architect Mode)
+ */
+export interface UniformOverrides {
+  [uniformName: string]: any;
+}
+
+/**
  * Main application state
  */
 interface SystemStore {
@@ -81,6 +88,11 @@ interface SystemStore {
 
   /** Currently selected object in scene (for inspection) */
   selectedObject: SelectedObject | null;
+
+  // ===== Architect Mode State (Phase 3) =====
+
+  /** Uniform overrides for celestial bodies (object ID -> uniform overrides map) */
+  uniformOverrides: Map<string, UniformOverrides>;
 
   // ===== Scene State =====
 
@@ -171,6 +183,29 @@ interface SystemStore {
    * @param camera - Three.js camera instance
    */
   setCamera: (camera: THREE.Camera | null) => void;
+
+  // ===== Architect Mode Actions (Phase 3) =====
+
+  /**
+   * Update a shader uniform for a celestial body
+   * @param objectId - ID of the celestial body (star, planet, or moon)
+   * @param uniformName - Name of the uniform to update
+   * @param value - New value for the uniform
+   */
+  updateUniform: (objectId: string, uniformName: string, value: any) => void;
+
+  /**
+   * Reset all shader uniforms for an object to procedural defaults
+   * @param objectId - ID of the celestial body
+   */
+  resetObjectUniforms: (objectId: string) => void;
+
+  /**
+   * Get uniform overrides for a specific object
+   * @param objectId - ID of the celestial body
+   * @returns Uniform overrides or undefined if no overrides exist
+   */
+  getObjectUniforms: (objectId: string) => UniformOverrides | undefined;
 }
 
 // ============================================================================
@@ -189,6 +224,7 @@ export const useSystemStore = create<SystemStore>((set, get) => ({
   focusedSystemIndex: null,
   ideOpen: false,
   selectedObject: null,
+  uniformOverrides: new Map(),
   scene: null,
   camera: null,
 
@@ -205,8 +241,13 @@ export const useSystemStore = create<SystemStore>((set, get) => ({
   },
 
   generateSystem: (seed: number) => {
-    // Mark as generating
-    set({ isGenerating: true, generationError: null });
+    // Mark as generating (clear overrides for fresh start)
+    set({
+      isGenerating: true,
+      generationError: null,
+      uniformOverrides: new Map(),
+      selectedObject: null
+    });
 
     try {
       console.log(`[Store] Generating system with seed: ${seed}`);
@@ -268,7 +309,8 @@ export const useSystemStore = create<SystemStore>((set, get) => ({
     set({
       currentSystem: null,
       selectedObject: null,
-      generationError: null
+      generationError: null,
+      uniformOverrides: new Map() // Clear overrides when clearing system
     });
   },
 
@@ -315,8 +357,13 @@ export const useSystemStore = create<SystemStore>((set, get) => ({
   // ===== Phase 2: Galaxy Actions =====
 
   generateGalaxy: (seed: number, systemCount = 12) => {
-    // Mark as generating
-    set({ isGenerating: true, generationError: null });
+    // Mark as generating (clear overrides for fresh start)
+    set({
+      isGenerating: true,
+      generationError: null,
+      uniformOverrides: new Map(),
+      selectedObject: null
+    });
 
     try {
       console.log(`[Store] Generating galaxy with seed: ${seed}, ${systemCount} systems`);
@@ -354,7 +401,8 @@ export const useSystemStore = create<SystemStore>((set, get) => ({
       viewMode: 'system',
       focusedSystemIndex: null,
       selectedObject: null,
-      generationError: null
+      generationError: null,
+      uniformOverrides: new Map() // Clear overrides when clearing galaxy
     });
   },
 
@@ -383,16 +431,57 @@ export const useSystemStore = create<SystemStore>((set, get) => ({
       set({
         focusedSystemIndex: index,
         currentSystem: system,
-        viewMode: 'system'
+        viewMode: 'system',
+        uniformOverrides: new Map(), // Clear overrides when switching systems
+        selectedObject: null // Deselect object when switching systems
       });
     } else {
       console.log('[Store] Unfocusing system, returning to galaxy view');
       set({
         focusedSystemIndex: null,
         currentSystem: null,
-        viewMode: 'galaxy'
+        viewMode: 'galaxy',
+        uniformOverrides: new Map(), // Clear overrides when returning to galaxy
+        selectedObject: null
       });
     }
+  },
+
+  // ===== Phase 3: Architect Mode Actions =====
+
+  updateUniform: (objectId: string, uniformName: string, value: any) => {
+    const { uniformOverrides } = get();
+
+    // Get existing overrides for this object or create new map
+    const objectOverrides = uniformOverrides.get(objectId) || {};
+
+    // Update the uniform value
+    objectOverrides[uniformName] = value;
+
+    // Create new Map to trigger React re-render
+    const newOverrides = new Map(uniformOverrides);
+    newOverrides.set(objectId, objectOverrides);
+
+    console.log(`[Store] Updated uniform ${uniformName} for ${objectId}:`, value);
+
+    set({ uniformOverrides: newOverrides });
+  },
+
+  resetObjectUniforms: (objectId: string) => {
+    const { uniformOverrides } = get();
+
+    // Create new Map without this object's overrides
+    const newOverrides = new Map(uniformOverrides);
+    newOverrides.delete(objectId);
+
+    console.log(`[Store] Reset uniforms for ${objectId}`);
+
+    set({ uniformOverrides: newOverrides });
+  },
+
+  getObjectUniforms: (objectId: string) => {
+    const { uniformOverrides } = get();
+    return uniformOverrides.get(objectId);
   }
 }));
 

@@ -17,6 +17,7 @@ import { useSystemStore } from '../store/system-store';
 
 export function App() {
   const appMode = useSystemStore((state) => state.appMode);
+  const ideOpen = useSystemStore((state) => state.ideOpen);
 
   // Landing page: Mode selection
   if (appMode === 'landing') {
@@ -60,7 +61,10 @@ export function App() {
       <UIControls />
 
       {/* Main canvas area */}
-      <div style={styles.canvasWrapper}>
+      <div style={{
+        ...styles.canvasWrapper,
+        ...(ideOpen ? styles.canvasWrapperWithIDE : {})
+      }}>
         <CanvasContainer />
       </div>
 
@@ -87,7 +91,11 @@ const styles = {
   canvasWrapper: {
     flex: 1,
     position: 'relative',
-    overflow: 'hidden'
+    overflow: 'hidden',
+    transition: 'margin-right 0.3s ease-in-out'
+  } as React.CSSProperties,
+  canvasWrapperWithIDE: {
+    marginRight: 'max(40%, 400px)' // Match IDE panel width/minWidth
   } as React.CSSProperties,
   placeholderContainer: {
     width: '100vw',

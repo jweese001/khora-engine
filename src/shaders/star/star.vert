@@ -1,26 +1,20 @@
 //
-// Star Vertex Shader
-// Simple vertex shader for emissive star rendering
+// Star Vertex Shader (Temperature-Based)
 //
 
-varying vec3 vPosition;
+uniform float u_time;
+uniform float u_scale;
+
+varying vec3 vTexCoord3D;
 varying vec3 vNormal;
-varying vec3 vWorldPosition;
-varying vec2 vUv;
+varying vec3 vPosition;
 
 void main() {
-  // Pass local position for noise calculation
+  // Create 3D texture coordinates for noise sampling
+  // Slow down time effect significantly for subtle animation
+  vTexCoord3D = u_scale * (position.xyz + vec3(u_time * 0.1, u_time * 0.08, u_time * 0.09));
+  vNormal = normalize(normalMatrix * normal);
   vPosition = position;
 
-  // Pass normal for lighting calculations
-  vNormal = normalize(normalMatrix * normal);
-
-  // Pass world position for view-dependent effects
-  vWorldPosition = (modelMatrix * vec4(position, 1.0)).xyz;
-
-  // Pass UV coordinates
-  vUv = uv;
-
-  // Standard vertex transformation
   gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
 }

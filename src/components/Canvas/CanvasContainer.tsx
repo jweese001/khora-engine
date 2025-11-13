@@ -20,6 +20,7 @@ export function CanvasContainer() {
   const currentSystem = useSystemStore((state) => state.currentSystem);
   const currentGalaxy = useSystemStore((state) => state.currentGalaxy);
   const viewMode = useSystemStore((state) => state.viewMode);
+  const uniformOverrides = useSystemStore((state) => state.uniformOverrides);
 
   // Initialize ThreeSceneManager on mount
   useEffect(() => {
@@ -78,6 +79,9 @@ export function CanvasContainer() {
 
     if (currentSystem) {
       console.log('[CanvasContainer] Rendering system:', currentSystem.name);
+      // Switch to system view (removes galaxy objects)
+      sceneManagerRef.current.switchToSystemView();
+      // Then render the system
       sceneManagerRef.current.renderSystem(currentSystem);
     } else {
       console.log('[CanvasContainer] No system to render');
@@ -96,6 +100,22 @@ export function CanvasContainer() {
       console.log('[CanvasContainer] No galaxy to render');
     }
   }, [currentGalaxy, viewMode]);
+
+  // Apply uniform overrides to scene (Phase 3: Architect Mode)
+  useEffect(() => {
+    if (!sceneManagerRef.current) return;
+    if (uniformOverrides.size === 0) return;
+
+    console.log('[CanvasContainer] Applying uniform overrides:', uniformOverrides.size, 'objects');
+
+    // Iterate through all objects with overrides
+    uniformOverrides.forEach((overrides, objectId) => {
+      // Apply each uniform override for this object
+      Object.entries(overrides).forEach(([uniformName, value]) => {
+        sceneManagerRef.current?.updateObjectUniforms(objectId, uniformName, value);
+      });
+    });
+  }, [uniformOverrides]);
 
   return (
     <div

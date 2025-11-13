@@ -15,58 +15,86 @@ import { SeededRandom } from '../utils/random';
 // ============================================================================
 
 /**
- * Shader uniforms for rocky/barren planets
+ * Unified shader uniforms for all planet types
+ * Supports Rocky/Barren (mode 0), Gas Giant (mode 1), Ice Giant (mode 2)
  */
-export interface RockyPlanetUniforms {
+export interface PlanetUniforms {
+  // Core
+  u_time: { value: number };
+  u_lightPosition: { value: THREE.Vector3 };
+  u_planetMode: { value: number };  // 0=Rocky, 1=Gas, 2=Ice
+
+  // Terrain (Rocky mode)
+  u_terrainScale: { value: number };
+  u_terrainRoughness: { value: number };
+  u_craterDensity: { value: number };
+  u_continentSize: { value: number };
+  u_biomeVariation: { value: number };
   u_baseColor: { value: THREE.Vector3 };
+  u_mountainColor: { value: THREE.Vector3 };
+  u_lowlandColor: { value: THREE.Vector3 };
+  u_desertColor: { value: THREE.Vector3 };
+
+  // Water
   u_waterCoverage: { value: number };
+  u_waterSpeed: { value: number };
+  u_waterColor: { value: THREE.Vector3 };
+
+  // Ice Caps
+  u_iceSize: { value: number };
+  u_iceRoughness: { value: number };
+  u_iceColor: { value: THREE.Vector3 };
+
+  // Atmosphere
   u_atmosphereDensity: { value: number };
   u_atmosphereColor: { value: THREE.Vector3 };
-  u_seed: { value: number };
-  u_hasAtmosphere: { value: boolean };
-  u_cameraPosition: { value: THREE.Vector3 };
-}
 
-/**
- * Shader uniforms for gas giants and ice giants
- */
-export interface GasGiantUniforms {
-  u_bandColor1: { value: THREE.Vector3 };
-  u_bandColor2: { value: THREE.Vector3 };
-  u_bandColor3: { value: THREE.Vector3 };
+  // Clouds
+  u_cloudCoverage: { value: number };
+  u_cloudSpeed: { value: number };
+  u_cloudNoiseType: { value: number };
+  u_cloudDepth: { value: number };
+  u_cloudShadow: { value: number };
+  u_cloudColor: { value: THREE.Vector3 };
+
+  // Gas Giant (modes 1 and 2)
   u_bandCount: { value: number };
   u_turbulence: { value: number };
-  u_seed: { value: number };
+  u_bandSpeed: { value: number };
+  u_stormIntensity: { value: number };
+  u_stormColor: { value: THREE.Vector3 };
 }
 
 /**
- * Shader uniforms for enhanced star rendering
+ * Legacy type alias for backward compatibility
+ * @deprecated Use PlanetUniforms instead
+ */
+export type RockyPlanetUniforms = PlanetUniforms;
+
+/**
+ * Legacy type alias for backward compatibility
+ * @deprecated Use PlanetUniforms instead
+ */
+export type GasGiantUniforms = PlanetUniforms;
+
+/**
+ * Shader uniforms for temperature-based star rendering
+ * Uses blackbody radiation for realistic color calculation
  */
 export interface StarUniforms {
-  // Colors
-  u_starColor: { value: THREE.Vector3 };
-  u_noiseColor: { value: THREE.Vector3 };
-  u_centerColor: { value: THREE.Vector3 };
-  u_temperature: { value: number };
-  u_seed: { value: number };
+  // Temperature-based rendering
+  u_highTemp: { value: number };      // High temperature in Kelvin (bright regions)
+  u_lowTemp: { value: number };       // Low temperature in Kelvin (dark regions/sunspots)
+  u_scale: { value: number };         // Noise scale
+  u_time: { value: number };          // Animation time
 
-  // Surface activity
-  u_activityLevel: { value: number };
-  u_activityScale: { value: number };
-  u_activitySpeed: { value: number };
-
-  // Center gradient
-  u_gradientStrength: { value: number };
-  u_gradientFalloff: { value: number };
-  u_gradientOpacity: { value: number };
+  // Sunspot parameters
+  u_sunspotFreq: { value: number };   // Sunspot frequency (size)
+  u_sunspotIntensity: { value: number }; // Sunspot darkness intensity
 
   // Limb darkening
-  u_limbDarkeningPower: { value: number };
-  u_centerBrightness: { value: number };
-
-  // View-dependent
-  u_cameraPosition: { value: THREE.Vector3 };
-  u_time: { value: number };
+  u_limbDarkeningPower: { value: number }; // How dark edges get
+  u_centerBrightness: { value: number };   // Center brightness multiplier
 }
 
 /**
@@ -136,7 +164,9 @@ function getAtmosphereColor(planet: Planet): THREE.Vector3 {
 /**
  * Get band colors for gas giants
  */
-function getGasGiantBandColors(planet: Planet): [THREE.Vector3, THREE.Vector3, THREE.Vector3] {
+// Not currently used but kept for potential future Phase 3 architect mode presets
+// @ts-expect-error - Kept for future use
+function _getGasGiantBandColors(planet: Planet): [THREE.Vector3, THREE.Vector3, THREE.Vector3] {
   const comp = planet.atmosphere.composition;
 
   if (planet.type === PlanetType.IceGiant) {
@@ -200,7 +230,266 @@ function getMoonBaseColor(moon: Moon, parentPlanet: Planet): THREE.Vector3 {
 // ============================================================================
 
 /**
+ * Generate comprehensive shader uniforms for all planet types
+ * Intelligently maps planet properties to shader parameters based on:
+ * - Planet type (Rocky/Barren/GasGiant/IceGiant)
+ * - Habitable zone position
+ * - Planet size and mass
+ * - Atmosphere composition
+ * - Surface temperature
+ *
+ * @param planet - Planet data
+ * @param habitableZone - Star's habitable zone (for determining if planet is in HZ)
+ * @param camera - Camera for view-dependent effects
+ * @returns Complete uniforms object for unified planet shader
+ */
+export function derivePlanetUniforms(
+  planet: Planet,
+  habitableZone: { inner: number; outer: number },
+  _camera: THREE.Camera
+): PlanetUniforms {
+  // Generate seed from planet ID for deterministic noise
+  const seed = hashString(planet.id);
+  const rng = new SeededRandom(seed);
+
+  // Determine planet mode based on type
+  let planetMode = 0; // Default: Rocky
+  if (planet.type === PlanetType.GasGiant) {
+    planetMode = 1;
+  } else if (planet.type === PlanetType.IceGiant) {
+    planetMode = 2;
+  }
+
+  // Check if planet is in habitable zone
+  const inHabitableZone = planet.orbitDistance >= habitableZone.inner &&
+                           planet.orbitDistance <= habitableZone.outer;
+
+  // ========================================================================
+  // Terrain Parameters (Rocky/Barren mode)
+  // ========================================================================
+
+  let terrainScale = 3.0;
+  let terrainRoughness = 0.5;
+  let craterDensity = 0.0;
+  let continentSize = 0.5;
+  let biomeVariation = 0.0;
+
+  if (planetMode === 0) { // Rocky/Barren
+    // Barren planets are rougher and more cratered
+    if (planet.type === PlanetType.Barren) {
+      terrainScale = 4.5;
+      terrainRoughness = 0.7;
+      craterDensity = 0.6; // Heavy cratering
+      continentSize = 0.8;  // Large continuous landmasses
+      biomeVariation = 0.1; // Low variation (mostly similar terrain)
+    }
+    // Rocky planets in habitable zone have diverse biomes
+    else if (inHabitableZone) {
+      terrainScale = 3.0;
+      terrainRoughness = 0.5;
+      craterDensity = 0.0; // Little to no cratering (geologically active)
+      continentSize = 0.5;  // Balanced land/water
+      biomeVariation = 0.7; // High biome variation
+    }
+    // Rocky planets outside habitable zone
+    else {
+      terrainScale = 4.0;
+      terrainRoughness = 0.6;
+      craterDensity = 0.2; // Some cratering
+      continentSize = 0.7;  // More land
+      biomeVariation = 0.4; // Moderate variation
+    }
+  }
+
+  // ========================================================================
+  // Colors
+  // ========================================================================
+
+  const baseColor = getTerrainColor(planet);
+  const atmosphereColor = getAtmosphereColor(planet);
+  // Band colors not used in unified shader (gas giants use their own color logic)
+
+  // Mountain/lowland/desert colors for biomes
+  let mountainColor = new THREE.Vector3(0.55, 0.45, 0.33); // Brown
+  let lowlandColor = new THREE.Vector3(0.29, 0.49, 0.35);  // Green
+  let desertColor = new THREE.Vector3(0.76, 0.60, 0.42);   // Tan
+
+  if (planet.type === PlanetType.Barren) {
+    // All similar gray/brown tones for barren
+    mountainColor = new THREE.Vector3(0.60, 0.50, 0.40);
+    lowlandColor = new THREE.Vector3(0.55, 0.45, 0.35);
+    desertColor = new THREE.Vector3(0.55, 0.45, 0.35);
+  }
+
+  // ========================================================================
+  // Water Parameters
+  // ========================================================================
+
+  let waterCoverage = planet.waterCoverage;
+  let waterSpeed = 0.3;
+  const waterColor = new THREE.Vector3(0.12, 0.35, 0.52); // Deep blue
+
+  // Adjust water parameters based on zone
+  if (inHabitableZone && planet.type === PlanetType.Rocky) {
+    // Habitable zone: more water, active hydrological cycle
+    waterSpeed = 0.3;
+  } else if (planet.type === PlanetType.Barren) {
+    // Barren: no water
+    waterCoverage = 0.0;
+    waterSpeed = 0.0;
+  }
+
+  // ========================================================================
+  // Ice Caps
+  // ========================================================================
+
+  let iceSize = 0.0;
+  let iceRoughness = 0.3;
+  const iceColor = new THREE.Vector3(0.91, 0.96, 0.97); // White
+
+  if (planet.type === PlanetType.Rocky && waterCoverage > 0.0) {
+    // Ice caps based on temperature
+    if (planet.surfaceTemperature < 250) {
+      iceSize = 0.4; // Large ice caps (cold planet)
+    } else if (planet.surfaceTemperature < 273) {
+      iceSize = 0.3; // Medium ice caps
+    } else if (inHabitableZone) {
+      iceSize = 0.25; // Small polar ice caps (Earth-like)
+    }
+  }
+
+  // ========================================================================
+  // Atmosphere Parameters
+  // ========================================================================
+
+  let atmosphereDensity = planet.atmosphere.present ? planet.atmosphere.density : 0.0;
+
+  // Gas/ice giants always have thick atmospheres
+  if (planetMode === 1 || planetMode === 2) {
+    atmosphereDensity = 0.8;
+  }
+
+  // ========================================================================
+  // Cloud Parameters
+  // ========================================================================
+
+  let cloudCoverage = 0.0;
+  let cloudSpeed = 0.15;
+  let cloudNoiseType = 1.0; // Fluffy cumulus by default
+  let cloudDepth = 0.6;
+  let cloudShadow = 0.4;
+  const cloudColor = new THREE.Vector3(1.0, 1.0, 1.0); // White
+
+  if (planet.type === PlanetType.Rocky && inHabitableZone && waterCoverage > 0.3) {
+    // Habitable planets with water have clouds
+    cloudCoverage = 0.55;
+    cloudSpeed = 0.15;
+    cloudNoiseType = 1.0; // Fluffy cumulus
+    cloudDepth = 0.6;
+    cloudShadow = 0.4;
+  } else if (planet.type === PlanetType.Rocky && atmosphereDensity > 0.3) {
+    // Thin atmosphere: some clouds
+    cloudCoverage = 0.2;
+    cloudSpeed = 0.1;
+    cloudNoiseType = 0.0; // Smooth cirrus
+    cloudDepth = 0.3;
+    cloudShadow = 0.2;
+  }
+  // Gas/ice giants don't use cloud layer (atmosphere is the visible surface)
+
+  // ========================================================================
+  // Gas Giant Band Parameters
+  // ========================================================================
+
+  let bandCount = 0.0;
+  let turbulence = 0.0;
+  let bandSpeed = 0.0;
+  let stormIntensity = 0.0;
+  let stormColor = new THREE.Vector3(0.5, 0.5, 0.5);
+
+  if (planetMode === 1) {
+    // Gas Giant
+    bandCount = 5 + Math.floor(planet.radius * 2); // Larger = more bands (5-15)
+    turbulence = 0.7 + rng.random() * 0.2; // 0.7-0.9 (very turbulent)
+    bandSpeed = 0.08 + rng.random() * 0.04; // 0.08-0.12 (band animation speed)
+    stormIntensity = 0.4 + rng.random() * 0.3; // 0.4-0.7 (active storms)
+
+    // Storm color: reddish/orange for gas giants (Great Red Spot style)
+    stormColor = new THREE.Vector3(
+      0.7 + rng.random() * 0.2,  // 0.7-0.9 red
+      0.3 + rng.random() * 0.2,  // 0.3-0.5 green
+      0.2 + rng.random() * 0.1   // 0.2-0.3 blue
+    );
+  } else if (planetMode === 2) {
+    // Ice Giant
+    bandCount = 5 + Math.floor(planet.radius * 1.5); // Fewer bands (5-12)
+    turbulence = 0.3 + rng.random() * 0.2; // 0.3-0.5 (calmer)
+    bandSpeed = 0.04 + rng.random() * 0.02; // 0.04-0.06 (slower than gas giants)
+    stormIntensity = 0.2 + rng.random() * 0.2; // 0.2-0.4 (subtle storms)
+
+    // Storm color: dark blue/gray for ice giants (Great Dark Spot style)
+    stormColor = new THREE.Vector3(
+      0.1 + rng.random() * 0.1,  // 0.1-0.2 red (darker)
+      0.2 + rng.random() * 0.15, // 0.2-0.35 green
+      0.3 + rng.random() * 0.2   // 0.3-0.5 blue
+    );
+  }
+
+  // ========================================================================
+  // Assemble Final Uniforms
+  // ========================================================================
+
+  return {
+    // Core
+    u_time: { value: 0.0 },
+    u_lightPosition: { value: new THREE.Vector3(5, 3, 5) },
+    u_planetMode: { value: planetMode },
+
+    // Terrain
+    u_terrainScale: { value: terrainScale },
+    u_terrainRoughness: { value: terrainRoughness },
+    u_craterDensity: { value: craterDensity },
+    u_continentSize: { value: continentSize },
+    u_biomeVariation: { value: biomeVariation },
+    u_baseColor: { value: baseColor },
+    u_mountainColor: { value: mountainColor },
+    u_lowlandColor: { value: lowlandColor },
+    u_desertColor: { value: desertColor },
+
+    // Water
+    u_waterCoverage: { value: waterCoverage },
+    u_waterSpeed: { value: waterSpeed },
+    u_waterColor: { value: waterColor },
+
+    // Ice Caps
+    u_iceSize: { value: iceSize },
+    u_iceRoughness: { value: iceRoughness },
+    u_iceColor: { value: iceColor },
+
+    // Atmosphere
+    u_atmosphereDensity: { value: atmosphereDensity },
+    u_atmosphereColor: { value: atmosphereColor },
+
+    // Clouds
+    u_cloudCoverage: { value: cloudCoverage },
+    u_cloudSpeed: { value: cloudSpeed },
+    u_cloudNoiseType: { value: cloudNoiseType },
+    u_cloudDepth: { value: cloudDepth },
+    u_cloudShadow: { value: cloudShadow },
+    u_cloudColor: { value: cloudColor },
+
+    // Gas Giant
+    u_bandCount: { value: bandCount },
+    u_turbulence: { value: turbulence },
+    u_bandSpeed: { value: bandSpeed },
+    u_stormIntensity: { value: stormIntensity },
+    u_stormColor: { value: stormColor },
+  };
+}
+
+/**
  * Generate shader uniforms for rocky/barren planets
+ * @deprecated Use derivePlanetUniforms instead
  *
  * @param planet - Planet data
  * @param camera - Camera for view-dependent effects
@@ -210,21 +499,8 @@ export function deriveRockyPlanetUniforms(
   planet: Planet,
   camera: THREE.Camera
 ): RockyPlanetUniforms {
-  const baseColor = getTerrainColor(planet);
-  const atmosphereColor = getAtmosphereColor(planet);
-
-  // Generate seed from planet ID for deterministic noise
-  const seed = hashString(planet.id);
-
-  return {
-    u_baseColor: { value: baseColor },
-    u_waterCoverage: { value: planet.waterCoverage },
-    u_atmosphereDensity: { value: planet.atmosphere.density },
-    u_atmosphereColor: { value: atmosphereColor },
-    u_seed: { value: seed },
-    u_hasAtmosphere: { value: planet.atmosphere.present },
-    u_cameraPosition: { value: camera.position },
-  };
+  // This function is deprecated - use derivePlanetUniforms instead
+  return derivePlanetUniforms(planet, { inner: 0, outer: 0 }, camera);
 }
 
 /**
@@ -234,36 +510,8 @@ export function deriveRockyPlanetUniforms(
  * @returns Uniforms object for gas giant shader
  */
 export function deriveGasGiantUniforms(planet: Planet): GasGiantUniforms {
-  const [color1, color2, color3] = getGasGiantBandColors(planet);
-
-  // Generate seed from planet ID for deterministic noise
-  const seed = hashString(planet.id);
-
-  // Band count varies by planet size (larger = more bands)
-  const bandCount = 5 + Math.floor(planet.radius * 2); // 5-12 bands typically
-
-  // Turbulence: Gas giants are always turbulent
-  // Use seed to get deterministic but varied turbulence
-  const seedVariation = (seed % 100) / 100; // 0.0-1.0 from seed
-
-  let turbulence = 0.7; // Default high turbulence
-
-  if (planet.type === PlanetType.IceGiant) {
-    // Ice giants: 0.6-0.75 turbulence (cooler, less turbulent)
-    turbulence = 0.6 + seedVariation * 0.15;
-  } else {
-    // Gas giants: 0.7-0.9 turbulence (hotter, very turbulent)
-    turbulence = 0.7 + seedVariation * 0.2;
-  }
-
-  return {
-    u_bandColor1: { value: color1 },
-    u_bandColor2: { value: color2 },
-    u_bandColor3: { value: color3 },
-    u_bandCount: { value: bandCount },
-    u_turbulence: { value: turbulence },
-    u_seed: { value: seed },
-  };
+  // This function is deprecated - use derivePlanetUniforms instead
+  return derivePlanetUniforms(planet, { inner: 0, outer: 0 }, new THREE.PerspectiveCamera());
 }
 
 /**
@@ -303,136 +551,116 @@ export function deriveMoonUniforms(
 // ============================================================================
 
 /**
- * Generate shader uniforms for enhanced star rendering
+ * Generate shader uniforms for temperature-based star rendering
  *
- * Maps spectral types to appropriate color schemes and parameters.
- * Uses seeded randomization for variation within spectral type ranges.
+ * Maps spectral types to appropriate temperature ranges for blackbody radiation.
+ * Based on unified demo preset data.
  *
  * @param star - Star data
- * @param camera - Camera for view-dependent effects
- * @returns Uniforms object for enhanced star shader
+ * @param camera - Camera (no longer needed but kept for compatibility)
+ * @returns Uniforms object for temperature-based star shader
  */
 export function deriveStarUniforms(
   star: Star,
-  camera: THREE.Camera
+  _camera: THREE.Camera
 ): StarUniforms {
   // Generate seed from star ID for deterministic variation
   const seed = hashString(star.id);
   const rng = new SeededRandom(seed);
 
-  // Spectral type-based color mapping
-  // Using ranges from the demo settings as baseline for G-type (Sun-like)
-  const spectralColors = {
-    'O': {
-      // Blue stars - very hot (darkened significantly)
-      base: new THREE.Vector3(0.4, 0.5, 0.8),
-      noise: new THREE.Vector3(0.2, 0.3, 0.6),
-      center: new THREE.Vector3(0.6, 0.7, 0.9),
-    },
-    'B': {
-      // Blue-white stars (darkened significantly)
-      base: new THREE.Vector3(0.5, 0.6, 0.8),
-      noise: new THREE.Vector3(0.3, 0.4, 0.7),
-      center: new THREE.Vector3(0.7, 0.8, 0.9),
-    },
-    'A': {
-      // White stars (darkened significantly)
-      base: new THREE.Vector3(0.7, 0.7, 0.8),
-      noise: new THREE.Vector3(0.5, 0.5, 0.6),
-      center: new THREE.Vector3(0.85, 0.85, 0.9),
-    },
-    'F': {
-      // Yellow-white stars (much darker noise for contrast)
-      base: new THREE.Vector3(0.8, 0.75, 0.5),
-      noise: new THREE.Vector3(0.3, 0.2, 0.1),  // Much darker brown spots
-      center: new THREE.Vector3(0.9, 0.85, 0.6),
-    },
-    'G': {
-      // Yellow stars (Sun-like) - using demo settings as baseline (darkened)
-      // Base Color: #ffaa00 -> darker
-      base: new THREE.Vector3(0.8, 0.5, 0.0),
-      // Noise Color: #cc3300 -> keep dark
-      noise: new THREE.Vector3(0.6, 0.15, 0.0),
-      // Center Color: #ffff00 -> darker
-      center: new THREE.Vector3(0.9, 0.9, 0.0),
-    },
-    'K': {
-      // Orange stars (darkened)
-      base: new THREE.Vector3(0.8, 0.5, 0.2),
-      noise: new THREE.Vector3(0.6, 0.3, 0.1),
-      center: new THREE.Vector3(0.9, 0.65, 0.3),
-    },
-    'M': {
-      // Red stars (darkened slightly)
-      base: new THREE.Vector3(0.8, 0.4, 0.2),
-      noise: new THREE.Vector3(0.6, 0.2, 0.05),
-      center: new THREE.Vector3(0.9, 0.6, 0.3),
-    },
+  // Temperature ranges by spectral type (in Kelvin)
+  // Based on unified demo presets for Main Sequence stars
+  const temperatureRanges = {
+    'O': { high: 45000, low: 35000 },      // Blue
+    'B': { high: 25000, low: 18000 },      // Blue-White
+    'A': { high: 9500, low: 7800 },        // White
+    'F': { high: 7200, low: 6200 },        // Yellow-White
+    'G': { high: 6000, low: 5200 },        // Yellow (Sun-like)
+    'K': { high: 5000, low: 3900 },        // Orange
+    'M': { high: 3500, low: 2500 },        // Red
   };
 
-  const colors = spectralColors[star.spectralType] || spectralColors['G'];
+  const temps = temperatureRanges[star.spectralType] || temperatureRanges['G'];
 
-  // Temperature normalization (0.5-2.0 range for brightness multiplier)
-  const tempNormalized = Math.max(0.5, Math.min(2.0, star.temperature / 5778)); // 5778K = Sun
+  // Noise scale by spectral type (from unified demo presets)
+  const scaleRanges = {
+    'O': { min: 0.48, max: 0.52 },   // 0.5
+    'B': { min: 0.43, max: 0.47 },   // 0.45
+    'A': { min: 0.40, max: 0.44 },   // 0.42
+    'F': { min: 0.38, max: 0.42 },   // 0.40
+    'G': { min: 0.38, max: 0.42 },   // 0.40
+    'K': { min: 0.36, max: 0.40 },   // 0.38
+    'M': { min: 0.33, max: 0.37 },   // 0.35
+  };
 
-  // Activity level varies by spectral type and seed
-  // BOOSTED: Increased all ranges to make surface detail more visible
-  let activityLevel: number;
-  if (star.spectralType === 'M') {
-    // M-type: High activity (flares common)
-    activityLevel = rng.randomFloat(0.5, 0.8);
-  } else if (star.spectralType === 'G') {
-    // G-type (Sun-like): Medium activity - boosted from 0.2-0.4
-    activityLevel = rng.randomFloat(0.4, 0.6);
-  } else if (star.spectralType === 'O' || star.spectralType === 'B') {
-    // Hot stars: Low surface activity (smooth) - boosted from 0.1-0.25
-    activityLevel = rng.randomFloat(0.2, 0.4);
-  } else {
-    // F, A, K: Medium-low activity - boosted from 0.15-0.35
-    activityLevel = rng.randomFloat(0.3, 0.5);
-  }
+  const scaleRange = scaleRanges[star.spectralType] || scaleRanges['G'];
+  const scale = rng.randomFloat(scaleRange.min, scaleRange.max);
 
-  // Activity scale (noise frequency) - demo uses ~2.0-3.0 range
-  const activityScale = rng.randomFloat(2.0, 3.5);
+  // Sunspot frequency by spectral type (from unified demo presets)
+  const sunspotFreqRanges = {
+    'O': { min: 5.5, max: 6.5 },     // 6.0
+    'B': { min: 5.0, max: 6.0 },     // 5.5
+    'A': { min: 4.5, max: 5.5 },     // 5.0
+    'F': { min: 4.0, max: 5.0 },     // 4.5
+    'G': { min: 3.5, max: 4.5 },     // 4.0
+    'K': { min: 3.0, max: 4.0 },     // 3.5
+    'M': { min: 2.5, max: 3.5 },     // 3.0
+  };
 
-  // Activity speed (animation) - demo uses ~0.1-0.2
-  const activitySpeed = rng.randomFloat(0.08, 0.15);
+  const sunspotFreqRange = sunspotFreqRanges[star.spectralType] || sunspotFreqRanges['G'];
+  const sunspotFreq = rng.randomFloat(sunspotFreqRange.min, sunspotFreqRange.max);
 
-  // Gradient parameters - reduced opacity to not wash out surface detail
-  // Demo: Gradient Strength: 0.24, Falloff: 1.1, Opacity: 0.60
-  const gradientStrength = rng.randomFloat(0.15, 0.25); // Reduced
-  const gradientFalloff = rng.randomFloat(1.0, 1.3);  // Same
-  const gradientOpacity = rng.randomFloat(0.3, 0.5);  // Reduced from 0.5-0.7
+  // Sunspot intensity by spectral type (M-type stars have high activity)
+  const sunspotIntensityRanges = {
+    'O': { min: 1.7, max: 1.9 },     // 1.8
+    'B': { min: 1.6, max: 1.8 },     // 1.7
+    'A': { min: 1.5, max: 1.7 },     // 1.6
+    'F': { min: 1.4, max: 1.6 },     // 1.5
+    'G': { min: 1.4, max: 1.6 },     // 1.5
+    'K': { min: 2.0, max: 2.6 },     // 2.3 (higher activity)
+    'M': { min: 2.5, max: 3.1 },     // 2.8 (very high activity - flare stars)
+  };
 
-  // Limb darkening - demo uses: Power: 1.9, Center Brightness: 1.15
-  const limbDarkeningPower = rng.randomFloat(1.7, 2.1); // Centered on 1.9
-  const centerBrightness = rng.randomFloat(1.0, 1.3);   // Centered on 1.15
+  const sunspotIntensityRange = sunspotIntensityRanges[star.spectralType] || sunspotIntensityRanges['G'];
+  const sunspotIntensity = rng.randomFloat(sunspotIntensityRange.min, sunspotIntensityRange.max);
+
+  // Limb darkening power by spectral type (hot stars = darker edges)
+  const limbPowerRanges = {
+    'O': { min: 3.3, max: 3.7 },     // 3.5
+    'B': { min: 3.0, max: 3.4 },     // 3.2
+    'A': { min: 2.6, max: 3.0 },     // 2.8
+    'F': { min: 2.4, max: 2.8 },     // 2.6
+    'G': { min: 2.3, max: 2.7 },     // 2.5
+    'K': { min: 2.1, max: 2.5 },     // 2.3
+    'M': { min: 1.8, max: 2.2 },     // 2.0
+  };
+
+  const limbPowerRange = limbPowerRanges[star.spectralType] || limbPowerRanges['G'];
+  const limbPower = rng.randomFloat(limbPowerRange.min, limbPowerRange.max);
+
+  // Center brightness by spectral type (hot stars = brighter centers)
+  const centerBrightRanges = {
+    'O': { min: 2.0, max: 2.4 },     // 2.2
+    'B': { min: 1.8, max: 2.2 },     // 2.0
+    'A': { min: 1.5, max: 1.9 },     // 1.7
+    'F': { min: 1.4, max: 1.8 },     // 1.6
+    'G': { min: 1.3, max: 1.7 },     // 1.5
+    'K': { min: 1.2, max: 1.6 },     // 1.4
+    'M': { min: 1.0, max: 1.4 },     // 1.2
+  };
+
+  const centerBrightRange = centerBrightRanges[star.spectralType] || centerBrightRanges['G'];
+  const centerBrightness = rng.randomFloat(centerBrightRange.min, centerBrightRange.max);
 
   return {
-    // Colors
-    u_starColor: { value: colors.base },
-    u_noiseColor: { value: colors.noise },
-    u_centerColor: { value: colors.center },
-    u_temperature: { value: tempNormalized },
-    u_seed: { value: seed },
-
-    // Surface activity
-    u_activityLevel: { value: activityLevel },
-    u_activityScale: { value: activityScale },
-    u_activitySpeed: { value: activitySpeed },
-
-    // Center gradient
-    u_gradientStrength: { value: gradientStrength },
-    u_gradientFalloff: { value: gradientFalloff },
-    u_gradientOpacity: { value: gradientOpacity },
-
-    // Limb darkening
-    u_limbDarkeningPower: { value: limbDarkeningPower },
-    u_centerBrightness: { value: centerBrightness },
-
-    // View-dependent
-    u_cameraPosition: { value: camera.position },
+    u_highTemp: { value: temps.high },
+    u_lowTemp: { value: temps.low },
+    u_scale: { value: scale },
     u_time: { value: 0.0 }, // Will be updated in animation loop
+    u_sunspotFreq: { value: sunspotFreq },
+    u_sunspotIntensity: { value: sunspotIntensity },
+    u_limbDarkeningPower: { value: limbPower },
+    u_centerBrightness: { value: centerBrightness },
   };
 }
 

@@ -10,16 +10,13 @@ import * as THREE from 'three';
 import type { Planet } from '../types/celestial-bodies';
 import { PlanetType } from '../types/celestial-bodies';
 
-// Import shaders (CRITICAL FIX: removed seed offsets from noise)
-import rockyPlanetVertexShader from '../shaders/rocky-planet/rocky-planet.vert';
-import rockyPlanetFragmentShader from '../shaders/rocky-planet/rocky-planet.frag';
-import gasGiantVertexShader from '../shaders/gas-giant/gas-giant.vert';
-import gasGiantFragmentShader from '../shaders/gas-giant/gas-giant.frag';
+// Import unified planet shader
+import planetVertexShader from '../shaders/planet/planet.vert';
+import planetFragmentShader from '../shaders/planet/planet.frag';
 
-// Import uniform helpers
+// Import uniform helper
 import {
-  deriveRockyPlanetUniforms,
-  deriveGasGiantUniforms
+  derivePlanetUniforms
 } from './shaderUniforms';
 
 // ============================================================================
@@ -70,13 +67,15 @@ function getPlanetBaseColor(type: PlanetType): THREE.Color {
 // ============================================================================
 
 /**
- * Create a planet mesh using procedural shaders
+ * Create a planet mesh using unified procedural shader
  *
- * Uses type-based shader selection:
- * - Rocky/Barren: Terrain shader with elevation, water, atmosphere
- * - GasGiant/IceGiant: Band pattern shader with turbulence
+ * Single shader handles all planet types:
+ * - Rocky/Barren (mode 0): Terrain with elevation, water, ice caps, clouds, atmosphere
+ * - Gas Giant (mode 1): Atmospheric bands with turbulence and storms
+ * - Ice Giant (mode 2): Smooth bands with hazy atmosphere
  *
  * @param planet - Planet data
+ * @param habitableZone - Star's habitable zone (for intelligent parameter mapping)
  * @param sceneUnitsPerSolarRadius - Scaling factor from star (scene units per solar radius)
  * @param subdivision - Geometry subdivision level (default: 3 for smoother appearance)
  * @param camera - Camera for view-dependent effects (required for atmosphere)
@@ -84,6 +83,7 @@ function getPlanetBaseColor(type: PlanetType): THREE.Color {
  */
 export function createPlanetMesh(
   planet: Planet,
+  habitableZone: { inner: number; outer: number },
   sceneUnitsPerSolarRadius: number,
   subdivision: number = 3,
   camera?: THREE.Camera
@@ -108,33 +108,21 @@ export function createPlanetMesh(
   // IcosahedronGeometry gives better sphere than SphereGeometry
   const geometry = new THREE.IcosahedronGeometry(visualRadius, subdivision);
 
-  // Create material based on planet type
-  let material: THREE.ShaderMaterial;
+  // Create unified shader material with intelligent parameter derivation
+  const uniforms = derivePlanetUniforms(
+    planet,
+    habitableZone,
+    camera || new THREE.PerspectiveCamera() // Fallback camera if not provided
+  );
 
-  if (planet.type === PlanetType.Rocky || planet.type === PlanetType.Barren) {
-    // Rocky/Barren planets use terrain shader
-    const uniforms = deriveRockyPlanetUniforms(
-      planet,
-      camera || new THREE.PerspectiveCamera() // Fallback camera if not provided
-    );
+  const material = new THREE.ShaderMaterial({
+    vertexShader: planetVertexShader,
+    fragmentShader: planetFragmentShader,
+    uniforms: uniforms as any, // THREE.js uniforms type compatibility
+    side: THREE.FrontSide,
+  });
 
-    material = new THREE.ShaderMaterial({
-      vertexShader: rockyPlanetVertexShader,
-      fragmentShader: rockyPlanetFragmentShader,
-      uniforms: uniforms as any, // THREE.js uniforms type compatibility
-      side: THREE.FrontSide,
-    });
-  } else {
-    // Gas giants and ice giants use band pattern shader
-    const uniforms = deriveGasGiantUniforms(planet);
-
-    material = new THREE.ShaderMaterial({
-      vertexShader: gasGiantVertexShader,
-      fragmentShader: gasGiantFragmentShader,
-      uniforms: uniforms as any, // THREE.js uniforms type compatibility
-      side: THREE.FrontSide,
-    });
-  }
+  console.log(`[PlanetRenderer] Created ${planet.type} planet ${planet.name} (mode=${uniforms.u_planetMode.value}): water=${uniforms.u_waterCoverage.value.toFixed(2)}, clouds=${uniforms.u_cloudCoverage.value.toFixed(2)}, biomes=${uniforms.u_biomeVariation.value.toFixed(2)}`);
 
   // Create mesh
   const mesh = new THREE.Mesh(geometry, material);
@@ -246,19 +234,21 @@ export function createCloudLayer(
  * Combines planet mesh, atmosphere, and clouds into a single group.
  *
  * @param planet - Planet data
+ * @param habitableZone - Star's habitable zone
  * @param sceneUnitsPerSolarRadius - Scaling factor from star
  * @param orbitScale - Scale factor for orbital distance (default: 50.0)
  * @returns THREE.Group with all planet elements
  */
 export function createPlanetObject(
   planet: Planet,
+  habitableZone: { inner: number; outer: number },
   sceneUnitsPerSolarRadius: number,
   orbitScale: number = 50.0
 ): THREE.Group {
   const group = new THREE.Group();
 
   // Add planet mesh
-  const mesh = createPlanetMesh(planet, sceneUnitsPerSolarRadius);
+  const mesh = createPlanetMesh(planet, habitableZone, sceneUnitsPerSolarRadius);
   group.add(mesh);
 
   // Add atmosphere if present

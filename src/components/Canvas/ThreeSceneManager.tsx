@@ -48,6 +48,10 @@ export class ThreeSceneManager {
   private galaxyRenderer: GalaxyRenderer;
   private currentViewMode: 'system' | 'galaxy' = 'system';
 
+  // Material tracking (Phase 3: Architect Mode)
+  // Maps object ID -> THREE.Material for live uniform updates
+  private materialRegistry: Map<string, THREE.Material> = new Map();
+
   /**
    * Initialize Three.js scene manager
    *
@@ -402,7 +406,7 @@ export class ThreeSceneManager {
   public renderSystem(system: StarSystem): void {
     console.log('[ThreeSceneManager] Rendering system:', system.name);
 
-    // Clear existing system objects
+    // Clear existing system objects (also clears material registry)
     this.clearSystemObjects();
 
     // Star-relative scaling system:
@@ -491,6 +495,12 @@ export class ThreeSceneManager {
     starMesh.name = 'star';
     this.scene.add(starMesh);
 
+    // Register star material for Phase 3 live editing
+    if (starMesh.material) {
+      this.materialRegistry.set(system.star.id, starMesh.material as THREE.Material);
+      console.log(`[ThreeSceneManager] Registered star material: ${system.star.id}`);
+    }
+
     // Add star lighting for planets
     const starLights = createStarLight(system.star, 3.0);
     starLights.name = 'star-lights';
@@ -522,16 +532,21 @@ export class ThreeSceneManager {
         data: planet
       };
 
-      // Create planet with LOD (pass camera for shader uniforms)
+      // Create planet with LOD (pass camera and habitable zone for intelligent shader parameters)
       const planetLOD = new CelestialBodyLOD(
         planet,
         'planet',
         sceneUnitsPerSolarRadius,
         undefined, // No parent planet for planets
-        this.camera // Pass camera for atmosphere effects
+        this.camera, // Pass camera for atmosphere effects
+        system.star.habitableZone // Pass habitable zone for intelligent parameter mapping
       );
       planetLOD.object.name = `planet-${planetIndex}`;
       planetSystemGroup.add(planetLOD.object);
+
+      // Register planet LOD for Phase 3 live editing
+      this.materialRegistry.set(planet.id, planetLOD as any); // Store LOD object, not material
+      console.log(`[ThreeSceneManager] Registered planet LOD: ${planet.id}`);
 
       // Calculate planet visual radius using the helper function (ensures consistency)
       const planetVisualRadius = calcPlanetVisualRadius(planet);
@@ -543,7 +558,8 @@ export class ThreeSceneManager {
           'moon',
           sceneUnitsPerSolarRadius,
           planet, // Parent planet required for moon renderer
-          this.camera // Pass camera for shader uniforms
+          this.camera, // Pass camera for shader uniforms
+          undefined // Moons don't use habitable zone in shader
         );
 
         moonLOD.object.name = `moon-${planetIndex}-${moonIndex}`;
@@ -570,6 +586,10 @@ export class ThreeSceneManager {
         );
 
         planetSystemGroup.add(moonLOD.object);
+
+        // Register moon LOD for Phase 3 live editing
+        this.materialRegistry.set(moon.id, moonLOD as any); // Store LOD object, not material
+        console.log(`[ThreeSceneManager] Registered moon LOD: ${moon.id}`);
       });
 
       // Add the complete planet system to scene
@@ -734,6 +754,9 @@ export class ThreeSceneManager {
       this.disposeObjectRecursive(object);
     });
 
+    // Clear material registry (Phase 3)
+    this.materialRegistry.clear();
+
     console.log('[ThreeSceneManager] System objects cleared');
   }
 
@@ -797,6 +820,52 @@ export class ThreeSceneManager {
    */
   public getViewMode(): 'system' | 'galaxy' {
     return this.currentViewMode;
+  }
+
+  // ==========================================================================
+  // Phase 3: Architect Mode - Live Shader Editing
+  // ==========================================================================
+
+  /**
+   * Update shader uniform for a celestial body (Phase 3: Architect Mode)
+   *
+   * @param objectId - ID of the celestial body (star, planet, or moon)
+   * @param uniformName - Name of the shader uniform to update
+   * @param value - New value for the uniform
+   */
+  public updateObjectUniforms(objectId: string, uniformName: string, value: any): void {
+    const entry = this.materialRegistry.get(objectId);
+
+    if (!entry) {
+      console.warn(`[ThreeSceneManager] No material found for object: ${objectId}`);
+      return;
+    }
+
+    // Check if entry is a LOD object (planets/moons) or direct material (stars)
+    if (entry instanceof CelestialBodyLOD) {
+      // LOD object - update all LOD level materials
+      entry.updateUniform(uniformName, value);
+      console.log(`[ThreeSceneManager] Updated LOD uniform ${uniformName} for ${objectId}`);
+    } else if (entry instanceof THREE.Material) {
+      // Direct material (star) - update single material
+      if (entry instanceof THREE.ShaderMaterial) {
+        // Check if uniform exists
+        if (!entry.uniforms[uniformName]) {
+          console.warn(`[ThreeSceneManager] Uniform ${uniformName} not found in material for ${objectId}`);
+          return;
+        }
+
+        // Handle color conversion from hex string
+        if (typeof value === 'string' && value.startsWith('#')) {
+          const color = new THREE.Color(value);
+          entry.uniforms[uniformName].value.set(color.r, color.g, color.b);
+        } else {
+          entry.uniforms[uniformName].value = value;
+        }
+        entry.uniformsNeedUpdate = true;
+        console.log(`[ThreeSceneManager] Updated material uniform ${uniformName} for ${objectId}`);
+      }
+    }
   }
 
   /**

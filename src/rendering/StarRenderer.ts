@@ -129,11 +129,11 @@ export function createStarMesh(
   // Use higher subdivision for stars since they're always visible and important
   const geometry = new THREE.SphereGeometry(visualRadius, 32, 32);
 
-  // Get enhanced shader uniforms from spectral type mapping
+  // Get temperature-based shader uniforms from spectral type mapping
   const cameraRef = camera || new THREE.PerspectiveCamera(); // Fallback camera
   const uniforms = deriveStarUniforms(star, cameraRef);
 
-  console.log(`[StarRenderer] Enhanced star ${star.name} (${star.spectralType}-type): temp=${star.temperature}K, activity=${uniforms.u_activityLevel.value.toFixed(2)}`);
+  console.log(`[StarRenderer] Temperature-based star ${star.name} (${star.spectralType}-type): highTemp=${uniforms.u_highTemp.value}K, lowTemp=${uniforms.u_lowTemp.value}K, sunspots=${uniforms.u_sunspotIntensity.value.toFixed(2)}`);
 
   // Create ShaderMaterial with enhanced star shader
   const material = new THREE.ShaderMaterial({
