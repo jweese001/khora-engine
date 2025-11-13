@@ -7,7 +7,9 @@
 
 uniform float u_time;
 uniform vec3 u_lightPosition;
+uniform vec3 u_cameraPosition;
 uniform int u_planetMode; // 0=Rocky, 1=Gas, 2=Ice
+uniform int u_debugMode; // 0=normal, 1=diffuse, 2=normals, 3=lightDir, 4=viewDir
 
 // Terrain
 uniform float u_terrainScale;
@@ -131,7 +133,7 @@ float getCloudNoise(vec3 p, float noiseType, float animTime) {
 vec3 renderRockyPlanet() {
   vec3 normal = normalize(vNormal);
   vec3 lightDir = normalize(u_lightPosition - vPosition);
-  vec3 viewDir = normalize(vViewPosition);
+  vec3 viewDir = normalize(u_cameraPosition - vPosition);
 
   // Terrain elevation
   float elevation = fbm(vPosition * u_terrainScale, 4, u_terrainRoughness);
@@ -211,9 +213,9 @@ vec3 renderRockyPlanet() {
     }
   }
 
-  // Basic lighting
+  // Basic lighting (dramatic shadows in space)
   float diffuse = max(0.0, dot(normal, lightDir));
-  terrainColor *= (0.4 + diffuse * 0.6);
+  terrainColor *= (0.03 + diffuse * 0.97);
 
   vec3 finalColor = terrainColor;
 
@@ -227,14 +229,15 @@ vec3 renderRockyPlanet() {
     float waves = fbm(wavePos, 3, 0.5) * 0.1;
     waterColor += vec3(waves);
 
-    // Water lighting
+    // Water lighting (dark on shadow side)
     float waterDiffuse = max(0.0, dot(normal, lightDir));
-    waterColor *= (0.5 + waterDiffuse * 0.5);
+    waterColor *= (0.02 + waterDiffuse * 0.98);
 
-    // Specular highlight
+    // Very subtle specular highlight (only on light-facing surfaces)
     vec3 halfVector = normalize(lightDir + viewDir);
-    float specular = pow(max(0.0, dot(normal, halfVector)), 32.0);
-    waterColor += vec3(specular * 0.8);
+    float specular = pow(max(0.0, dot(normal, halfVector)), 64.0);
+    // Only apply specular if surface faces the light - very subtle
+    waterColor += vec3(specular * 0.1 * step(0.0, waterDiffuse));
 
     finalColor = waterColor;
   }
@@ -250,14 +253,15 @@ vec3 renderRockyPlanet() {
       float iceNoise = fbm(vPosition * 8.0, 3, u_iceRoughness);
       vec3 iceColor = u_iceColor + vec3(iceNoise * 0.1);
 
-      // Ice lighting
+      // Ice lighting (reflective but still shows shadows)
       float diffuse = max(0.0, dot(normal, lightDir));
-      iceColor *= (0.6 + diffuse * 0.4);
+      iceColor *= (0.05 + diffuse * 0.95);
 
-      // Ice specular (shiny ice)
+      // Very subtle ice specular (only on light-facing surfaces)
       vec3 halfVector = normalize(lightDir + viewDir);
-      float specular = pow(max(0.0, dot(normal, halfVector)), 16.0);
-      iceColor += vec3(specular * 0.3);
+      float specular = pow(max(0.0, dot(normal, halfVector)), 32.0);
+      // Only apply specular if surface faces the light - very subtle
+      iceColor += vec3(specular * 0.08 * step(0.0, diffuse));
 
       finalColor = mix(finalColor, iceColor, iceFactor);
     }
@@ -301,9 +305,11 @@ vec3 renderRockyPlanet() {
     }
   }
 
-  // Atmosphere glow
+  // Atmosphere glow (only on edges facing camera)
   if(u_atmosphereDensity > 0.0) {
-    float fresnel = pow(1.0 - abs(dot(viewDir, normal)), 3.0);
+    float viewDotNormal = dot(viewDir, normal);
+    // Only apply glow when facing camera (viewDotNormal > 0)
+    float fresnel = pow(max(0.0, 1.0 - viewDotNormal), 3.0) * step(0.0, viewDotNormal);
     vec3 atmosphereGlow = u_atmosphereColor * fresnel * u_atmosphereDensity;
     finalColor += atmosphereGlow * 0.5;
   }
@@ -317,7 +323,7 @@ vec3 renderRockyPlanet() {
 vec3 renderGasGiant() {
   vec3 normal = normalize(vNormal);
   vec3 lightDir = normalize(u_lightPosition - vPosition);
-  vec3 viewDir = normalize(vViewPosition);
+  vec3 viewDir = normalize(u_cameraPosition - vPosition);
 
   // Latitude for horizontal bands
   float latitude = vPosition.y / length(vPosition);
@@ -366,17 +372,19 @@ vec3 renderGasGiant() {
     gasColor = mix(gasColor, u_stormColor, stormBlend);
   }
 
-  // Lighting
+  // Lighting (some atmospheric scattering but clear terminator)
   float diffuse = max(0.0, dot(normal, lightDir));
-  gasColor *= (0.5 + diffuse * 0.5);
+  gasColor *= (0.08 + diffuse * 0.92);
 
   // Limb darkening
   float limbDark = pow(max(0.0, dot(viewDir, normal)), 0.8);
   gasColor *= mix(0.6, 1.0, limbDark);
 
-  // Atmospheric glow
+  // Atmospheric glow (only on edges facing camera)
   if(u_atmosphereDensity > 0.0) {
-    float fresnel = pow(1.0 - abs(dot(viewDir, normal)), 3.0);
+    float viewDotNormal = dot(viewDir, normal);
+    // Only apply glow when facing camera
+    float fresnel = pow(max(0.0, 1.0 - viewDotNormal), 3.0) * step(0.0, viewDotNormal);
     vec3 glowColor = u_baseColor * 1.2;
     gasColor += glowColor * fresnel * u_atmosphereDensity * 0.3;
   }
@@ -390,7 +398,7 @@ vec3 renderGasGiant() {
 vec3 renderIceGiant() {
   vec3 normal = normalize(vNormal);
   vec3 lightDir = normalize(u_lightPosition - vPosition);
-  vec3 viewDir = normalize(vViewPosition);
+  vec3 viewDir = normalize(u_cameraPosition - vPosition);
 
   float latitude = vPosition.y / length(vPosition);
 
@@ -428,12 +436,14 @@ vec3 renderIceGiant() {
     iceColor = mix(iceColor, stormColorDarkened, stormBlend);
   }
 
-  // Smooth lighting
+  // Smooth lighting (slight scattering but clear shadows)
   float diffuse = max(0.0, dot(normal, lightDir));
-  iceColor *= (0.6 + diffuse * 0.4);
+  iceColor *= (0.06 + diffuse * 0.94);
 
-  // Hazy atmosphere effect
-  float fresnel = pow(1.0 - abs(dot(viewDir, normal)), 2.5);
+  // Hazy atmosphere effect (only on edges facing camera)
+  float viewDotNormal = dot(viewDir, normal);
+  // Only apply haze when facing camera
+  float fresnel = pow(max(0.0, 1.0 - viewDotNormal), 2.5) * step(0.0, viewDotNormal);
   vec3 hazeColor = u_baseColor * 1.3;
   iceColor = mix(iceColor, hazeColor, fresnel * u_atmosphereDensity * 0.4);
 
@@ -455,6 +465,46 @@ void main() {
   } else {
     // Rocky/Terrestrial (includes Barren, Moon, Asteroid)
     finalColor = renderRockyPlanet();
+  }
+
+  // ============================================================================
+  // DEBUG VISUALIZATIONS
+  // ============================================================================
+  if(u_debugMode > 0) {
+    vec3 normal = normalize(vNormal);
+    vec3 lightDir = normalize(u_lightPosition - vPosition);
+    vec3 viewDir = normalize(u_cameraPosition - vPosition);
+    float diffuse = max(0.0, dot(normal, lightDir));
+
+    if(u_debugMode == 1) {
+      // Show diffuse term only (should show clear day/night boundary)
+      finalColor = vec3(diffuse);
+    }
+    else if(u_debugMode == 2) {
+      // Show world-space normals (RGB = XYZ)
+      finalColor = normal * 0.5 + 0.5;
+    }
+    else if(u_debugMode == 3) {
+      // Show light direction (RGB = direction from surface to light)
+      finalColor = lightDir * 0.5 + 0.5;
+    }
+    else if(u_debugMode == 4) {
+      // Show view direction (RGB = direction from surface to camera)
+      finalColor = viewDir * 0.5 + 0.5;
+    }
+    else if(u_debugMode == 5) {
+      // Show if surface faces light (white = facing, black = away)
+      finalColor = vec3(step(0.0, diffuse));
+    }
+    else if(u_debugMode == 6) {
+      // Show distance to light source
+      float dist = length(u_lightPosition - vPosition);
+      finalColor = vec3(dist / 100.0); // Normalize to visible range
+    }
+    else if(u_debugMode == 7) {
+      // Show positions
+      finalColor = vPosition / 100.0; // Normalize to visible range
+    }
   }
 
   gl_FragColor = vec4(finalColor, 1.0);

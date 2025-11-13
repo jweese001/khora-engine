@@ -86,7 +86,8 @@ export function createPlanetMesh(
   habitableZone: { inner: number; outer: number },
   sceneUnitsPerSolarRadius: number,
   subdivision: number = 3,
-  camera?: THREE.Camera
+  camera?: THREE.Camera,
+  starPosition: THREE.Vector3 = new THREE.Vector3(0, 0, 0)
 ): THREE.Mesh {
   // Star-relative scaling:
   // Convert planet radius (Earth radii) to solar radii, then to scene units
@@ -112,7 +113,8 @@ export function createPlanetMesh(
   const uniforms = derivePlanetUniforms(
     planet,
     habitableZone,
-    camera || new THREE.PerspectiveCamera() // Fallback camera if not provided
+    camera || new THREE.PerspectiveCamera(), // Fallback camera if not provided
+    starPosition
   );
 
   const material = new THREE.ShaderMaterial({

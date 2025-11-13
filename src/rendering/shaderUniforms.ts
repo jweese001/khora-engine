@@ -22,7 +22,9 @@ export interface PlanetUniforms {
   // Core
   u_time: { value: number };
   u_lightPosition: { value: THREE.Vector3 };
+  u_cameraPosition: { value: THREE.Vector3 };
   u_planetMode: { value: number };  // 0=Rocky, 1=Gas, 2=Ice
+  u_debugMode: { value: number };   // 0=normal, 1=diffuse, 2=normals, etc.
 
   // Terrain (Rocky mode)
   u_terrainScale: { value: number };
@@ -288,7 +290,8 @@ function getMoonBaseColor(moon: Moon, parentPlanet: Planet): THREE.Vector3 {
 export function derivePlanetUniforms(
   planet: Planet,
   habitableZone: { inner: number; outer: number },
-  _camera: THREE.Camera
+  camera: THREE.Camera,
+  starPosition: THREE.Vector3 = new THREE.Vector3(0, 0, 0)
 ): PlanetUniforms {
   // Generate seed from planet ID for deterministic noise
   const seed = hashString(planet.id);
@@ -528,8 +531,10 @@ export function derivePlanetUniforms(
   return {
     // Core
     u_time: { value: 0.0 },
-    u_lightPosition: { value: new THREE.Vector3(5, 3, 5) },
+    u_lightPosition: { value: starPosition.clone() },
+    u_cameraPosition: { value: camera.position.clone() },
     u_planetMode: { value: planetMode },
+    u_debugMode: { value: 0 }, // 0=normal rendering, >0=debug visualizations
 
     // Terrain
     u_terrainScale: { value: terrainScale },

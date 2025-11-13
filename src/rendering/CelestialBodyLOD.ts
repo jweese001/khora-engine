@@ -113,6 +113,11 @@ export class CelestialBodyLOD {
   private habitableZone?: { inner: number; outer: number };
 
   /**
+   * Star position for shader lighting calculation
+   */
+  private starPosition: THREE.Vector3;
+
+  /**
    * Create a LOD system for a celestial body
    *
    * @param bodyData - Planet or Moon data
@@ -121,6 +126,7 @@ export class CelestialBodyLOD {
    * @param parentPlanet - Required for moons, unused for planets
    * @param camera - Camera for shader view-dependent effects (optional)
    * @param habitableZone - Star's habitable zone for planet shader (optional, but recommended for planets)
+   * @param starPosition - Position of the star for lighting (default: origin)
    */
   constructor(
     bodyData: Planet | Moon,
@@ -128,12 +134,14 @@ export class CelestialBodyLOD {
     sceneUnitsPerSolarRadius: number,
     parentPlanet?: Planet,
     camera?: THREE.Camera,
-    habitableZone?: { inner: number; outer: number }
+    habitableZone?: { inner: number; outer: number },
+    starPosition: THREE.Vector3 = new THREE.Vector3(0, 0, 0)
   ) {
     this.bodyData = bodyData;
     this.bodyType = bodyType;
     this.camera = camera;
     this.habitableZone = habitableZone;
+    this.starPosition = starPosition;
 
     // Create THREE.LOD container
     this.object = new THREE.LOD();
@@ -202,7 +210,7 @@ export class CelestialBodyLOD {
       // Use provided habitable zone or default to empty range
       const habitableZone = this.habitableZone || { inner: 0, outer: 0 };
 
-      return createPlanetMesh(planet, habitableZone, sceneUnitsPerSolarRadius, subdivision, this.camera);
+      return createPlanetMesh(planet, habitableZone, sceneUnitsPerSolarRadius, subdivision, this.camera, this.starPosition);
     } else {
       // Create moon mesh with specified subdivision
       const moon = this.bodyData as Moon;

@@ -52,6 +52,9 @@ export class ThreeSceneManager {
   // Maps object ID -> THREE.Material for live uniform updates
   private materialRegistry: Map<string, THREE.Material> = new Map();
 
+  // Debug mode (toggle with D key)
+  private debugMode: number = 0; // 0=normal, 1-7=debug visualizations
+
   /**
    * Initialize Three.js scene manager
    *
@@ -274,7 +277,7 @@ export class ThreeSceneManager {
   // ==========================================================================
 
   /**
-   * Set up event listeners for window resize and object selection
+   * Set up event listeners for window resize, object selection, and debug controls
    */
   private setupEventListeners(): void {
     // Window resize
@@ -282,6 +285,9 @@ export class ThreeSceneManager {
 
     // Object selection (click)
     this.renderer.domElement.addEventListener('click', this.handleClick);
+
+    // Debug mode toggle (press D key)
+    window.addEventListener('keydown', this.handleKeyDown);
   }
 
   /**
@@ -365,12 +371,50 @@ export class ThreeSceneManager {
     }
   };
 
+  /**
+   * Handle keyboard input for debug controls
+   */
+  private handleKeyDown = (event: KeyboardEvent): void => {
+    // Press D to cycle through debug modes
+    if (event.key === 'd' || event.key === 'D') {
+      this.debugMode = (this.debugMode + 1) % 8; // Cycle 0-7
+
+      const debugModeNames = [
+        'Normal Rendering',
+        'Diffuse Only (Day/Night)',
+        'World-Space Normals',
+        'Light Direction',
+        'View Direction',
+        'Surface Facing Light',
+        'Distance to Light',
+        'World Positions'
+      ];
+
+      console.log(`[DEBUG] Mode ${this.debugMode}: ${debugModeNames[this.debugMode]}`);
+
+      // Update all planet materials with new debug mode
+      this.scene.traverse((object) => {
+        if (object instanceof THREE.LOD) {
+          object.levels.forEach((level) => {
+            const mesh = level.object as THREE.Mesh;
+            if (mesh.material && (mesh.material as THREE.ShaderMaterial).uniforms) {
+              const material = mesh.material as THREE.ShaderMaterial;
+              if (material.uniforms.u_debugMode) {
+                material.uniforms.u_debugMode.value = this.debugMode;
+              }
+            }
+          });
+        }
+      });
+    }
+  };
+
   // ==========================================================================
   // Animation Loop
   // ==========================================================================
 
   /**
-   * Main animation loop - updates controls and renders scene
+   * Main animation loop - updates controls, shader uniforms, and renders scene
    */
   private animate = (): void => {
     this.animationFrameId = requestAnimationFrame(this.animate);
@@ -383,10 +427,30 @@ export class ThreeSceneManager {
     // not from (0,0,0). Without this, all planets use the same LOD level.
     this.scene.updateMatrixWorld();
 
-    // Update LOD levels based on camera distance to each object's world position
+    // Update shader uniforms for all celestial bodies
+    // CRITICAL: Camera position must be updated every frame for correct lighting and atmosphere
+    const time = performance.now() * 0.001; // Convert to seconds
     this.scene.traverse((object) => {
       if (object instanceof THREE.LOD) {
         object.update(this.camera);
+
+        // Update shader uniforms for all LOD levels
+        object.levels.forEach((level) => {
+          const mesh = level.object as THREE.Mesh;
+          if (mesh.material && (mesh.material as THREE.ShaderMaterial).uniforms) {
+            const material = mesh.material as THREE.ShaderMaterial;
+
+            // Update camera position for view-dependent effects (atmosphere, specular)
+            if (material.uniforms.u_cameraPosition) {
+              material.uniforms.u_cameraPosition.value.copy(this.camera.position);
+            }
+
+            // Update time for animated effects
+            if (material.uniforms.u_time) {
+              material.uniforms.u_time.value = time;
+            }
+          }
+        });
       }
     });
 
@@ -532,6 +596,9 @@ export class ThreeSceneManager {
         data: planet
       };
 
+      // Star position in world space (at origin)
+      const starPositionWorld = new THREE.Vector3(0, 0, 0);
+
       // Create planet with LOD (pass camera and habitable zone for intelligent shader parameters)
       const planetLOD = new CelestialBodyLOD(
         planet,
@@ -539,7 +606,8 @@ export class ThreeSceneManager {
         sceneUnitsPerSolarRadius,
         undefined, // No parent planet for planets
         this.camera, // Pass camera for atmosphere effects
-        system.star.habitableZone // Pass habitable zone for intelligent parameter mapping
+        system.star.habitableZone, // Pass habitable zone for intelligent parameter mapping
+        starPositionWorld // Star position in world coordinate system
       );
       planetLOD.object.name = `planet-${planetIndex}`;
       planetSystemGroup.add(planetLOD.object);
@@ -553,17 +621,6 @@ export class ThreeSceneManager {
 
       // Create moons with LOD and add as children
       planet.moons.forEach((moon, moonIndex) => {
-        const moonLOD = new CelestialBodyLOD(
-          moon,
-          'moon',
-          sceneUnitsPerSolarRadius,
-          planet, // Parent planet required for moon renderer
-          this.camera, // Pass camera for shader uniforms
-          undefined // Moons don't use habitable zone in shader
-        );
-
-        moonLOD.object.name = `moon-${planetIndex}-${moonIndex}`;
-
         // CRITICAL: Keep moons TIGHT around planet (within Hill sphere)
         // Position moons in concentric shells from 1.5× to 2.5× planet radius
         // This ensures they stay within planet's gravitational sphere of influence
@@ -579,11 +636,25 @@ export class ThreeSceneManager {
 
         // Distribute moons evenly around planet
         const angle = (moonIndex / planet.moons.length) * Math.PI * 2;
-        moonLOD.object.position.set(
-          Math.cos(angle) * moonOrbitSceneUnits,
-          0,
-          Math.sin(angle) * moonOrbitSceneUnits
+        const moonLocalX = Math.cos(angle) * moonOrbitSceneUnits;
+        const moonLocalZ = Math.sin(angle) * moonOrbitSceneUnits;
+
+        // Star position in world space (at origin) - same for all moons
+        const starPositionWorld = new THREE.Vector3(0, 0, 0);
+
+        const moonLOD = new CelestialBodyLOD(
+          moon,
+          'moon',
+          sceneUnitsPerSolarRadius,
+          planet, // Parent planet required for moon renderer
+          this.camera, // Pass camera for shader uniforms
+          undefined, // Moons don't use habitable zone in shader
+          starPositionWorld // Star position in world coordinate system
         );
+
+        moonLOD.object.name = `moon-${planetIndex}-${moonIndex}`;
+
+        moonLOD.object.position.set(moonLocalX, 0, moonLocalZ);
 
         planetSystemGroup.add(moonLOD.object);
 
@@ -882,6 +953,7 @@ export class ThreeSceneManager {
 
     // Remove event listeners
     window.removeEventListener('resize', this.handleResize);
+    window.removeEventListener('keydown', this.handleKeyDown);
     this.renderer.domElement.removeEventListener('click', this.handleClick);
 
     // Dispose controls
