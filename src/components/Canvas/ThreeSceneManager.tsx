@@ -190,12 +190,12 @@ export class ThreeSceneManager {
     composer.addPass(renderPass);
 
     // Add bloom pass for star glow
-    // VERY LOW threshold + moderate strength
+    // Match reference demo: strong bloom for dramatic star glow
     const bloomPass = new UnrealBloomPass(
       new THREE.Vector2(window.innerWidth, window.innerHeight),
-      0.9,  // strength - moderate
-      0.7,  // radius
-      0.5   // threshold - VERY LOW (even dim areas will glow slightly)
+      2.3,  // strength - strong (matches reference demo)
+      0.8,  // radius - matches reference demo
+      0.85  // threshold - high (only brightest areas glow)
     );
     composer.addPass(bloomPass);
 
@@ -431,6 +431,7 @@ export class ThreeSceneManager {
     // CRITICAL: Camera position must be updated every frame for correct lighting and atmosphere
     const time = performance.now() * 0.001; // Convert to seconds
     this.scene.traverse((object) => {
+      // Update LOD objects (planets, moons)
       if (object instanceof THREE.LOD) {
         object.update(this.camera);
 
@@ -451,6 +452,25 @@ export class ThreeSceneManager {
             }
           }
         });
+      }
+
+      // Update star mesh (regular Mesh, not LOD)
+      if (object.name === 'star' && object instanceof THREE.Mesh) {
+        const material = object.material as THREE.ShaderMaterial;
+        if (material.uniforms) {
+          // Update time for surface activity animation
+          if (material.uniforms.u_time) {
+            material.uniforms.u_time.value = time;
+          }
+
+          // Update camera position (not currently used in star shader, but future-proof)
+          if (material.uniforms.u_cameraPosition) {
+            material.uniforms.u_cameraPosition.value.copy(this.camera.position);
+          }
+        }
+
+        // Add subtle rotation for additional dynamism (like sunspot/feature rotation)
+        object.rotation.y += 0.0005; // Half speed of temp demo for subtlety
       }
     });
 
