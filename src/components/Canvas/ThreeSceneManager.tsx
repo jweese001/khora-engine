@@ -189,17 +189,16 @@ export class ThreeSceneManager {
     const renderPass = new RenderPass(this.scene, this.camera);
     composer.addPass(renderPass);
 
-    // Add bloom pass for star glow
-    // Match reference demo: strong bloom for dramatic star glow
-    const bloomPass = new UnrealBloomPass(
-      new THREE.Vector2(window.innerWidth, window.innerHeight),
-      2.3,  // strength - strong (matches reference demo)
-      0.8,  // radius - matches reference demo
-      0.85  // threshold - high (only brightest areas glow)
-    );
-    composer.addPass(bloomPass);
+    // Bloom disabled per user request (entire scene bloom not desired)
+    // const bloomPass = new UnrealBloomPass(
+    //   new THREE.Vector2(window.innerWidth, window.innerHeight),
+    //   2.3,  // strength - strong (matches reference demo)
+    //   0.8,  // radius - matches reference demo
+    //   0.85  // threshold - high (only brightest areas glow)
+    // );
+    // composer.addPass(bloomPass);
 
-    console.log('[ThreeSceneManager] Post-processing composer initialized with bloom');
+    console.log('[ThreeSceneManager] Post-processing composer initialized (bloom disabled)');
 
     return composer;
   }
