@@ -270,6 +270,170 @@ Awaiting user verification (requires browser reload for shader changes)
 
 ---
 
+## Session 15: Star Bloom Enhancement (November 13, 2025)
+
+**Status:** ⏸️ **REVERTED** - Bloom Disabled Per User Request
+
+### Session Summary
+
+**Goal:** Enhance star bloom to match reference shader demo for dramatic visual impact
+
+**Problem Statement:**
+- User compared standalone star shader demo to Khora rendering
+- Reference demo had strong, dramatic bloom glow
+- Khora had conservative bloom (strength 0.9 vs reference 2.3)
+- User concerned that adding visual controls might affect procedural generation system
+
+### Analysis: Reference vs Khora Differences
+
+**Identified 5 key visual differences:**
+1. **Bloom/Glow Post-Processing** - Most obvious (conservative vs dramatic)
+2. **Surface Activity/Sunspots** - Dark spots on star surface (future enhancement)
+3. **Center Brightness** - Brighter white core (future enhancement)
+4. **Limb Darkening** - Stronger edge darkening (future enhancement)
+5. **Color Temperature Gradient** - Rich color gradients (future enhancement)
+
+**Root Cause:** Bloom parameters were set conservatively in initial implementation
+
+### Architectural Safety Analysis
+
+**User Concern:** "Adding controls will have unwanted effect on galaxy/star generation"
+
+**Analysis:**
+- Generation Layer (data): `star-generator.ts`, `planet-generator.ts` - Creates JSON data structures
+- Rendering Layer (visuals): Shaders, `StarRenderer.ts` - Converts data to Three.js meshes
+- Post-Processing Layer (screen effects): Bloom, tone mapping - Applies screen-space effects
+
+**Conclusion:** **Probability of affecting generation: ZERO**
+- These layers are completely separate
+- Visual changes (bloom, shaders) never touch generation algorithms
+- Same seed will always produce same data structures regardless of visual settings
+
+### Implementation: Bloom Parameter Updates
+
+**File Modified:** `src/components/Canvas/ThreeSceneManager.tsx` (lines 192-200)
+
+**Changes Applied:**
+
+**Before (conservative bloom):**
+```typescript
+const bloomPass = new UnrealBloomPass(
+  new THREE.Vector2(window.innerWidth, window.innerHeight),
+  0.9,  // strength - moderate
+  0.7,  // radius
+  0.5   // threshold - VERY LOW (even dim areas glow)
+);
+```
+
+**After (dramatic bloom matching reference):**
+```typescript
+const bloomPass = new UnrealBloomPass(
+  new THREE.Vector2(window.innerWidth, window.innerHeight),
+  2.3,  // strength - strong (matches reference demo)
+  0.8,  // radius - matches reference demo
+  0.85  // threshold - high (only brightest areas glow)
+);
+```
+
+**Parameter Explanation:**
+- **Strength:** 0.9 → 2.3 (155% increase) - Much more dramatic glow
+- **Radius:** 0.7 → 0.8 (14% increase) - Slightly wider spread
+- **Threshold:** 0.5 → 0.85 (70% increase) - Only bright areas glow (prevents dim objects from glowing)
+
+### Additional Improvements (User-Applied)
+
+**Star Mesh Rotation and Uniform Updates** (found in diff):
+- Added star mesh rotation for dynamic surface activity
+- Added uniform update infrastructure for future shader improvements
+- Rotation speed: 0.0005 rad/frame (subtle, half speed of temp demo)
+- Time-based `u_time` uniform for surface activity animation
+- Camera position tracking for view-dependent effects (future-proof)
+
+### Files Modified
+
+1. **ThreeSceneManager.tsx**
+   - Updated bloom parameters (lines 192-200)
+   - Added star mesh rotation (lines 431-473)
+   - Added uniform update system for stars
+
+### Git Commit
+
+**Commit:** 4da2226
+**Message:** ✨ IMPROVE: Enhance star bloom and add rotation
+
+**Changes:**
+- 1 file changed
+- 24 insertions
+- 4 deletions
+
+### Success Criteria
+
+- ✅ Bloom parameters match reference demo values
+- ✅ No impact on procedural generation system (architecturally guaranteed)
+- ✅ Star rotation infrastructure added for future shader improvements
+- ⏳ Visual verification pending (user must reload browser and test)
+
+### Expected Visual Results
+
+**Before:**
+- Stars had moderate glow
+- Bloom applied to both bright and dim areas (low threshold)
+- Subtle, conservative appearance
+
+**After:**
+- Stars have dramatic, intense glow
+- Only brightest areas (stars) glow (high threshold)
+- Matches reference demo appearance
+- More cinematic, impressive visual impact
+
+### Technical Notes
+
+**Bloom Threshold Strategy:**
+- **Low threshold (0.5):** Everything glows slightly, even planets
+- **High threshold (0.85):** Only emissive stars glow, planets don't
+- High threshold + high strength = dramatic star-only glow
+
+**Star Rotation:**
+- Added for visual dynamism and future shader improvements
+- Rotates on Y-axis (vertical)
+- Speed calibrated to be subtle (not distracting)
+- Enables time-based surface features (sunspots, flares) in future
+
+### Future Enhancements (Not Implemented)
+
+**Additional star shader features identified:**
+1. Surface activity/sunspots (noise-based dark spots)
+2. Center brightness multiplier (brighter core)
+3. Enhanced limb darkening
+4. Temperature-based color gradients (white→yellow→orange→red)
+
+**Status:** Deferred to future sessions based on user priorities
+
+### User Feedback and Reversion
+
+**User Decision:** Bloom should not apply to entire scene
+- Scene-wide bloom affects all objects (stars, planets, moons)
+- Not desired for current visual style
+- Bloom disabled (commit 2759ac1)
+
+**Current State:**
+- ✅ Bloom code commented out (preserved for reference)
+- ✅ EffectComposer still in place for future post-processing
+- ✅ Scene renders without glow effects
+- 🎯 Can re-enable or implement per-object bloom in future if needed
+
+**Alternative Approaches (Not Implemented):**
+1. Selective bloom (render stars to separate layer, composite)
+2. Per-object glow shaders (emissive materials only)
+3. Post-processing controls in IDE (scene-level settings)
+
+### Next Steps
+
+1. 🎯 Ready for next development priorities
+2. 💡 Consider per-object glow implementation if star enhancement needed
+
+---
+
 ## Session 13: Acceptance Testing & Validation (November 11, 2025)
 
 **Status:** ✅ **COMPLETE** - All acceptance tests passed!
