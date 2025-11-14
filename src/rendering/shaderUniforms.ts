@@ -128,20 +128,34 @@ function getTerrainColor(planet: Planet, rng: SeededRandom): THREE.Vector3 {
     case PlanetType.Barren:
       // Gray rocky surface
       return new THREE.Vector3(0.412, 0.412, 0.412); // RGB(105, 105, 105) = #696969
-    case PlanetType.GasGiant:
+    case PlanetType.GasGiant: {
       // Gas giants: Warm tones (Jupiter, Saturn-like)
       // Varied oranges, browns, creams, tans
       const gasHue = rng.random() * 0.15; // 0.0-0.15 (orange to yellow range)
       const gasSat = 0.4 + rng.random() * 0.4; // 0.4-0.8 saturation
-      const gasBright = 0.5 + rng.random() * 0.3; // 0.5-0.8 brightness
-      return hslToRgb(gasHue, gasSat, gasBright);
-    case PlanetType.IceGiant:
+      const gasBright = 0.3 + rng.random() * 0.2; // 0.3-0.5 brightness
+      const rgb = hslToRgb(gasHue, gasSat, gasBright);
+      // Clamp to 0.69 max per channel to prevent white blowout when shader multiplies by 1.3
+      return new THREE.Vector3(
+        Math.min(rgb.x, 0.69),
+        Math.min(rgb.y, 0.69),
+        Math.min(rgb.z, 0.69)
+      );
+    }
+    case PlanetType.IceGiant: {
       // Ice giants: Cool tones (Uranus, Neptune-like)
       // Varied blues, cyans, teals
       const iceHue = 0.5 + rng.random() * 0.15; // 0.5-0.65 (cyan to blue range)
       const iceSat = 0.5 + rng.random() * 0.3; // 0.5-0.8 saturation
-      const iceBright = 0.5 + rng.random() * 0.25; // 0.5-0.75 brightness
-      return hslToRgb(iceHue, iceSat, iceBright);
+      const iceBright = 0.35 + rng.random() * 0.2; // 0.35-0.55 brightness
+      const rgb = hslToRgb(iceHue, iceSat, iceBright);
+      // Clamp to 0.69 max per channel to prevent white blowout when shader multiplies by 1.3
+      return new THREE.Vector3(
+        Math.min(rgb.x, 0.69),
+        Math.min(rgb.y, 0.69),
+        Math.min(rgb.z, 0.69)
+      );
+    }
     default:
       // Fallback gray
       return new THREE.Vector3(0.5, 0.5, 0.5);
@@ -409,9 +423,9 @@ export function derivePlanetUniforms(
 
   let atmosphereDensity = planet.atmosphere.present ? planet.atmosphere.density : 0.0;
 
-  // Gas/ice giants always have thick atmospheres
+  // Gas/ice giants always have thick atmospheres (0.15 for subtle rim light)
   if (planetMode === 1 || planetMode === 2) {
-    atmosphereDensity = 0.8;
+    atmosphereDensity = 0.15;
   }
 
   // ========================================================================
@@ -454,14 +468,14 @@ export function derivePlanetUniforms(
 
   if (planetMode === 1) {
     // Gas Giant - More varied appearance
-    // Band count: 6-20 (more variation based on size + random factor)
-    bandCount = 6 + Math.floor(planet.radius * 2 + rng.random() * 6);
-    // Turbulence: 0.5-0.95 (wider range for more variety)
-    turbulence = 0.5 + rng.random() * 0.45;
+    // Band count: 10-18 (visually interesting range, user can override 0-24 in Controls)
+    bandCount = 10 + Math.floor(rng.random() * 8);
+    // Turbulence: 0.5-0.8 (visible variation, user can override 0-1 in Controls)
+    turbulence = 0.5 + rng.random() * 0.3;
     // Band speed: 0.05-0.15 (wider range)
     bandSpeed = 0.05 + rng.random() * 0.1;
-    // Storm intensity: 0.2-0.8 (much wider range)
-    stormIntensity = 0.2 + rng.random() * 0.6;
+    // Storm intensity: 0.3-0.6 (balanced range, user can override 0-1 in Controls)
+    stormIntensity = 0.3 + rng.random() * 0.3;
 
     // Storm color: More varied reddish/orange/yellow for gas giants
     const stormVariation = rng.random();
@@ -489,14 +503,14 @@ export function derivePlanetUniforms(
     }
   } else if (planetMode === 2) {
     // Ice Giant - More varied appearance
-    // Band count: 4-16 (more variation)
-    bandCount = 4 + Math.floor(planet.radius * 1.5 + rng.random() * 5);
-    // Turbulence: 0.15-0.6 (wider range)
-    turbulence = 0.15 + rng.random() * 0.45;
-    // Band speed: 0.02-0.08 (wider range)
-    bandSpeed = 0.02 + rng.random() * 0.06;
-    // Storm intensity: 0.1-0.6 (wider range)
-    stormIntensity = 0.1 + rng.random() * 0.5;
+    // Band count: 6-12 (smoother appearance than gas giants, user can override 0-24 in Controls)
+    bandCount = 6 + Math.floor(rng.random() * 6);
+    // Turbulence: 0.25-0.5 (subtler than gas giants, user can override 0-1 in Controls)
+    turbulence = 0.25 + rng.random() * 0.25;
+    // Band speed: 0.03-0.08 (slower, smoother motion)
+    bandSpeed = 0.03 + rng.random() * 0.05;
+    // Storm intensity: 0.2-0.5 (balanced range, user can override 0-1 in Controls)
+    stormIntensity = 0.2 + rng.random() * 0.3;
 
     // Storm color: More varied dark blues/teals for ice giants
     const stormVariation = rng.random();

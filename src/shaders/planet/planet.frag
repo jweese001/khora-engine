@@ -52,7 +52,8 @@ uniform float u_stormIntensity;
 uniform vec3 u_stormColor;
 
 varying vec3 vNormal;
-varying vec3 vPosition;
+varying vec3 vPosition;       // Local space position for noise (radius 1.0)
+varying vec3 vWorldPosition;  // World space position for lighting
 varying vec2 vUv;
 varying vec3 vViewPosition;
 
@@ -132,8 +133,8 @@ float getCloudNoise(vec3 p, float noiseType, float animTime) {
 // ============================================================================
 vec3 renderRockyPlanet() {
   vec3 normal = normalize(vNormal);
-  vec3 lightDir = normalize(u_lightPosition - vPosition);
-  vec3 viewDir = normalize(u_cameraPosition - vPosition);
+  vec3 lightDir = normalize(u_lightPosition - vWorldPosition);
+  vec3 viewDir = normalize(u_cameraPosition - vWorldPosition);
 
   // Terrain elevation
   float elevation = fbm(vPosition * u_terrainScale, 4, u_terrainRoughness);
@@ -305,12 +306,17 @@ vec3 renderRockyPlanet() {
     }
   }
 
-  // Atmosphere glow (only on edges facing camera)
+  // Atmosphere glow
   if(u_atmosphereDensity > 0.0) {
     float viewDotNormal = dot(viewDir, normal);
-    // Only apply glow when facing camera (viewDotNormal > 0)
+    // Only glow when surface faces camera
     float fresnel = pow(max(0.0, 1.0 - viewDotNormal), 3.0) * step(0.0, viewDotNormal);
-    vec3 atmosphereGlow = u_atmosphereColor * fresnel * u_atmosphereDensity;
+
+    // Subtle fade on dark side (prevents glare on backlit planets)
+    float lightDotNormal = dot(normal, lightDir);
+    float litSide = smoothstep(-0.2, 0.5, lightDotNormal);
+
+    vec3 atmosphereGlow = u_atmosphereColor * fresnel * u_atmosphereDensity * litSide;
     finalColor += atmosphereGlow * 0.5;
   }
 
@@ -322,8 +328,8 @@ vec3 renderRockyPlanet() {
 // ============================================================================
 vec3 renderGasGiant() {
   vec3 normal = normalize(vNormal);
-  vec3 lightDir = normalize(u_lightPosition - vPosition);
-  vec3 viewDir = normalize(u_cameraPosition - vPosition);
+  vec3 lightDir = normalize(u_lightPosition - vWorldPosition);
+  vec3 viewDir = normalize(u_cameraPosition - vWorldPosition);
 
   // Latitude for horizontal bands
   float latitude = vPosition.y / length(vPosition);
@@ -334,8 +340,11 @@ vec3 renderGasGiant() {
     bands = sin(latitude * u_bandCount * 3.14159) * 0.5 + 0.5;
   }
 
-  // Add turbulence to bands
-  vec3 turbPos = vPosition + vec3(u_time * u_bandSpeed, 0.0, 0.0);
+  // Normalize vPosition to radius 1.0 for consistent noise across all planet sizes
+  vec3 normPos = normalize(vPosition);
+
+  // Turbulence
+  vec3 turbPos = normPos + vec3(u_time * u_bandSpeed, 0.0, 0.0);
   float turbulence = fbm(turbPos * 3.0, 4, 0.6) * u_turbulence;
   bands += turbulence;
 
@@ -343,7 +352,7 @@ vec3 renderGasGiant() {
   float storms = 0.0;
   if(u_stormIntensity > 0.0) {
     // Larger scale for more prominent storm cells
-    float stormNoise = fbm(vPosition * 1.8, 3, 0.7);
+    float stormNoise = fbm(normPos * 1.8, 3, 0.7);
     // Less aggressive power for more visible effect
     storms = pow(max(0.0, stormNoise), 1.2) * u_stormIntensity * 1.5;
   }
@@ -351,10 +360,10 @@ vec3 renderGasGiant() {
   // Combine patterns
   float pattern = clamp(bands + storms * 0.5, 0.0, 1.0);
 
-  // Color based on pattern
+  // Color based on pattern (clamp to prevent white blowout)
   vec3 color1 = u_baseColor;
   vec3 color2 = u_baseColor * 0.6;
-  vec3 color3 = u_baseColor * 1.3;
+  vec3 color3 = min(u_baseColor * 1.3, vec3(0.95)); // Clamp to prevent >1.0
 
   vec3 gasColor;
   if(pattern < 0.4) {
@@ -380,14 +389,22 @@ vec3 renderGasGiant() {
   float limbDark = pow(max(0.0, dot(viewDir, normal)), 0.8);
   gasColor *= mix(0.6, 1.0, limbDark);
 
-  // Atmospheric glow (only on edges facing camera)
+  // Atmospheric glow
   if(u_atmosphereDensity > 0.0) {
     float viewDotNormal = dot(viewDir, normal);
-    // Only apply glow when facing camera
+    // Only glow when surface faces camera
     float fresnel = pow(max(0.0, 1.0 - viewDotNormal), 3.0) * step(0.0, viewDotNormal);
+
+    // Subtle fade on dark side (prevents glare on backlit planets)
+    float lightDotNormal = dot(normal, lightDir);
+    float litSide = smoothstep(-0.2, 0.5, lightDotNormal);
+
     vec3 glowColor = u_baseColor * 1.2;
-    gasColor += glowColor * fresnel * u_atmosphereDensity * 0.3;
+    gasColor += glowColor * fresnel * u_atmosphereDensity * 0.3 * litSide;
   }
+
+  // Final clamp to prevent white blowout on bright-colored gas giants
+  gasColor = min(gasColor, vec3(0.90));
 
   return gasColor;
 }
@@ -397,8 +414,8 @@ vec3 renderGasGiant() {
 // ============================================================================
 vec3 renderIceGiant() {
   vec3 normal = normalize(vNormal);
-  vec3 lightDir = normalize(u_lightPosition - vPosition);
-  vec3 viewDir = normalize(u_cameraPosition - vPosition);
+  vec3 lightDir = normalize(u_lightPosition - vWorldPosition);
+  vec3 viewDir = normalize(u_cameraPosition - vWorldPosition);
 
   float latitude = vPosition.y / length(vPosition);
 
@@ -408,15 +425,18 @@ vec3 renderIceGiant() {
     bands = sin(latitude * u_bandCount * 3.14159) * 0.5 + 0.5;
   }
 
+  // Normalize vPosition to radius 1.0 for consistent noise across all planet sizes
+  vec3 normPos = normalize(vPosition);
+
   // Subtle turbulence (half speed for smoother ice giant effect)
-  vec3 turbPos = vPosition + vec3(u_time * u_bandSpeed * 0.5, 0.0, 0.0);
+  vec3 turbPos = normPos + vec3(u_time * u_bandSpeed * 0.5, 0.0, 0.0);
   float turbulence = fbm(turbPos * 2.0, 3, 0.5) * u_turbulence * 0.5;
   bands += turbulence;
 
   // Storm features (Great Dark Spot style for Neptune-like planets)
   float storms = 0.0;
   if(u_stormIntensity > 0.0) {
-    float stormNoise = fbm(vPosition * 1.5, 3, 0.6);
+    float stormNoise = fbm(normPos * 1.5, 3, 0.6);
     storms = pow(max(0.0, stormNoise), 1.3) * u_stormIntensity * 1.2;
   }
 
@@ -424,7 +444,7 @@ vec3 renderIceGiant() {
 
   // Ice giant colors (cyan/blue tones)
   vec3 color1 = u_baseColor * 0.8;
-  vec3 color2 = u_baseColor * 1.1;
+  vec3 color2 = u_baseColor * 1.05; // Reduced from 1.1 to prevent bright hotspots
 
   vec3 iceColor = mix(color1, color2, pattern);
 
@@ -440,12 +460,27 @@ vec3 renderIceGiant() {
   float diffuse = max(0.0, dot(normal, lightDir));
   iceColor *= (0.06 + diffuse * 0.94);
 
-  // Hazy atmosphere effect (only on edges facing camera)
+  // Hazy atmosphere effect - edge-focused only
   float viewDotNormal = dot(viewDir, normal);
-  // Only apply haze when facing camera
-  float fresnel = pow(max(0.0, 1.0 - viewDotNormal), 2.5) * step(0.0, viewDotNormal);
-  vec3 hazeColor = u_baseColor * 1.3;
-  iceColor = mix(iceColor, hazeColor, fresnel * u_atmosphereDensity * 0.4);
+  // Make fresnel much more edge-focused (power 4.0 instead of 2.5)
+  // and only apply when surface faces camera
+  float fresnel = pow(max(0.0, 1.0 - viewDotNormal), 4.0) * step(0.0, viewDotNormal);
+
+  // Add spatial noise to break up uniform hotspots
+  float hazeNoise = fbm(normPos * 4.0, 2, 0.5) * 0.5 + 0.5;
+
+  // Subtle fade on dark side (prevents glare on backlit planets)
+  float lightDotNormal = dot(normal, lightDir);
+  float litSide = smoothstep(-0.1, 0.6, lightDotNormal);
+
+  vec3 hazeColor = u_baseColor * 1.15; // Slightly reduced from 1.2
+  // Modulate fresnel by noise to prevent uniform hotspots
+  // Strength back up to 0.30 (between original 0.4 and reduced 0.15)
+  float hazeStrength = fresnel * u_atmosphereDensity * 0.30 * litSide * hazeNoise;
+  iceColor = mix(iceColor, hazeColor, hazeStrength);
+
+  // Final clamp to prevent white blowout on bright-colored ice giants
+  iceColor = min(iceColor, vec3(0.88)); // Slightly lower clamp (0.88 instead of 0.90)
 
   return iceColor;
 }
@@ -472,8 +507,8 @@ void main() {
   // ============================================================================
   if(u_debugMode > 0) {
     vec3 normal = normalize(vNormal);
-    vec3 lightDir = normalize(u_lightPosition - vPosition);
-    vec3 viewDir = normalize(u_cameraPosition - vPosition);
+    vec3 lightDir = normalize(u_lightPosition - vWorldPosition);
+    vec3 viewDir = normalize(u_cameraPosition - vWorldPosition);
     float diffuse = max(0.0, dot(normal, lightDir));
 
     if(u_debugMode == 1) {
@@ -498,12 +533,12 @@ void main() {
     }
     else if(u_debugMode == 6) {
       // Show distance to light source
-      float dist = length(u_lightPosition - vPosition);
+      float dist = length(u_lightPosition - vWorldPosition);
       finalColor = vec3(dist / 100.0); // Normalize to visible range
     }
     else if(u_debugMode == 7) {
-      // Show positions
-      finalColor = vPosition / 100.0; // Normalize to visible range
+      // Show world positions
+      finalColor = vWorldPosition / 100.0; // Normalize to visible range
     }
   }
 
