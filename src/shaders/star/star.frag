@@ -1,97 +1,137 @@
 //
-// Enhanced Star Fragment Shader
-// Multi-color control with gradient overlay and limb darkening
+// Star Fragment Shader (Temperature-Based with Blackbody Radiation)
+// Based on unified demo - uses high/low temperature for realistic color
 //
 
 #include "../common/noise.glsl"
 
-// Star properties
-uniform vec3 u_starColor;           // Base star color
-uniform vec3 u_noiseColor;          // Dark spots/cooler regions color
-uniform vec3 u_centerColor;         // Center gradient color (yellow/white)
-uniform float u_temperature;        // Temperature multiplier (0.5-2.0)
-uniform float u_seed;               // Deterministic noise offset
+// Temperature-based uniforms
+uniform float u_highTemp;       // High temperature in Kelvin (bright regions)
+uniform float u_lowTemp;        // Low temperature in Kelvin (dark regions/sunspots)
+uniform float u_scale;          // Noise scale
+uniform float u_time;           // Animation time
 
-// Surface activity (sunspots, prominences)
-uniform float u_activityLevel;      // 0.0-1.0, how much noise affects surface
-uniform float u_activityScale;      // Noise frequency (larger = smaller spots)
-uniform float u_activitySpeed;      // Animation speed
+// Sunspot parameters
+uniform float u_sunspotFreq;    // Sunspot frequency (size)
+uniform float u_sunspotIntensity; // Sunspot darkness intensity
 
-// Center gradient
-uniform float u_gradientStrength;   // How strong the center color is
-uniform float u_gradientFalloff;    // How quickly gradient fades from center
-uniform float u_gradientOpacity;    // Blend between gradient and surface noise
+// Limb darkening
+uniform float u_limbDarkeningPower; // How dark edges get
+uniform float u_centerBrightness;   // Center brightness multiplier
 
-// Limb darkening (edges appear darker)
-uniform float u_limbDarkeningPower; // Higher = darker edges
-uniform float u_centerBrightness;   // Brightness boost at center
-
-// View-dependent
-uniform vec3 u_cameraPosition;      // For view calculations
-uniform float u_time;               // For animation
-
-varying vec3 vPosition;
+varying vec3 vTexCoord3D;
 varying vec3 vNormal;
-varying vec3 vWorldPosition;
+varying vec3 vPosition;
+
+// Multi-octave noise function
+const int octaves = 4;
+
+float noise(vec3 position, float frequency, float persistence) {
+  float total = 0.0;
+  float maxAmplitude = 0.0;
+  float amplitude = 1.0;
+  for (int i = 0; i < octaves; i++) {
+    total += simplex3D(position * frequency) * amplitude;
+    frequency *= 2.0;
+    maxAmplitude += amplitude;
+    amplitude *= persistence;
+  }
+  return total / maxAmplitude;
+}
 
 void main() {
-  // === SURFACE ACTIVITY (NOISE PATTERNS) ===
-  vec3 normPos = normalize(vPosition);
+  // Base noise for surface variation
+  float noiseBase = (noise(vTexCoord3D, 0.40, 0.7) + 1.0) / 2.0;
 
-  // Use seed to rotate noise sampling (preserves detail, unlike offset)
-  float seedAngle = u_seed * 6.28318; // Full rotation based on seed
-  mat3 rotation = mat3(
-    cos(seedAngle), 0.0, sin(seedAngle),
-    0.0, 1.0, 0.0,
-    -sin(seedAngle), 0.0, cos(seedAngle)
-  );
-  vec3 rotatedPos = rotation * normPos;
+  // Multi-octave sunspots (cooler dark regions)
+  float sunspot1 = simplex3D(vTexCoord3D * u_sunspotFreq);
+  float sunspot2 = simplex3D(vTexCoord3D * u_sunspotFreq * 2.3) * 0.5;
+  float sunspot3 = simplex3D(vTexCoord3D * u_sunspotFreq * 4.7) * 0.25;
+  float sunspotNoise = (sunspot1 + sunspot2 + sunspot3);
 
-  // Animated noise for surface activity
-  vec3 noiseInput = rotatedPos * u_activityScale;
-  noiseInput.x += u_time * u_activitySpeed;
+  // Create discrete spots with threshold - adjusted for better visibility
+  float t1 = sunspotNoise * u_sunspotIntensity - 0.8;
 
-  // Multi-octave noise for realistic surface variation
-  float noise1 = simplex3D(noiseInput);
-  float noise2 = simplex3D(noiseInput * 2.3) * 0.5;
-  float noise3 = simplex3D(noiseInput * 4.7) * 0.25;
-  float combinedNoise = noise1 + noise2 + noise3;
+  // Bright spots (hotter regions) - also multi-octave
+  float bright1 = simplex3D(vTexCoord3D * 0.8);
+  float bright2 = simplex3D(vTexCoord3D * 1.6) * 0.5;
+  float brightNoise = (bright1 + bright2) * 0.5 - 0.3;
 
-  // Normalize to 0.0-1.0 range
-  float noiseMix = (combinedNoise + 1.0) * 0.5;
+  float ss = max(0.0, t1) * 0.3;
+  float brightSpot = max(0.0, brightNoise) * 0.2;
+  float total = clamp(noiseBase - ss + brightSpot, 0.0, 1.0);
 
-  // Blend between noise color (dark spots) and star color
-  vec3 surfaceColor = mix(u_noiseColor, u_starColor, noiseMix);
+  // Calculate temperature from noise
+  float temp = (u_highTemp * total + (1.0 - total) * u_lowTemp);
 
-  // Apply activity level (high activity = more surface variation)
-  // When activity is 0, use pure starColor (uniform)
-  // When activity is 1, use full surfaceColor (maximum variation)
-  vec3 activityBlended = mix(u_starColor, surfaceColor, u_activityLevel);
+  // ========================================================================
+  // Temperature to RGB conversion (blackbody radiation approximation)
+  // ========================================================================
+  float i = (temp - 800.0) * 0.035068;
 
-  // === LIMB DARKENING (CENTER GRADIENT) ===
-  // Calculate view direction dot product (1.0 at center, 0.0 at edges)
+  // R channel buckets
+  bool rbucket1 = i < 60.0;
+  bool rbucket2 = i >= 60.0 && i < 236.0;
+  bool rbucket3 = i >= 236.0 && i < 288.0;
+  bool rbucket4 = i >= 288.0 && i < 377.0;
+  bool rbucket5 = i >= 377.0 && i < 511.0;
+  bool rbucket6 = i >= 511.0;
+
+  // G channel buckets
+  bool gbucket1 = i < 60.0;
+  bool gbucket2 = i >= 60.0 && i < 103.0;
+  bool gbucket3 = i >= 103.0 && i < 133.0;
+  bool gbucket4 = i >= 133.0 && i < 174.0;
+  bool gbucket5 = i >= 174.0 && i < 236.0;
+  bool gbucket6 = i >= 236.0 && i < 286.0;
+  bool gbucket7 = i >= 286.0 && i < 367.0;
+  bool gbucket8 = i >= 367.0 && i < 511.0;
+  bool gbucket9 = i >= 511.0;
+
+  // B channel buckets
+  bool bbucket1 = i < 103.0;
+  bool bbucket2 = i >= 103.0 && i < 133.0;
+  bool bbucket3 = i >= 133.0 && i < 173.0;
+  bool bbucket4 = i >= 173.0 && i < 231.0;
+  bool bbucket5 = i >= 231.0;
+
+  float r =
+    float(rbucket1) * (0.0 + i * 4.25) +
+    float(rbucket2) * (255.0) +
+    float(rbucket3) * (255.0 + (i - 236.0) * -2.442) +
+    float(rbucket4) * (128.0 + (i - 288.0) * -0.764) +
+    float(rbucket5) * (60.0 + (i - 377.0) * -0.4477) +
+    float(rbucket6) * 0.0;
+
+  float g =
+     float(gbucket1) * (0.0) +
+     float(gbucket2) * (0.0 + (i - 60.0) * 2.3255) +
+     float(gbucket3) * (100.0 + (i - 103.0) * 4.433) +
+     float(gbucket4) * (233.0 + (i - 133.0) * 0.53658) +
+     float(gbucket5) * (255.0) +
+     float(gbucket6) * (255.0 + (i - 236.0) * -1.24) +
+     float(gbucket7) * (193.0 + (i - 286.0) * -0.7901) +
+     float(gbucket8) * (129.0 + (i - 367.0) * -0.45138) +
+     float(gbucket9) * (64.0 + (i - 511.0) * -0.06237);
+
+  float b =
+    float(bbucket1) * 0.0 +
+    float(bbucket2) * (0.0 + (i - 103.0) * 7.0333) +
+    float(bbucket3) * (211.0 + (i - 133.0) * 0.9) +
+    float(bbucket4) * (247.0 + (i - 173.0) * 0.1379) +
+    float(bbucket5) * 255.0;
+
+  vec3 color = vec3(r / 255.0, g / 255.0, b / 255.0);
+
+  // ========================================================================
+  // Limb darkening effect
+  // ========================================================================
   float viewDot = max(dot(vNormal, vec3(0.0, 0.0, 1.0)), 0.0);
-
-  // Center gradient: stronger at center, fades to edges
-  float centerGradient = pow(viewDot, u_gradientFalloff);
-
-  // Blend center color with activity-blended surface using gradient
-  float gradientMix = centerGradient * u_gradientStrength * u_gradientOpacity;
-  vec3 gradientColor = mix(activityBlended, u_centerColor, gradientMix);
-
-  // === FINAL BRIGHTNESS ===
-  // Limb darkening: star is brighter at center, darker at edges
   float limbDarkening = pow(viewDot, u_limbDarkeningPower);
+  float brightness = limbDarkening * u_centerBrightness;
 
-  // Apply brightness (temperature affects overall brightness)
-  // Boosted back up slightly for bloom activation
-  float brightness = limbDarkening * u_centerBrightness * u_temperature * 0.85;
-
-  // Combine gradient color with brightness
-  vec3 finalColor = gradientColor * brightness;
-
-  // Clamp to valid range (bloom threshold is 0.5, so allow values >0.5)
-  finalColor = clamp(finalColor, 0.0, 2.5);
+  // Apply limb darkening to final color
+  vec3 finalColor = color * brightness;
 
   gl_FragColor = vec4(finalColor, 1.0);
 }

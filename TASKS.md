@@ -115,6 +115,358 @@
 
 ---
 
+## Session 14: Shader Lighting Debug System (November 13, 2025)
+
+**Status:** ✅ **COMPLETE** - Lighting Issues Resolved
+
+### Session Summary
+
+**Goal:** Implement systematic shader debugging and fix planet lighting issues
+
+**Problem Statement:**
+- Planets appeared "blown out" and evenly lit (ambient light too high)
+- Star appeared directionally lit instead of emissive
+- Planets had unrealistic "hot spots" (specular highlights too strong)
+- Needed methodical debugging approach instead of blind iteration
+
+### Implementation: Debug Visualization System
+
+**Created 8-mode debug system (press D key to cycle):**
+
+**Mode 0:** Normal rendering (full shader)
+**Mode 1:** Diffuse only (day/night visualization) - CRITICAL for diagnosis
+**Mode 2:** World-space normals (RGB = XYZ)
+**Mode 3:** Light direction visualization
+**Mode 4:** View direction visualization
+**Mode 5:** Surface facing light (binary)
+**Mode 6:** Distance to light source
+**Mode 7:** World positions
+
+**Files Modified:**
+- `src/shaders/planet/planet.frag` - Added u_debugMode uniform and visualization code
+- `src/rendering/shaderUniforms.ts` - Added u_debugMode to interface and uniforms
+- `src/components/Canvas/ThreeSceneManager.tsx` - Added keyboard handler for D key cycling
+
+### Root Cause Analysis (Using Debug System)
+
+**Debug Mode 1 revealed:** Diffuse lighting was CORRECT (clear half-bright, half-dark)
+**Real problem:** Ambient lighting values too high, washing out shadows in Mode 0
+
+**User feedback (critical correction):** *"the image shows that the planets are fully lit on the star side and totally black on the other side. The Star is at the top of the image and the white semi circles are the planets they look like half of a sphere because they are not lit on the opposite side."*
+
+### Fixes Applied
+
+#### 1. Ambient Lighting Reduction
+**Goal:** Show dramatic day/night terminator with realistic shadows
+
+**Rocky/Barren Planets:**
+- Terrain: 15% → 3% ambient
+- Water: 10% → 2% ambient
+- Ice caps: 20% → 5% ambient
+
+**Gas Giants:** 35% → 8% ambient
+**Ice Giants:** 25% → 6% ambient
+
+**Result:** Clear terminator visible, dramatic shadows on night side
+
+#### 2. Specular Highlight Reduction
+**Goal:** Remove unrealistic "hot spots" (shiny appearance)
+
+**Water surfaces:**
+- Intensity: 0.8 → 0.1 (much more subtle)
+- Exponent: 32 → 64 (tighter, smaller highlight)
+
+**Ice caps:**
+- Intensity: 0.3 → 0.08 (very subtle)
+- Exponent: 16 → 32 (tighter highlight)
+
+**Result:** Planets look natural, no prominent shiny spots
+
+### Technical Details
+
+**Shader Coordinate System:**
+- All lighting calculations in world space
+- Star position at origin (0,0,0)
+- Camera position updated per-frame
+
+**Debug System Architecture:**
+- Uniform `u_debugMode` (int) added to all planet materials
+- Keyboard handler in ThreeSceneManager.tsx
+- Scene traversal to update all LOD materials simultaneously
+- Console logging for mode names
+
+**Keyboard Controls:**
+- Press `D` to cycle through modes 0-7
+- Console shows current mode name
+- All planets update instantly
+
+### User Verification
+
+**Initial feedback (before fixes):**
+*"getting closer but still not right. the star it's self seems to be directionally lit and the planets are lit from the star side but blown out completely on that side. they look evenly lit by ambient light."*
+
+**After ambient fix:**
+*"this is looking better"* ✅
+- Ice giant shows clear bright side (facing star) and dark side (shadow)
+- Visible terminator
+- Dramatic shadows
+
+**After specular fix:**
+Awaiting user verification (requires browser reload for shader changes)
+
+### Success Criteria
+
+- ✅ Methodical debugging approach implemented (8 visualization modes)
+- ✅ Identified real problem (ambient, not diffuse)
+- ✅ Reduced ambient lighting for dramatic shadows
+- ✅ Reduced specular highlights to remove "hot spots"
+- ✅ Debug system kept for future troubleshooting
+- ⏳ User verification of specular fix (pending reload)
+
+### Benefits
+
+**Development Workflow:**
+- Systematic debugging instead of blind iteration
+- Ability to isolate shader components (diffuse, normals, lighting)
+- Visual verification of coordinate spaces and calculations
+- Reusable for future shader development
+
+**Visual Quality:**
+- Dramatic day/night contrast (planets look like real space objects)
+- Clear terminator between light and shadow
+- More subtle, realistic surface reflections
+- Star appears as light source, not lit object
+
+### Files Modified
+
+1. **planet.frag** (2 changes)
+   - Added debug visualization system (80 lines)
+   - Reduced ambient lighting (5 changes)
+   - Reduced specular intensity and tightened exponents (2 changes)
+
+2. **shaderUniforms.ts** (1 change)
+   - Added `u_debugMode: { value: 0 }` to PlanetUniforms interface and initialization
+
+3. **ThreeSceneManager.tsx** (3 changes)
+   - Added `debugMode: number = 0` state
+   - Added keyboard event listener setup
+   - Added `handleKeyDown()` method to cycle debug modes and update all materials
+   - Added keyboard listener cleanup in dispose
+
+### Git Commit
+
+**Commit:** 041ebfd
+**Message:** ✨ SHADER: Implement debug visualization and fix lighting
+
+**Changes:**
+- 6 files changed
+- 191 insertions(+), 52 deletions(-)
+
+### Next Steps
+
+1. ⏳ User to reload browser and verify specular highlight fix
+2. ✅ Debug system kept for future troubleshooting (user choice)
+3. 🎯 Ready for next phase development
+
+---
+
+## Session 15: Star Bloom Enhancement (November 13, 2025)
+
+**Status:** ✅ **COMPLETE** - Bloom Enabled and Approved
+
+### Session Summary
+
+**Goal:** Enhance star bloom to match reference shader demo for dramatic visual impact
+
+**Problem Statement:**
+- User compared standalone star shader demo to Khora rendering
+- Reference demo had strong, dramatic bloom glow
+- Khora had conservative bloom (strength 0.9 vs reference 2.3)
+- User concerned that adding visual controls might affect procedural generation system
+
+### Analysis: Reference vs Khora Differences
+
+**Identified 5 key visual differences:**
+1. **Bloom/Glow Post-Processing** - Most obvious (conservative vs dramatic)
+2. **Surface Activity/Sunspots** - Dark spots on star surface (future enhancement)
+3. **Center Brightness** - Brighter white core (future enhancement)
+4. **Limb Darkening** - Stronger edge darkening (future enhancement)
+5. **Color Temperature Gradient** - Rich color gradients (future enhancement)
+
+**Root Cause:** Bloom parameters were set conservatively in initial implementation
+
+### Architectural Safety Analysis
+
+**User Concern:** "Adding controls will have unwanted effect on galaxy/star generation"
+
+**Analysis:**
+- Generation Layer (data): `star-generator.ts`, `planet-generator.ts` - Creates JSON data structures
+- Rendering Layer (visuals): Shaders, `StarRenderer.ts` - Converts data to Three.js meshes
+- Post-Processing Layer (screen effects): Bloom, tone mapping - Applies screen-space effects
+
+**Conclusion:** **Probability of affecting generation: ZERO**
+- These layers are completely separate
+- Visual changes (bloom, shaders) never touch generation algorithms
+- Same seed will always produce same data structures regardless of visual settings
+
+### Implementation: Bloom Parameter Updates
+
+**File Modified:** `src/components/Canvas/ThreeSceneManager.tsx` (lines 192-200)
+
+**Changes Applied:**
+
+**Before (conservative bloom):**
+```typescript
+const bloomPass = new UnrealBloomPass(
+  new THREE.Vector2(window.innerWidth, window.innerHeight),
+  0.9,  // strength - moderate
+  0.7,  // radius
+  0.5   // threshold - VERY LOW (even dim areas glow)
+);
+```
+
+**After (dramatic bloom matching reference):**
+```typescript
+const bloomPass = new UnrealBloomPass(
+  new THREE.Vector2(window.innerWidth, window.innerHeight),
+  2.3,  // strength - strong (matches reference demo)
+  0.8,  // radius - matches reference demo
+  0.85  // threshold - high (only brightest areas glow)
+);
+```
+
+**Parameter Explanation:**
+- **Strength:** 0.9 → 2.3 (155% increase) - Much more dramatic glow
+- **Radius:** 0.7 → 0.8 (14% increase) - Slightly wider spread
+- **Threshold:** 0.5 → 0.85 (70% increase) - Only bright areas glow (prevents dim objects from glowing)
+
+### Additional Improvements (User-Applied)
+
+**Star Mesh Rotation and Uniform Updates** (found in diff):
+- Added star mesh rotation for dynamic surface activity
+- Added uniform update infrastructure for future shader improvements
+- Rotation speed: 0.0005 rad/frame (subtle, half speed of temp demo)
+- Time-based `u_time` uniform for surface activity animation
+- Camera position tracking for view-dependent effects (future-proof)
+
+### Files Modified
+
+1. **ThreeSceneManager.tsx**
+   - Updated bloom parameters (lines 192-200)
+   - Added star mesh rotation (lines 431-473)
+   - Added uniform update system for stars
+
+### Git Commit
+
+**Commit:** 4da2226
+**Message:** ✨ IMPROVE: Enhance star bloom and add rotation
+
+**Changes:**
+- 1 file changed
+- 24 insertions
+- 4 deletions
+
+### Success Criteria
+
+- ✅ Bloom parameters match reference demo values
+- ✅ No impact on procedural generation system (architecturally guaranteed)
+- ✅ Star rotation infrastructure added for future shader improvements
+- ⏳ Visual verification pending (user must reload browser and test)
+
+### Expected Visual Results
+
+**Before:**
+- Stars had moderate glow
+- Bloom applied to both bright and dim areas (low threshold)
+- Subtle, conservative appearance
+
+**After:**
+- Stars have dramatic, intense glow
+- Only brightest areas (stars) glow (high threshold)
+- Matches reference demo appearance
+- More cinematic, impressive visual impact
+
+### Technical Notes
+
+**Bloom Threshold Strategy:**
+- **Low threshold (0.5):** Everything glows slightly, even planets
+- **High threshold (0.85):** Only emissive stars glow, planets don't
+- High threshold + high strength = dramatic star-only glow
+
+**Star Rotation:**
+- Added for visual dynamism and future shader improvements
+- Rotates on Y-axis (vertical)
+- Speed calibrated to be subtle (not distracting)
+- Enables time-based surface features (sunspots, flares) in future
+
+### Future Enhancements (Not Implemented)
+
+**Additional star shader features identified:**
+1. Surface activity/sunspots (noise-based dark spots)
+2. Center brightness multiplier (brighter core)
+3. Enhanced limb darkening
+4. Temperature-based color gradients (white→yellow→orange→red)
+
+**Status:** Deferred to future sessions based on user priorities
+
+### Final Decision
+
+**User Evaluation:** Bloom re-enabled and approved
+- Initial concern: Scene-wide bloom might affect all objects
+- Tested with high threshold (0.85) - primarily affects bright stars
+- User decision: Keep bloom enabled
+
+**Current State:**
+- ✅ Bloom active (strength 2.3, radius 0.8, threshold 0.85)
+- ✅ High threshold minimizes effect on planets/moons
+- ✅ Dramatic star glow matches reference demo aesthetic
+- 🎯 Bloom stays enabled for production
+
+**Git History:**
+- Commit 4da2226: Initial bloom enhancement
+- Commit 2759ac1: Temporarily disabled for evaluation
+- Commit 70f5891: Re-enabled after user approval
+
+### Git Repository Setup
+
+**GitHub Remote Configured:**
+- Repository: https://github.com/jweese001/khora-engine.git
+- Remote name: `origin`
+
+**All Branches Synchronized:**
+- ✅ `main` - Force-pushed (Phase 1 complete with v1.0.1 tag)
+- ✅ `feature/phase-2-galaxy` - Current branch (Session 15 work)
+- ✅ `bugfix/geometry-overlap` - Geometry overlap fixes
+- ✅ `feature/m6-ide-integration` - IDE integration complete
+- ✅ `polish/phase-1-ui-ux` - UI/UX improvements
+
+**Branch Tracking Configured:**
+All local branches now track remote counterparts for simplified workflow.
+
+### Session 15 Summary
+
+**Completed:**
+- ✅ Analyzed star rendering differences vs reference demo
+- ✅ Explained architectural separation (generation/rendering/post-processing)
+- ✅ Enhanced bloom parameters (strength 2.3, threshold 0.85)
+- ✅ User evaluated and approved bloom effect
+- ✅ Configured GitHub remote and synchronized all branches
+- ✅ Documentation updated
+
+**Final State:**
+- Bloom: Enabled (dramatic star glow with high threshold)
+- Star rotation: Active (0.0005 rad/frame)
+- Repository: Fully synchronized with GitHub
+- Ready for next development phase
+
+### Next Steps
+
+1. 🎯 Ready for next development priorities
+2. ✅ Bloom configuration finalized
+3. ✅ GitHub repository fully synchronized
+
+---
+
 ## Session 13: Acceptance Testing & Validation (November 11, 2025)
 
 **Status:** ✅ **COMPLETE** - All acceptance tests passed!
@@ -928,9 +1280,154 @@ server: {
 
 ---
 
-## Phase 3 Planning: Architect Mode (Future)
+## Phase 3: Architect Mode Implementation (November 11, 2025)
 
-**Note:** This section documents future work identified during M5 (Procedural Shaders) development.
+**Status:** ✅ **COMPLETE** - Live Shader Parameter Editing System Implemented
+
+### Session Summary
+
+**Goal:** Implement live shader parameter editing without regenerating systems
+
+**Completed:**
+- ✅ Analyzed shader uniform system and identified all editable parameters
+- ✅ Installed `react-colorful` color picker library
+- ✅ Created `ShaderControls.tsx` component with categorized controls
+- ✅ Implemented uniform override system in store (`uniformOverrides` Map)
+- ✅ Added 'Controls' tab to IDE panel
+- ✅ Implemented real-time uniform updates in ThreeSceneManager
+- ✅ Connected store changes to automatic scene updates via CanvasContainer
+- ✅ Added material registry to track LOD objects and direct materials
+- ✅ Automatic hex color conversion to THREE.Vector3
+
+### Implementation Details
+
+#### 1. ShaderControls Component (`src/components/IDE/ShaderControls.tsx`)
+- **Type-specific controls:** Different UIs for stars, rocky planets, gas giants, and moons
+- **Control types:** Color pickers (HexColorPicker), range sliders, numeric inputs
+- **Categorized sections:** Surface Activity, Center Gradient, Limb Darkening (stars), Surface Properties, Water/Atmosphere (planets), Band Colors (gas giants)
+- **Real-time preview:** Changes applied instantly as sliders/colors are adjusted
+- **Reset button:** Revert to procedural defaults
+
+#### 2. Store Integration (`src/store/system-store.ts`)
+- Added `uniformOverrides: Map<string, UniformOverrides>` to track custom uniform values per object
+- Implemented three new actions:
+  - `updateUniform(objectId, uniformName, value)` - Store custom value
+  - `resetObjectUniforms(objectId)` - Clear all overrides
+  - `getObjectUniforms(objectId)` - Retrieve current overrides
+
+#### 3. Material Registry System (`src/components/Canvas/ThreeSceneManager.tsx`)
+- Added `private materialRegistry: Map<string, THREE.Material>` to track all celestial body materials
+- **Star materials:** Registered during `renderSystem()` as direct THREE.Material references
+- **Planet/Moon materials:** Registered as `CelestialBodyLOD` objects (handles all 3 LOD levels)
+- **Auto-cleanup:** Registry cleared when system changes
+- Implemented `updateObjectUniforms()` method that:
+  - Finds material/LOD object in registry
+  - Updates uniforms for LOD objects (all 3 detail levels) or direct materials (stars)
+  - Handles automatic hex color string to THREE.Vector3 conversion
+
+#### 4. LOD Material Updates (`src/rendering/CelestialBodyLOD.ts`)
+- Added `private materials: THREE.Material[]` to store all LOD level materials
+- Modified constructor to capture material references during LOD level creation
+- Implemented two new public methods:
+  - `getMaterials()` - Access all materials for inspection
+  - `updateUniform(uniformName, value)` - Update uniform across all LOD levels with color conversion
+
+#### 5. Real-time Updates (`src/components/Canvas/CanvasContainer.tsx`)
+- Added `useEffect` hook watching `uniformOverrides` Map from store
+- Automatically applies all uniform changes to scene materials
+- Iterates through objects with overrides and calls `sceneManager.updateObjectUniforms()`
+
+### Editable Shader Parameters
+
+**Star Shaders:**
+- Surface Activity: `u_activityLevel` (0-1), `u_activityScale` (1-10), `u_activitySpeed` (0-1)
+- Center Gradient: `u_gradientStrength` (0-2), `u_gradientFalloff` (0.5-3), `u_gradientOpacity` (0-1), `u_centerColor` (RGB)
+- Limb Darkening: `u_limbDarkeningPower` (0.5-5), `u_centerBrightness` (0.5-2)
+- Colors: `u_starColor` (RGB), `u_noiseColor` (RGB)
+
+**Rocky/Barren Planets:**
+- Surface: `u_baseColor` (RGB)
+- Water: `u_waterCoverage` (0-1)
+- Atmosphere: `u_atmosphereDensity` (0-1), `u_atmosphereColor` (RGB)
+
+**Gas/Ice Giants:**
+- Bands: `u_bandColor1` (RGB), `u_bandColor2` (RGB), `u_bandColor3` (RGB)
+- Structure: `u_bandCount` (3-15), `u_turbulence` (0-1)
+
+**Moons:**
+- Surface: `u_baseColor` (RGB)
+
+### Technical Architecture
+
+**Data Flow:**
+1. User adjusts slider/color in ShaderControls → `onUniformChange(uniformName, value)`
+2. IDEPanel handler → calls store's `updateUniform(objectId, uniformName, value)`
+3. Store updates → modifies `uniformOverrides` Map, triggers React re-render
+4. CanvasContainer effect → detects Map change, calls `sceneManager.updateObjectUniforms()`
+5. ThreeSceneManager → finds material/LOD in registry, applies uniform update
+   - For LOD objects: updates all 3 detail levels via `CelestialBodyLOD.updateUniform()`
+   - For direct materials: updates THREE.ShaderMaterial uniforms directly
+6. Three.js → renders next frame with new values (instant visual feedback)
+
+**Key Features:**
+- **LOD consistency:** All 3 detail levels updated simultaneously, no visual popping
+- **Automatic color conversion:** Hex strings from color picker automatically converted to THREE.Vector3
+- **Type safety:** Proper handling of both LOD objects and direct materials
+- **Performance:** Only updates changed uniforms, minimal overhead
+- **Memory management:** Registry cleared when system changes
+
+### Files Modified/Created
+
+**Created:**
+- `src/components/IDE/ShaderControls.tsx` (500+ lines) - Main UI component
+
+**Modified:**
+- `src/store/system-store.ts` - Added uniform override state and actions
+- `src/components/IDE/IDEPanel.tsx` - Added Controls tab and wrapper component
+- `src/rendering/CelestialBodyLOD.ts` - Added material tracking and update methods
+- `src/components/Canvas/ThreeSceneManager.tsx` - Added material registry and update system
+- `src/components/Canvas/CanvasContainer.tsx` - Connected store to scene updates
+- `package.json` - Installed react-colorful dependency
+
+### Success Criteria
+
+- ✅ Click celestial body → IDE shows relevant shader parameters
+- ✅ Adjust slider → shader updates in real-time (no regeneration needed)
+- ✅ Change color → color updates instantly across all LOD levels
+- ✅ Reset button → reverts to procedural defaults
+- ✅ Works for all object types (stars, planets, moons, gas giants)
+- ✅ No visual artifacts or LOD popping during updates
+- ✅ Performance maintained (uniform updates are fast)
+
+### Benefits
+
+**Development Workflow:**
+- Dramatically faster shader iteration (no code recompile needed)
+- Visual feedback is instant (see changes as you adjust)
+- Can explore parameter space interactively
+- Easy to find "sweet spot" values for visual quality
+
+**User Experience:**
+- Creative control over procedural systems
+- Can customize planets while preserving deterministic base
+- Overrides saved per object (don't affect other planets)
+- Non-destructive editing (reset anytime)
+
+### Future Enhancements (Phase 3+)
+
+**Potential additions:**
+- [ ] Save/load customized systems with overrides
+- [ ] Export shader presets (share parameter sets)
+- [ ] "Apply to All" button (apply settings to all similar objects)
+- [ ] Undo/redo system for parameter changes
+- [ ] Shader preset library
+- [ ] Parameter randomization within safe ranges
+
+---
+
+## Phase 3 Planning: Architect Mode (Original Vision)
+
+**Note:** This section documents the original vision identified during M5 (Procedural Shaders) development. The core implementation is now complete (see above).
 
 ### Key Insight from M5 Development
 

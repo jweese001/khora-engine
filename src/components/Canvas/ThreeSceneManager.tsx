@@ -13,9 +13,11 @@ import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import type { StarSystem } from '../../types/celestial-bodies';
+import type { Galaxy } from '../../types/galaxy';
 import { createStarMesh, createStarLight, calculateSceneUnitsPerSolarRadius } from '../../rendering/StarRenderer';
 import { createTypedOrbitLine } from '../../rendering/OrbitRenderer';
 import { CelestialBodyLOD } from '../../rendering/CelestialBodyLOD';
+import { GalaxyRenderer } from '../../rendering/GalaxyRenderer';
 
 // ============================================================================
 // ThreeSceneManager Class
@@ -41,6 +43,17 @@ export class ThreeSceneManager {
   // Raycasting for object selection
   private raycaster: THREE.Raycaster;
   private mouse: THREE.Vector2;
+
+  // Galaxy rendering (Phase 2)
+  private galaxyRenderer: GalaxyRenderer;
+  private currentViewMode: 'system' | 'galaxy' = 'system';
+
+  // Material tracking (Phase 3: Architect Mode)
+  // Maps object ID -> THREE.Material for live uniform updates
+  private materialRegistry: Map<string, THREE.Material> = new Map();
+
+  // Debug mode (toggle with D key)
+  private debugMode: number = 0; // 0=normal, 1-7=debug visualizations
 
   /**
    * Initialize Three.js scene manager
@@ -76,6 +89,9 @@ export class ThreeSceneManager {
 
     // Create controls
     this.controls = this.createControls();
+
+    // Initialize galaxy renderer (Phase 2)
+    this.galaxyRenderer = new GalaxyRenderer();
 
     // Add starfield background
     this.addStarfield();
@@ -174,12 +190,12 @@ export class ThreeSceneManager {
     composer.addPass(renderPass);
 
     // Add bloom pass for star glow
-    // VERY LOW threshold + moderate strength
+    // Match reference demo: strong bloom for dramatic star glow
     const bloomPass = new UnrealBloomPass(
       new THREE.Vector2(window.innerWidth, window.innerHeight),
-      0.9,  // strength - moderate
-      0.7,  // radius
-      0.5   // threshold - VERY LOW (even dim areas will glow slightly)
+      2.3,  // strength - strong (matches reference demo)
+      0.8,  // radius - matches reference demo
+      0.85  // threshold - high (only brightest areas glow)
     );
     composer.addPass(bloomPass);
 
@@ -261,7 +277,7 @@ export class ThreeSceneManager {
   // ==========================================================================
 
   /**
-   * Set up event listeners for window resize and object selection
+   * Set up event listeners for window resize, object selection, and debug controls
    */
   private setupEventListeners(): void {
     // Window resize
@@ -269,6 +285,9 @@ export class ThreeSceneManager {
 
     // Object selection (click)
     this.renderer.domElement.addEventListener('click', this.handleClick);
+
+    // Debug mode toggle (press D key)
+    window.addEventListener('keydown', this.handleKeyDown);
   }
 
   /**
@@ -301,6 +320,20 @@ export class ThreeSceneManager {
     // Update raycaster
     this.raycaster.setFromCamera(this.mouse, this.camera);
 
+    // In galaxy view, raycast against galaxy system markers
+    if (this.currentViewMode === 'galaxy') {
+      const systemObjects = this.galaxyRenderer.getSystemObjects();
+      const intersects = this.raycaster.intersectObjects(systemObjects, false);
+
+      if (intersects.length > 0 && this.onObjectSelected) {
+        const selectedObject = intersects[0].object;
+        console.log('[ThreeSceneManager] Galaxy system selected:', selectedObject.userData);
+        this.onObjectSelected(selectedObject.userData);
+      }
+      return;
+    }
+
+    // In system view, raycast against celestial bodies
     // Check for intersections (exclude starfield and orbit lines)
     const intersects = this.raycaster.intersectObjects(
       this.scene.children.filter((obj) =>
@@ -338,12 +371,50 @@ export class ThreeSceneManager {
     }
   };
 
+  /**
+   * Handle keyboard input for debug controls
+   */
+  private handleKeyDown = (event: KeyboardEvent): void => {
+    // Press D to cycle through debug modes
+    if (event.key === 'd' || event.key === 'D') {
+      this.debugMode = (this.debugMode + 1) % 8; // Cycle 0-7
+
+      const debugModeNames = [
+        'Normal Rendering',
+        'Diffuse Only (Day/Night)',
+        'World-Space Normals',
+        'Light Direction',
+        'View Direction',
+        'Surface Facing Light',
+        'Distance to Light',
+        'World Positions'
+      ];
+
+      console.log(`[DEBUG] Mode ${this.debugMode}: ${debugModeNames[this.debugMode]}`);
+
+      // Update all planet materials with new debug mode
+      this.scene.traverse((object) => {
+        if (object instanceof THREE.LOD) {
+          object.levels.forEach((level) => {
+            const mesh = level.object as THREE.Mesh;
+            if (mesh.material && (mesh.material as THREE.ShaderMaterial).uniforms) {
+              const material = mesh.material as THREE.ShaderMaterial;
+              if (material.uniforms.u_debugMode) {
+                material.uniforms.u_debugMode.value = this.debugMode;
+              }
+            }
+          });
+        }
+      });
+    }
+  };
+
   // ==========================================================================
   // Animation Loop
   // ==========================================================================
 
   /**
-   * Main animation loop - updates controls and renders scene
+   * Main animation loop - updates controls, shader uniforms, and renders scene
    */
   private animate = (): void => {
     this.animationFrameId = requestAnimationFrame(this.animate);
@@ -356,10 +427,50 @@ export class ThreeSceneManager {
     // not from (0,0,0). Without this, all planets use the same LOD level.
     this.scene.updateMatrixWorld();
 
-    // Update LOD levels based on camera distance to each object's world position
+    // Update shader uniforms for all celestial bodies
+    // CRITICAL: Camera position must be updated every frame for correct lighting and atmosphere
+    const time = performance.now() * 0.001; // Convert to seconds
     this.scene.traverse((object) => {
+      // Update LOD objects (planets, moons)
       if (object instanceof THREE.LOD) {
         object.update(this.camera);
+
+        // Update shader uniforms for all LOD levels
+        object.levels.forEach((level) => {
+          const mesh = level.object as THREE.Mesh;
+          if (mesh.material && (mesh.material as THREE.ShaderMaterial).uniforms) {
+            const material = mesh.material as THREE.ShaderMaterial;
+
+            // Update camera position for view-dependent effects (atmosphere, specular)
+            if (material.uniforms.u_cameraPosition) {
+              material.uniforms.u_cameraPosition.value.copy(this.camera.position);
+            }
+
+            // Update time for animated effects
+            if (material.uniforms.u_time) {
+              material.uniforms.u_time.value = time;
+            }
+          }
+        });
+      }
+
+      // Update star mesh (regular Mesh, not LOD)
+      if (object.name === 'star' && object instanceof THREE.Mesh) {
+        const material = object.material as THREE.ShaderMaterial;
+        if (material.uniforms) {
+          // Update time for surface activity animation
+          if (material.uniforms.u_time) {
+            material.uniforms.u_time.value = time;
+          }
+
+          // Update camera position (not currently used in star shader, but future-proof)
+          if (material.uniforms.u_cameraPosition) {
+            material.uniforms.u_cameraPosition.value.copy(this.camera.position);
+          }
+        }
+
+        // Add subtle rotation for additional dynamism (like sunspot/feature rotation)
+        object.rotation.y += 0.0005; // Half speed of temp demo for subtlety
       }
     });
 
@@ -379,7 +490,7 @@ export class ThreeSceneManager {
   public renderSystem(system: StarSystem): void {
     console.log('[ThreeSceneManager] Rendering system:', system.name);
 
-    // Clear existing system objects
+    // Clear existing system objects (also clears material registry)
     this.clearSystemObjects();
 
     // Star-relative scaling system:
@@ -468,6 +579,12 @@ export class ThreeSceneManager {
     starMesh.name = 'star';
     this.scene.add(starMesh);
 
+    // Register star material for Phase 3 live editing
+    if (starMesh.material) {
+      this.materialRegistry.set(system.star.id, starMesh.material as THREE.Material);
+      console.log(`[ThreeSceneManager] Registered star material: ${system.star.id}`);
+    }
+
     // Add star lighting for planets
     const starLights = createStarLight(system.star, 3.0);
     starLights.name = 'star-lights';
@@ -499,32 +616,31 @@ export class ThreeSceneManager {
         data: planet
       };
 
-      // Create planet with LOD (pass camera for shader uniforms)
+      // Star position in world space (at origin)
+      const starPositionWorld = new THREE.Vector3(0, 0, 0);
+
+      // Create planet with LOD (pass camera and habitable zone for intelligent shader parameters)
       const planetLOD = new CelestialBodyLOD(
         planet,
         'planet',
         sceneUnitsPerSolarRadius,
         undefined, // No parent planet for planets
-        this.camera // Pass camera for atmosphere effects
+        this.camera, // Pass camera for atmosphere effects
+        system.star.habitableZone, // Pass habitable zone for intelligent parameter mapping
+        starPositionWorld // Star position in world coordinate system
       );
       planetLOD.object.name = `planet-${planetIndex}`;
       planetSystemGroup.add(planetLOD.object);
+
+      // Register planet LOD for Phase 3 live editing
+      this.materialRegistry.set(planet.id, planetLOD as any); // Store LOD object, not material
+      console.log(`[ThreeSceneManager] Registered planet LOD: ${planet.id}`);
 
       // Calculate planet visual radius using the helper function (ensures consistency)
       const planetVisualRadius = calcPlanetVisualRadius(planet);
 
       // Create moons with LOD and add as children
       planet.moons.forEach((moon, moonIndex) => {
-        const moonLOD = new CelestialBodyLOD(
-          moon,
-          'moon',
-          sceneUnitsPerSolarRadius,
-          planet, // Parent planet required for moon renderer
-          this.camera // Pass camera for shader uniforms
-        );
-
-        moonLOD.object.name = `moon-${planetIndex}-${moonIndex}`;
-
         // CRITICAL: Keep moons TIGHT around planet (within Hill sphere)
         // Position moons in concentric shells from 1.5× to 2.5× planet radius
         // This ensures they stay within planet's gravitational sphere of influence
@@ -540,13 +656,31 @@ export class ThreeSceneManager {
 
         // Distribute moons evenly around planet
         const angle = (moonIndex / planet.moons.length) * Math.PI * 2;
-        moonLOD.object.position.set(
-          Math.cos(angle) * moonOrbitSceneUnits,
-          0,
-          Math.sin(angle) * moonOrbitSceneUnits
+        const moonLocalX = Math.cos(angle) * moonOrbitSceneUnits;
+        const moonLocalZ = Math.sin(angle) * moonOrbitSceneUnits;
+
+        // Star position in world space (at origin) - same for all moons
+        const starPositionWorld = new THREE.Vector3(0, 0, 0);
+
+        const moonLOD = new CelestialBodyLOD(
+          moon,
+          'moon',
+          sceneUnitsPerSolarRadius,
+          planet, // Parent planet required for moon renderer
+          this.camera, // Pass camera for shader uniforms
+          undefined, // Moons don't use habitable zone in shader
+          starPositionWorld // Star position in world coordinate system
         );
 
+        moonLOD.object.name = `moon-${planetIndex}-${moonIndex}`;
+
+        moonLOD.object.position.set(moonLocalX, 0, moonLocalZ);
+
         planetSystemGroup.add(moonLOD.object);
+
+        // Register moon LOD for Phase 3 live editing
+        this.materialRegistry.set(moon.id, moonLOD as any); // Store LOD object, not material
+        console.log(`[ThreeSceneManager] Registered moon LOD: ${moon.id}`);
       });
 
       // Add the complete planet system to scene
@@ -594,6 +728,104 @@ export class ThreeSceneManager {
     );
   }
 
+  // ==========================================================================
+  // Galaxy Rendering (Phase 2)
+  // ==========================================================================
+
+  /**
+   * Render a galaxy in the scene (Phase 2)
+   * Switches to galaxy view mode
+   *
+   * @param galaxy - Galaxy to render
+   */
+  public renderGalaxy(galaxy: Galaxy): void {
+    console.log('[ThreeSceneManager] Rendering galaxy:', galaxy.name, `(${galaxy.systemCount} systems)`);
+
+    // Clear existing system objects (keep starfield)
+    this.clearSystemObjects();
+
+    // Clear previous galaxy rendering
+    const previousGalaxyGroup = this.scene.getObjectByName('GalaxyGroup');
+    if (previousGalaxyGroup) {
+      this.scene.remove(previousGalaxyGroup);
+    }
+
+    // Render galaxy
+    this.galaxyRenderer.renderGalaxy(galaxy);
+
+    // Add galaxy group to scene
+    const galaxyGroup = this.galaxyRenderer.getGroup();
+    this.scene.add(galaxyGroup);
+
+    // Switch to galaxy view mode
+    this.currentViewMode = 'galaxy';
+
+    // Position camera to view entire galaxy
+    this.focusOnGalaxy(galaxy);
+
+    console.log('[ThreeSceneManager] Galaxy rendered successfully');
+  }
+
+  /**
+   * Adjust camera to view the entire galaxy
+   * @param galaxy - Galaxy to focus on
+   */
+  private focusOnGalaxy(galaxy: Galaxy): void {
+    // Determine galaxy bounding radius based on type
+    let galaxyRadius = 100; // Default
+
+    if (galaxy.spiralParams) {
+      galaxyRadius = galaxy.spiralParams.diskRadius;
+    } else if (galaxy.ellipticalParams) {
+      galaxyRadius = galaxy.ellipticalParams.majorAxis;
+    } else if (galaxy.irregularParams) {
+      galaxyRadius = galaxy.irregularParams.boundingRadius;
+    }
+
+    // Position camera to view the whole galaxy
+    const cameraDistance = galaxyRadius * 2.5;
+
+    this.camera.position.set(
+      cameraDistance * 0.5,
+      cameraDistance * 0.8, // Higher angle for better overview
+      cameraDistance
+    );
+    this.camera.lookAt(0, 0, 0);
+
+    // Update controls target and limits for galaxy scale
+    this.controls.target.set(0, 0, 0);
+    this.controls.minDistance = galaxyRadius * 0.1;
+    this.controls.maxDistance = galaxyRadius * 5;
+    this.controls.update();
+
+    console.log(
+      `[ThreeSceneManager] Camera focused on galaxy (radius: ${galaxyRadius.toFixed(2)} light-years)`
+    );
+  }
+
+  /**
+   * Switch back from galaxy view to system view
+   */
+  public switchToSystemView(): void {
+    console.log('[ThreeSceneManager] Switching to system view');
+
+    // Clear galaxy rendering
+    const galaxyGroup = this.scene.getObjectByName('GalaxyGroup');
+    if (galaxyGroup) {
+      this.scene.remove(galaxyGroup);
+    }
+    this.galaxyRenderer.clear();
+
+    // Reset camera controls for system scale
+    this.controls.minDistance = 5;
+    this.controls.maxDistance = 5000;
+
+    // Switch view mode
+    this.currentViewMode = 'system';
+
+    console.log('[ThreeSceneManager] Switched to system view');
+  }
+
   /**
    * Clear all system objects from scene (keep starfield)
    */
@@ -612,6 +844,9 @@ export class ThreeSceneManager {
       this.scene.remove(object);
       this.disposeObjectRecursive(object);
     });
+
+    // Clear material registry (Phase 3)
+    this.materialRegistry.clear();
 
     console.log('[ThreeSceneManager] System objects cleared');
   }
@@ -672,6 +907,59 @@ export class ThreeSceneManager {
   }
 
   /**
+   * Get current view mode (system or galaxy)
+   */
+  public getViewMode(): 'system' | 'galaxy' {
+    return this.currentViewMode;
+  }
+
+  // ==========================================================================
+  // Phase 3: Architect Mode - Live Shader Editing
+  // ==========================================================================
+
+  /**
+   * Update shader uniform for a celestial body (Phase 3: Architect Mode)
+   *
+   * @param objectId - ID of the celestial body (star, planet, or moon)
+   * @param uniformName - Name of the shader uniform to update
+   * @param value - New value for the uniform
+   */
+  public updateObjectUniforms(objectId: string, uniformName: string, value: any): void {
+    const entry = this.materialRegistry.get(objectId);
+
+    if (!entry) {
+      console.warn(`[ThreeSceneManager] No material found for object: ${objectId}`);
+      return;
+    }
+
+    // Check if entry is a LOD object (planets/moons) or direct material (stars)
+    if (entry instanceof CelestialBodyLOD) {
+      // LOD object - update all LOD level materials
+      entry.updateUniform(uniformName, value);
+      console.log(`[ThreeSceneManager] Updated LOD uniform ${uniformName} for ${objectId}`);
+    } else if (entry instanceof THREE.Material) {
+      // Direct material (star) - update single material
+      if (entry instanceof THREE.ShaderMaterial) {
+        // Check if uniform exists
+        if (!entry.uniforms[uniformName]) {
+          console.warn(`[ThreeSceneManager] Uniform ${uniformName} not found in material for ${objectId}`);
+          return;
+        }
+
+        // Handle color conversion from hex string
+        if (typeof value === 'string' && value.startsWith('#')) {
+          const color = new THREE.Color(value);
+          entry.uniforms[uniformName].value.set(color.r, color.g, color.b);
+        } else {
+          entry.uniforms[uniformName].value = value;
+        }
+        entry.uniformsNeedUpdate = true;
+        console.log(`[ThreeSceneManager] Updated material uniform ${uniformName} for ${objectId}`);
+      }
+    }
+  }
+
+  /**
    * Dispose of scene manager - clean up resources
    */
   public dispose(): void {
@@ -685,10 +973,14 @@ export class ThreeSceneManager {
 
     // Remove event listeners
     window.removeEventListener('resize', this.handleResize);
+    window.removeEventListener('keydown', this.handleKeyDown);
     this.renderer.domElement.removeEventListener('click', this.handleClick);
 
     // Dispose controls
     this.controls.dispose();
+
+    // Dispose galaxy renderer (Phase 2)
+    this.galaxyRenderer.dispose();
 
     // Clear scene
     this.clearSystemObjects();

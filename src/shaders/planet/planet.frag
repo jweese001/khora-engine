@@ -1,0 +1,546 @@
+//
+// Planet Fragment Shader (Unified - Rocky/Gas/Ice)
+// Three rendering modes: 0=Rocky, 1=Gas Giant, 2=Ice Giant
+//
+
+#include "../common/noise.glsl"
+
+uniform float u_time;
+uniform vec3 u_lightPosition;
+uniform vec3 u_cameraPosition;
+uniform int u_planetMode; // 0=Rocky, 1=Gas, 2=Ice
+uniform int u_debugMode; // 0=normal, 1=diffuse, 2=normals, 3=lightDir, 4=viewDir
+
+// Terrain
+uniform float u_terrainScale;
+uniform float u_terrainRoughness;
+uniform float u_craterDensity;
+uniform float u_continentSize;
+uniform float u_biomeVariation;
+uniform vec3 u_baseColor;
+uniform vec3 u_mountainColor;
+uniform vec3 u_lowlandColor;
+uniform vec3 u_desertColor;
+
+// Water
+uniform float u_waterCoverage;
+uniform float u_waterSpeed;
+uniform vec3 u_waterColor;
+
+// Ice Caps
+uniform float u_iceSize;
+uniform float u_iceRoughness;
+uniform vec3 u_iceColor;
+
+// Atmosphere
+uniform float u_atmosphereDensity;
+uniform vec3 u_atmosphereColor;
+
+// Clouds
+uniform float u_cloudCoverage;
+uniform float u_cloudSpeed;
+uniform float u_cloudNoiseType;
+uniform float u_cloudDepth;
+uniform float u_cloudShadow;
+uniform vec3 u_cloudColor;
+
+// Gas Giant
+uniform float u_bandCount;
+uniform float u_turbulence;
+uniform float u_bandSpeed;
+uniform float u_stormIntensity;
+uniform vec3 u_stormColor;
+
+varying vec3 vNormal;
+varying vec3 vPosition;       // Local space position for noise (radius 1.0)
+varying vec3 vWorldPosition;  // World space position for lighting
+varying vec2 vUv;
+varying vec3 vViewPosition;
+
+// ============================================================================
+// Fractal Brownian Motion
+// ============================================================================
+float fbm(vec3 p, int octaves, float roughness) {
+  float value = 0.0;
+  float amplitude = 1.0;
+  float frequency = 1.0;
+  float maxValue = 0.0;
+
+  for(int i = 0; i < 8; i++) {
+    if(i >= octaves) break;
+    value += amplitude * simplex3D(p * frequency);
+    maxValue += amplitude;
+    amplitude *= roughness;
+    frequency *= 2.0;
+  }
+
+  return value / maxValue;
+}
+
+// ============================================================================
+// Crater Generation
+// ============================================================================
+float craterNoise(vec3 p, float density) {
+  if(density < 0.01) return 0.0;
+
+  float craters = 0.0;
+  // Multiple scales of craters
+  float large = fbm(p * 2.0, 2, 0.5);
+  float medium = fbm(p * 6.0, 2, 0.5);
+  float small = fbm(p * 15.0, 2, 0.5);
+
+  // Create crater-like depressions
+  large = pow(max(0.0, large), 2.0) * -1.0;
+  medium = pow(max(0.0, medium), 2.0) * -0.5;
+  small = pow(max(0.0, small), 2.0) * -0.25;
+
+  craters = (large + medium + small) * density;
+  return craters;
+}
+
+// ============================================================================
+// Cloud Noise Types
+// ============================================================================
+float getCloudNoise(vec3 p, float noiseType, float animTime) {
+  vec3 animPos = p + vec3(animTime * 0.2, animTime * 0.1, 0.0);
+
+  // Type 0: Smooth cirrus
+  if(noiseType < 0.5) {
+    return fbm(animPos * 3.0, 2, 0.4);
+  }
+  // Type 1: Fluffy cumulus
+  else if(noiseType < 1.5) {
+    float base = fbm(animPos * 2.5, 3, 0.6);
+    float detail = fbm(animPos * 8.0, 2, 0.5);
+    return pow(max(0.0, base), 1.5) + detail * 0.2;
+  }
+  // Type 2: Storm cells
+  else if(noiseType < 2.5) {
+    float cells = fbm(animPos * 1.8, 2, 0.7);
+    float turbulence = fbm(animPos * 6.0, 3, 0.6);
+    return pow(max(0.0, cells), 2.0) + turbulence * 0.3;
+  }
+  // Type 3: Weather fronts
+  else {
+    float fronts = fbm(animPos * vec3(4.0, 2.0, 4.0), 2, 0.5);
+    float swirls = fbm(animPos * 3.5 + vec3(0.0, animTime * 0.3, 0.0), 2, 0.6);
+    return fronts * 0.7 + swirls * 0.4;
+  }
+}
+
+// ============================================================================
+// Rocky/Terrestrial Planet Renderer
+// ============================================================================
+vec3 renderRockyPlanet() {
+  vec3 normal = normalize(vNormal);
+  vec3 lightDir = normalize(u_lightPosition - vWorldPosition);
+  vec3 viewDir = normalize(u_cameraPosition - vWorldPosition);
+
+  // Terrain elevation
+  float elevation = fbm(vPosition * u_terrainScale, 4, u_terrainRoughness);
+
+  // Add craters
+  float craters = craterNoise(vPosition, u_craterDensity);
+  elevation += craters;
+
+  // Adjust continent size - shifts elevation to create more/less land
+  // Range: -0.5 to 0.5, where positive = more land, negative = more water
+  elevation += (u_continentSize - 0.5);
+
+  // Base terrain color
+  vec3 terrainColor = u_baseColor;
+
+  // Biome-based color variation
+  if(u_biomeVariation > 0.0) {
+    // Calculate climate parameters
+    float latitude = abs(vPosition.y / length(vPosition));
+    float temperature = 1.0 - latitude; // Warmer at equator
+    temperature += elevation * 0.3; // Cooler at high elevations
+
+    // Regional moisture variation
+    float moisture = fbm(vPosition * 1.5, 3, 0.6) * 0.5 + 0.5;
+
+    // Use user-selected biome colors with variations
+    vec3 mountainColor = u_mountainColor;
+    vec3 lowlandColor = u_lowlandColor;
+    vec3 desertColor = u_desertColor;
+    vec3 tundraColor = mix(lowlandColor, vec3(0.6, 0.65, 0.6), 0.5); // Blend lowland with gray
+    vec3 forestColor = lowlandColor * 0.7; // Darker lowland color
+    vec3 grasslandColor = lowlandColor * 1.1; // Lighter lowland color
+
+    // Determine biome based on temperature and moisture
+    vec3 biomeColor = terrainColor;
+
+    if(elevation > 0.3) {
+      // High elevation = mountains
+      float mountainVar = fbm(vPosition * 5.0, 2, 0.5) * 0.3;
+      biomeColor = mix(mountainColor, mountainColor * 0.7, mountainVar);
+    } else if(temperature > 0.7 && moisture < 0.4) {
+      // Hot and dry = desert
+      float desertVar = fbm(vPosition * 4.0, 2, 0.5) * 0.2;
+      biomeColor = desertColor + vec3(desertVar);
+    } else if(temperature < 0.4) {
+      // Cold = tundra
+      biomeColor = mix(tundraColor, tundraColor * 0.8, moisture);
+    } else if(moisture > 0.6 && temperature > 0.5) {
+      // Warm and wet = forest
+      float forestShade = fbm(vPosition * 6.0, 2, 0.5) * 0.3;
+      biomeColor = mix(forestColor, forestColor * 0.6, forestShade);
+    } else if(moisture > 0.4) {
+      // Moderate moisture = grassland
+      float grassVar = fbm(vPosition * 3.0, 2, 0.5) * 0.2;
+      biomeColor = mix(grasslandColor, grasslandColor * 0.9, grassVar);
+    } else {
+      // Dry temperate = light grassland/steppe
+      biomeColor = mix(grasslandColor, desertColor, 0.5);
+    }
+
+    // Blend biome color with base color based on variation strength
+    terrainColor = mix(terrainColor, biomeColor, u_biomeVariation);
+
+    // Add subtle noise variation
+    float colorVar = fbm(vPosition * 5.0, 2, 0.5) * 0.1;
+    terrainColor += vec3(colorVar);
+  } else {
+    // Simple color variation when biomes disabled
+    float colorVar = fbm(vPosition * 5.0, 2, 0.5) * 0.2;
+    terrainColor += vec3(colorVar);
+
+    // Height-based color variation
+    if(elevation > 0.2) {
+      terrainColor *= 0.8; // Darker mountains
+    } else if(elevation < -0.1) {
+      terrainColor *= 1.1; // Lighter valleys
+    }
+  }
+
+  // Basic lighting (dramatic shadows in space)
+  float diffuse = max(0.0, dot(normal, lightDir));
+  terrainColor *= (0.03 + diffuse * 0.97);
+
+  vec3 finalColor = terrainColor;
+
+  // Water layer
+  if(u_waterCoverage > 0.0 && elevation < (u_waterCoverage - 0.5)) {
+    vec3 waterColor = u_waterColor;
+
+    // Animated waves
+    float waveTime = u_time * u_waterSpeed;
+    vec3 wavePos = vPosition * 8.0 + vec3(waveTime * 0.5);
+    float waves = fbm(wavePos, 3, 0.5) * 0.1;
+    waterColor += vec3(waves);
+
+    // Water lighting (dark on shadow side)
+    float waterDiffuse = max(0.0, dot(normal, lightDir));
+    waterColor *= (0.02 + waterDiffuse * 0.98);
+
+    // Very subtle specular highlight (only on light-facing surfaces)
+    vec3 halfVector = normalize(lightDir + viewDir);
+    float specular = pow(max(0.0, dot(normal, halfVector)), 64.0);
+    // Only apply specular if surface faces the light - very subtle
+    waterColor += vec3(specular * 0.1 * step(0.0, waterDiffuse));
+
+    finalColor = waterColor;
+  }
+
+  // Ice Caps
+  if(u_iceSize > 0.0) {
+    float latitude = vPosition.y / length(vPosition);
+    float iceThreshold = 1.0 - u_iceSize;
+    float iceFactor = smoothstep(iceThreshold - 0.1, iceThreshold, abs(latitude));
+
+    if(iceFactor > 0.01) {
+      // Ice texture with noise
+      float iceNoise = fbm(vPosition * 8.0, 3, u_iceRoughness);
+      vec3 iceColor = u_iceColor + vec3(iceNoise * 0.1);
+
+      // Ice lighting (reflective but still shows shadows)
+      float diffuse = max(0.0, dot(normal, lightDir));
+      iceColor *= (0.05 + diffuse * 0.95);
+
+      // Very subtle ice specular (only on light-facing surfaces)
+      vec3 halfVector = normalize(lightDir + viewDir);
+      float specular = pow(max(0.0, dot(normal, halfVector)), 32.0);
+      // Only apply specular if surface faces the light - very subtle
+      iceColor += vec3(specular * 0.08 * step(0.0, diffuse));
+
+      finalColor = mix(finalColor, iceColor, iceFactor);
+    }
+  }
+
+  // Clouds with depth and shadows
+  float cloudMask = 0.0;
+  if(u_cloudCoverage > 0.0) {
+    float animTime = u_time * u_cloudSpeed;
+    float cloudNoise = getCloudNoise(vPosition, u_cloudNoiseType, animTime);
+
+    float bias = (u_cloudCoverage - 0.5);
+    cloudNoise = clamp(cloudNoise + bias, 0.0, 1.0);
+    cloudMask = smoothstep(0.35, 0.65, cloudNoise);
+
+    if(cloudMask > 0.01) {
+      vec3 cloudColor = u_cloudColor;
+      float cloudLighting = max(0.3, dot(normal, lightDir));
+
+      // 3D depth effect - clouds are thicker and darker at center
+      float cloudThickness = cloudMask * u_cloudDepth;
+      cloudColor *= mix(1.0, 0.7, cloudThickness);
+      cloudColor *= cloudLighting;
+
+      // Blend clouds over surface
+      finalColor = mix(finalColor, cloudColor, cloudMask * 0.85);
+    }
+
+    // Cloud shadows on surface below
+    if(u_cloudShadow > 0.0 && cloudMask < 0.95) {
+      // Sample clouds slightly offset (simulate sun angle)
+      vec3 shadowSamplePos = vPosition + lightDir * 0.15;
+      float shadowCloudNoise = getCloudNoise(shadowSamplePos, u_cloudNoiseType, animTime);
+
+      float bias = (u_cloudCoverage - 0.5);
+      shadowCloudNoise = clamp(shadowCloudNoise + bias, 0.0, 1.0);
+      float shadowMask = smoothstep(0.35, 0.65, shadowCloudNoise);
+
+      // Darken surface where clouds cast shadows
+      finalColor *= mix(1.0, 0.6, shadowMask * u_cloudShadow * (1.0 - cloudMask));
+    }
+  }
+
+  // Atmosphere glow
+  if(u_atmosphereDensity > 0.0) {
+    float viewDotNormal = dot(viewDir, normal);
+    // Only glow when surface faces camera
+    float fresnel = pow(max(0.0, 1.0 - viewDotNormal), 3.0) * step(0.0, viewDotNormal);
+
+    // Subtle fade on dark side (prevents glare on backlit planets)
+    float lightDotNormal = dot(normal, lightDir);
+    float litSide = smoothstep(-0.2, 0.5, lightDotNormal);
+
+    vec3 atmosphereGlow = u_atmosphereColor * fresnel * u_atmosphereDensity * litSide;
+    finalColor += atmosphereGlow * 0.5;
+  }
+
+  return finalColor;
+}
+
+// ============================================================================
+// Gas Giant Renderer
+// ============================================================================
+vec3 renderGasGiant() {
+  vec3 normal = normalize(vNormal);
+  vec3 lightDir = normalize(u_lightPosition - vWorldPosition);
+  vec3 viewDir = normalize(u_cameraPosition - vWorldPosition);
+
+  // Latitude for horizontal bands
+  float latitude = vPosition.y / length(vPosition);
+
+  // Base band pattern (handle bandCount = 0)
+  float bands = 0.5;
+  if(u_bandCount > 0.0) {
+    bands = sin(latitude * u_bandCount * 3.14159) * 0.5 + 0.5;
+  }
+
+  // Normalize vPosition to radius 1.0 for consistent noise across all planet sizes
+  vec3 normPos = normalize(vPosition);
+
+  // Turbulence
+  vec3 turbPos = normPos + vec3(u_time * u_bandSpeed, 0.0, 0.0);
+  float turbulence = fbm(turbPos * 3.0, 4, 0.6) * u_turbulence;
+  bands += turbulence;
+
+  // Storm cells (Great Red Spot style)
+  float storms = 0.0;
+  if(u_stormIntensity > 0.0) {
+    // Larger scale for more prominent storm cells
+    float stormNoise = fbm(normPos * 1.8, 3, 0.7);
+    // Less aggressive power for more visible effect
+    storms = pow(max(0.0, stormNoise), 1.2) * u_stormIntensity * 1.5;
+  }
+
+  // Combine patterns
+  float pattern = clamp(bands + storms * 0.5, 0.0, 1.0);
+
+  // Color based on pattern (clamp to prevent white blowout)
+  vec3 color1 = u_baseColor;
+  vec3 color2 = u_baseColor * 0.6;
+  vec3 color3 = min(u_baseColor * 1.3, vec3(0.95)); // Clamp to prevent >1.0
+
+  vec3 gasColor;
+  if(pattern < 0.4) {
+    gasColor = mix(color2, color1, pattern / 0.4);
+  } else if(pattern < 0.7) {
+    gasColor = mix(color1, color3, (pattern - 0.4) / 0.3);
+  } else {
+    gasColor = mix(color3, color1, (pattern - 0.7) / 0.3);
+  }
+
+  // Storm color
+  // Lower threshold and stronger effect
+  if(storms > 0.15) {
+    float stormBlend = clamp((storms - 0.15) * 3.0, 0.0, 0.8);
+    gasColor = mix(gasColor, u_stormColor, stormBlend);
+  }
+
+  // Lighting (some atmospheric scattering but clear terminator)
+  float diffuse = max(0.0, dot(normal, lightDir));
+  gasColor *= (0.08 + diffuse * 0.92);
+
+  // Limb darkening
+  float limbDark = pow(max(0.0, dot(viewDir, normal)), 0.8);
+  gasColor *= mix(0.6, 1.0, limbDark);
+
+  // Atmospheric glow
+  if(u_atmosphereDensity > 0.0) {
+    float viewDotNormal = dot(viewDir, normal);
+    // Only glow when surface faces camera
+    float fresnel = pow(max(0.0, 1.0 - viewDotNormal), 3.0) * step(0.0, viewDotNormal);
+
+    // Subtle fade on dark side (prevents glare on backlit planets)
+    float lightDotNormal = dot(normal, lightDir);
+    float litSide = smoothstep(-0.2, 0.5, lightDotNormal);
+
+    vec3 glowColor = u_baseColor * 1.2;
+    gasColor += glowColor * fresnel * u_atmosphereDensity * 0.3 * litSide;
+  }
+
+  // Final clamp to prevent white blowout on bright-colored gas giants
+  gasColor = min(gasColor, vec3(0.90));
+
+  return gasColor;
+}
+
+// ============================================================================
+// Ice Giant Renderer (smoother bands, less turbulence)
+// ============================================================================
+vec3 renderIceGiant() {
+  vec3 normal = normalize(vNormal);
+  vec3 lightDir = normalize(u_lightPosition - vWorldPosition);
+  vec3 viewDir = normalize(u_cameraPosition - vWorldPosition);
+
+  float latitude = vPosition.y / length(vPosition);
+
+  // Smoother bands than gas giants (handle bandCount = 0)
+  float bands = 0.5;
+  if(u_bandCount > 0.0) {
+    bands = sin(latitude * u_bandCount * 3.14159) * 0.5 + 0.5;
+  }
+
+  // Normalize vPosition to radius 1.0 for consistent noise across all planet sizes
+  vec3 normPos = normalize(vPosition);
+
+  // Subtle turbulence (half speed for smoother ice giant effect)
+  vec3 turbPos = normPos + vec3(u_time * u_bandSpeed * 0.5, 0.0, 0.0);
+  float turbulence = fbm(turbPos * 2.0, 3, 0.5) * u_turbulence * 0.5;
+  bands += turbulence;
+
+  // Storm features (Great Dark Spot style for Neptune-like planets)
+  float storms = 0.0;
+  if(u_stormIntensity > 0.0) {
+    float stormNoise = fbm(normPos * 1.5, 3, 0.6);
+    storms = pow(max(0.0, stormNoise), 1.3) * u_stormIntensity * 1.2;
+  }
+
+  float pattern = clamp(bands + storms * 0.4, 0.0, 1.0);
+
+  // Ice giant colors (cyan/blue tones)
+  vec3 color1 = u_baseColor * 0.8;
+  vec3 color2 = u_baseColor * 1.05; // Reduced from 1.1 to prevent bright hotspots
+
+  vec3 iceColor = mix(color1, color2, pattern);
+
+  // Storm patches on ice giants (can be dark spots like Great Dark Spot)
+  if(storms > 0.2) {
+    // Use storm color but darkened for ice giants
+    vec3 stormColorDarkened = u_stormColor * 0.5;
+    float stormBlend = clamp((storms - 0.2) * 2.5, 0.0, 0.6);
+    iceColor = mix(iceColor, stormColorDarkened, stormBlend);
+  }
+
+  // Smooth lighting (slight scattering but clear shadows)
+  float diffuse = max(0.0, dot(normal, lightDir));
+  iceColor *= (0.06 + diffuse * 0.94);
+
+  // Hazy atmosphere effect - edge-focused only
+  float viewDotNormal = dot(viewDir, normal);
+  // Make fresnel much more edge-focused (power 4.0 instead of 2.5)
+  // and only apply when surface faces camera
+  float fresnel = pow(max(0.0, 1.0 - viewDotNormal), 4.0) * step(0.0, viewDotNormal);
+
+  // Add spatial noise to break up uniform hotspots
+  float hazeNoise = fbm(normPos * 4.0, 2, 0.5) * 0.5 + 0.5;
+
+  // Subtle fade on dark side (prevents glare on backlit planets)
+  float lightDotNormal = dot(normal, lightDir);
+  float litSide = smoothstep(-0.1, 0.6, lightDotNormal);
+
+  vec3 hazeColor = u_baseColor * 1.15; // Slightly reduced from 1.2
+  // Modulate fresnel by noise to prevent uniform hotspots
+  // Strength back up to 0.30 (between original 0.4 and reduced 0.15)
+  float hazeStrength = fresnel * u_atmosphereDensity * 0.30 * litSide * hazeNoise;
+  iceColor = mix(iceColor, hazeColor, hazeStrength);
+
+  // Final clamp to prevent white blowout on bright-colored ice giants
+  iceColor = min(iceColor, vec3(0.88)); // Slightly lower clamp (0.88 instead of 0.90)
+
+  return iceColor;
+}
+
+// ============================================================================
+// Main
+// ============================================================================
+void main() {
+  vec3 finalColor;
+
+  if(u_planetMode == 1) {
+    // Gas Giant
+    finalColor = renderGasGiant();
+  } else if(u_planetMode == 2) {
+    // Ice Giant
+    finalColor = renderIceGiant();
+  } else {
+    // Rocky/Terrestrial (includes Barren, Moon, Asteroid)
+    finalColor = renderRockyPlanet();
+  }
+
+  // ============================================================================
+  // DEBUG VISUALIZATIONS
+  // ============================================================================
+  if(u_debugMode > 0) {
+    vec3 normal = normalize(vNormal);
+    vec3 lightDir = normalize(u_lightPosition - vWorldPosition);
+    vec3 viewDir = normalize(u_cameraPosition - vWorldPosition);
+    float diffuse = max(0.0, dot(normal, lightDir));
+
+    if(u_debugMode == 1) {
+      // Show diffuse term only (should show clear day/night boundary)
+      finalColor = vec3(diffuse);
+    }
+    else if(u_debugMode == 2) {
+      // Show world-space normals (RGB = XYZ)
+      finalColor = normal * 0.5 + 0.5;
+    }
+    else if(u_debugMode == 3) {
+      // Show light direction (RGB = direction from surface to light)
+      finalColor = lightDir * 0.5 + 0.5;
+    }
+    else if(u_debugMode == 4) {
+      // Show view direction (RGB = direction from surface to camera)
+      finalColor = viewDir * 0.5 + 0.5;
+    }
+    else if(u_debugMode == 5) {
+      // Show if surface faces light (white = facing, black = away)
+      finalColor = vec3(step(0.0, diffuse));
+    }
+    else if(u_debugMode == 6) {
+      // Show distance to light source
+      float dist = length(u_lightPosition - vWorldPosition);
+      finalColor = vec3(dist / 100.0); // Normalize to visible range
+    }
+    else if(u_debugMode == 7) {
+      // Show world positions
+      finalColor = vWorldPosition / 100.0; // Normalize to visible range
+    }
+  }
+
+  gl_FragColor = vec4(finalColor, 1.0);
+}

@@ -102,6 +102,22 @@ export class CelestialBodyLOD {
   private camera?: THREE.Camera;
 
   /**
+   * Store materials for all LOD levels (Phase 3: Architect Mode)
+   * All LOD levels share the same materials for consistency
+   */
+  private materials: THREE.Material[] = [];
+
+  /**
+   * Habitable zone for intelligent planet shader parameter mapping
+   */
+  private habitableZone?: { inner: number; outer: number };
+
+  /**
+   * Star position for shader lighting calculation
+   */
+  private starPosition: THREE.Vector3;
+
+  /**
    * Create a LOD system for a celestial body
    *
    * @param bodyData - Planet or Moon data
@@ -109,17 +125,23 @@ export class CelestialBodyLOD {
    * @param sceneUnitsPerSolarRadius - Scaling factor from star
    * @param parentPlanet - Required for moons, unused for planets
    * @param camera - Camera for shader view-dependent effects (optional)
+   * @param habitableZone - Star's habitable zone for planet shader (optional, but recommended for planets)
+   * @param starPosition - Position of the star for lighting (default: origin)
    */
   constructor(
     bodyData: Planet | Moon,
     bodyType: 'planet' | 'moon',
     sceneUnitsPerSolarRadius: number,
     parentPlanet?: Planet,
-    camera?: THREE.Camera
+    camera?: THREE.Camera,
+    habitableZone?: { inner: number; outer: number },
+    starPosition: THREE.Vector3 = new THREE.Vector3(0, 0, 0)
   ) {
     this.bodyData = bodyData;
     this.bodyType = bodyType;
     this.camera = camera;
+    this.habitableZone = habitableZone;
+    this.starPosition = starPosition;
 
     // Create THREE.LOD container
     this.object = new THREE.LOD();
@@ -137,6 +159,11 @@ export class CelestialBodyLOD {
         sceneUnitsPerSolarRadius,
         parentPlanet
       );
+
+      // Store material reference for Phase 3 live editing
+      if (mesh.material) {
+        this.materials.push(mesh.material as THREE.Material);
+      }
 
       // Add this detail level to the LOD object
       this.object.addLevel(mesh, level.distance);
@@ -179,7 +206,11 @@ export class CelestialBodyLOD {
     if (this.bodyType === 'planet') {
       // Create planet mesh with specified subdivision
       const planet = this.bodyData as Planet;
-      return createPlanetMesh(planet, sceneUnitsPerSolarRadius, subdivision, this.camera);
+
+      // Use provided habitable zone or default to empty range
+      const habitableZone = this.habitableZone || { inner: 0, outer: 0 };
+
+      return createPlanetMesh(planet, habitableZone, sceneUnitsPerSolarRadius, subdivision, this.camera, this.starPosition);
     } else {
       // Create moon mesh with specified subdivision
       const moon = this.bodyData as Moon;
@@ -264,6 +295,50 @@ export class CelestialBodyLOD {
       bodyType: this.bodyType,
       levels
     };
+  }
+
+  // ============================================================================
+  // Phase 3: Architect Mode - Material Access
+  // ============================================================================
+
+  /**
+   * Get all materials used by this LOD (for live uniform updates)
+   *
+   * @returns Array of materials (one per LOD level)
+   */
+  public getMaterials(): THREE.Material[] {
+    return this.materials;
+  }
+
+  /**
+   * Update a uniform value on all LOD level materials
+   *
+   * @param uniformName - Name of the uniform to update
+   * @param value - New value (will be converted to THREE.js type if needed)
+   */
+  public updateUniform(uniformName: string, value: any): void {
+    this.materials.forEach(material => {
+      if (material instanceof THREE.ShaderMaterial) {
+        // Check if uniform exists
+        if (!material.uniforms[uniformName]) {
+          console.warn(`[CelestialBodyLOD] Uniform ${uniformName} not found for ${this.bodyData.name}`);
+          return;
+        }
+
+        // Handle color conversion from hex string
+        if (typeof value === 'string' && value.startsWith('#')) {
+          // Convert hex color to THREE.Vector3
+          const color = new THREE.Color(value);
+          material.uniforms[uniformName].value.set(color.r, color.g, color.b);
+        } else {
+          // Direct value assignment
+          material.uniforms[uniformName].value = value;
+        }
+        material.uniformsNeedUpdate = true;
+      }
+    });
+
+    console.log(`[CelestialBodyLOD] Updated uniform ${uniformName} for ${this.bodyData.name}`);
   }
 }
 

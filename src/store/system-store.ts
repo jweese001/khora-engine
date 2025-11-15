@@ -3,16 +3,19 @@
  *
  * Zustand store for managing star system state, IDE state, and scene references.
  * Phase 1: Basic system generation and selection only (no save/load).
+ * Phase 2: Galaxy generation with multiple star systems.
  */
 
 import { create } from 'zustand';
 import type * as THREE from 'three';
 import type { StarSystem } from '../types/celestial-bodies';
+import type { Galaxy } from '../types/galaxy';
 import { SeededRandom } from '../utils/random';
 import { generateStar } from '../generation/star-generator';
 import { generatePlanets } from '../generation/planet-generator';
 import { generateMoons } from '../generation/moon-generator';
 import { distributePlanetResources, distributeMoonResources } from '../generation/resource-distributor';
+import { generateGalaxy } from '../generation/galaxy-generator';
 
 // ============================================================================
 // Store State Interface
@@ -28,10 +31,35 @@ interface SelectedObject {
 }
 
 /**
+ * View mode for the application
+ */
+export type ViewMode = 'system' | 'galaxy';
+
+/**
+ * App mode for phase selection
+ */
+export type AppMode = 'landing' | 'diceRoll' | 'architect' | 'explorer';
+
+/**
+ * Uniform override for a celestial body (Phase 3: Architect Mode)
+ */
+export interface UniformOverrides {
+  [uniformName: string]: any;
+}
+
+/**
  * Main application state
  */
 interface SystemStore {
-  // ===== Star System State =====
+  // ===== App Mode (Phase 2 - Landing Page) =====
+
+  /** Current application mode */
+  appMode: AppMode;
+
+  /** Resource budget from dice roll (null if not yet rolled) */
+  resourceBudget: number | null;
+
+  // ===== Star System State (Phase 1) =====
 
   /** Currently generated star system (null if none generated) */
   currentSystem: StarSystem | null;
@@ -42,6 +70,17 @@ interface SystemStore {
   /** Last error during generation (null if no error) */
   generationError: string | null;
 
+  // ===== Galaxy State (Phase 2) =====
+
+  /** Currently generated galaxy (null if none generated) */
+  currentGalaxy: Galaxy | null;
+
+  /** Current view mode: 'system' for single system view, 'galaxy' for multi-system view */
+  viewMode: ViewMode;
+
+  /** Currently focused system within galaxy (for system-detail view) */
+  focusedSystemIndex: number | null;
+
   // ===== IDE State =====
 
   /** Whether IDE panel is open */
@@ -49,6 +88,11 @@ interface SystemStore {
 
   /** Currently selected object in scene (for inspection) */
   selectedObject: SelectedObject | null;
+
+  // ===== Architect Mode State (Phase 3) =====
+
+  /** Uniform overrides for celestial bodies (object ID -> uniform overrides map) */
+  uniformOverrides: Map<string, UniformOverrides>;
 
   // ===== Scene State =====
 
@@ -61,7 +105,19 @@ interface SystemStore {
   // ===== Actions =====
 
   /**
-   * Generate a new star system from seed
+   * Set the application mode (landing, architect, explorer)
+   * @param mode - App mode to switch to
+   */
+  setAppMode: (mode: AppMode) => void;
+
+  /**
+   * Set the resource budget from dice roll
+   * @param budget - Total resource points available
+   */
+  setResourceBudget: (budget: number) => void;
+
+  /**
+   * Generate a new star system from seed (Phase 1)
    * @param seed - Random seed for deterministic generation
    */
   generateSystem: (seed: number) => void;
@@ -70,6 +126,30 @@ interface SystemStore {
    * Clear current system and reset state
    */
   clearSystem: () => void;
+
+  /**
+   * Generate a new galaxy with multiple star systems (Phase 2)
+   * @param seed - Random seed for deterministic generation
+   * @param systemCount - Number of star systems to generate (default: 12)
+   */
+  generateGalaxy: (seed: number, systemCount?: number) => void;
+
+  /**
+   * Clear current galaxy and reset to system view
+   */
+  clearGalaxy: () => void;
+
+  /**
+   * Switch view mode between system and galaxy
+   * @param mode - View mode to switch to
+   */
+  setViewMode: (mode: ViewMode) => void;
+
+  /**
+   * Focus on a specific system within the galaxy
+   * @param index - Index of the system in galaxy.systems array (null to unfocus)
+   */
+  focusSystem: (index: number | null) => void;
 
   /**
    * Toggle IDE panel open/closed
@@ -103,6 +183,29 @@ interface SystemStore {
    * @param camera - Three.js camera instance
    */
   setCamera: (camera: THREE.Camera | null) => void;
+
+  // ===== Architect Mode Actions (Phase 3) =====
+
+  /**
+   * Update a shader uniform for a celestial body
+   * @param objectId - ID of the celestial body (star, planet, or moon)
+   * @param uniformName - Name of the uniform to update
+   * @param value - New value for the uniform
+   */
+  updateUniform: (objectId: string, uniformName: string, value: any) => void;
+
+  /**
+   * Reset all shader uniforms for an object to procedural defaults
+   * @param objectId - ID of the celestial body
+   */
+  resetObjectUniforms: (objectId: string) => void;
+
+  /**
+   * Get uniform overrides for a specific object
+   * @param objectId - ID of the celestial body
+   * @returns Uniform overrides or undefined if no overrides exist
+   */
+  getObjectUniforms: (objectId: string) => UniformOverrides | undefined;
 }
 
 // ============================================================================
@@ -111,19 +214,40 @@ interface SystemStore {
 
 export const useSystemStore = create<SystemStore>((set, get) => ({
   // Initial state
+  appMode: 'landing',
+  resourceBudget: null,
   currentSystem: null,
   isGenerating: false,
   generationError: null,
+  currentGalaxy: null,
+  viewMode: 'system',
+  focusedSystemIndex: null,
   ideOpen: false,
   selectedObject: null,
+  uniformOverrides: new Map(),
   scene: null,
   camera: null,
 
   // Actions
 
+  setAppMode: (mode: AppMode) => {
+    console.log(`[Store] Switching app mode to: ${mode}`);
+    set({ appMode: mode });
+  },
+
+  setResourceBudget: (budget: number) => {
+    console.log(`[Store] Setting resource budget: ${budget} points`);
+    set({ resourceBudget: budget });
+  },
+
   generateSystem: (seed: number) => {
-    // Mark as generating
-    set({ isGenerating: true, generationError: null });
+    // Mark as generating (clear overrides for fresh start)
+    set({
+      isGenerating: true,
+      generationError: null,
+      uniformOverrides: new Map(),
+      selectedObject: null
+    });
 
     try {
       console.log(`[Store] Generating system with seed: ${seed}`);
@@ -185,7 +309,8 @@ export const useSystemStore = create<SystemStore>((set, get) => ({
     set({
       currentSystem: null,
       selectedObject: null,
-      generationError: null
+      generationError: null,
+      uniformOverrides: new Map() // Clear overrides when clearing system
     });
   },
 
@@ -227,6 +352,136 @@ export const useSystemStore = create<SystemStore>((set, get) => ({
   setCamera: (camera: THREE.Camera | null) => {
     console.log('[Store] Camera reference updated');
     set({ camera });
+  },
+
+  // ===== Phase 2: Galaxy Actions =====
+
+  generateGalaxy: (seed: number, systemCount = 12) => {
+    // Mark as generating (clear overrides for fresh start)
+    set({
+      isGenerating: true,
+      generationError: null,
+      uniformOverrides: new Map(),
+      selectedObject: null
+    });
+
+    try {
+      console.log(`[Store] Generating galaxy with seed: ${seed}, ${systemCount} systems`);
+
+      // Generate the galaxy
+      const galaxy = generateGalaxy({ seed, systemCount });
+
+      console.log(`[Store] Generated galaxy: ${galaxy.name} (${galaxy.type})`);
+      console.log(`[Store] ${galaxy.systems.length} star systems generated`);
+
+      // Update state
+      set({
+        currentGalaxy: galaxy,
+        viewMode: 'galaxy',
+        focusedSystemIndex: null,
+        currentSystem: null, // Clear single system when viewing galaxy
+        isGenerating: false,
+        generationError: null
+      });
+
+      console.log('[Store] Galaxy generation complete:', galaxy);
+    } catch (error) {
+      console.error('[Store] Galaxy generation failed:', error);
+      set({
+        isGenerating: false,
+        generationError: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  },
+
+  clearGalaxy: () => {
+    console.log('[Store] Clearing current galaxy');
+    set({
+      currentGalaxy: null,
+      viewMode: 'system',
+      focusedSystemIndex: null,
+      selectedObject: null,
+      generationError: null,
+      uniformOverrides: new Map() // Clear overrides when clearing galaxy
+    });
+  },
+
+  setViewMode: (mode: ViewMode) => {
+    console.log(`[Store] Switching view mode to: ${mode}`);
+    set({ viewMode: mode });
+
+    // If switching to system view and no current system, unfocus any galaxy system
+    if (mode === 'system' && !get().currentSystem) {
+      set({ focusedSystemIndex: null });
+    }
+  },
+
+  focusSystem: (index: number | null) => {
+    const { currentGalaxy } = get();
+
+    if (index !== null && currentGalaxy) {
+      if (index < 0 || index >= currentGalaxy.systems.length) {
+        console.error(`[Store] Invalid system index: ${index}`);
+        return;
+      }
+
+      const system = currentGalaxy.systems[index].system;
+      console.log(`[Store] Focusing on system ${index}: ${system.name}`);
+
+      set({
+        focusedSystemIndex: index,
+        currentSystem: system,
+        viewMode: 'system',
+        uniformOverrides: new Map(), // Clear overrides when switching systems
+        selectedObject: null // Deselect object when switching systems
+      });
+    } else {
+      console.log('[Store] Unfocusing system, returning to galaxy view');
+      set({
+        focusedSystemIndex: null,
+        currentSystem: null,
+        viewMode: 'galaxy',
+        uniformOverrides: new Map(), // Clear overrides when returning to galaxy
+        selectedObject: null
+      });
+    }
+  },
+
+  // ===== Phase 3: Architect Mode Actions =====
+
+  updateUniform: (objectId: string, uniformName: string, value: any) => {
+    const { uniformOverrides } = get();
+
+    // Get existing overrides for this object or create new map
+    const objectOverrides = uniformOverrides.get(objectId) || {};
+
+    // Update the uniform value
+    objectOverrides[uniformName] = value;
+
+    // Create new Map to trigger React re-render
+    const newOverrides = new Map(uniformOverrides);
+    newOverrides.set(objectId, objectOverrides);
+
+    console.log(`[Store] Updated uniform ${uniformName} for ${objectId}:`, value);
+
+    set({ uniformOverrides: newOverrides });
+  },
+
+  resetObjectUniforms: (objectId: string) => {
+    const { uniformOverrides } = get();
+
+    // Create new Map without this object's overrides
+    const newOverrides = new Map(uniformOverrides);
+    newOverrides.delete(objectId);
+
+    console.log(`[Store] Reset uniforms for ${objectId}`);
+
+    set({ uniformOverrides: newOverrides });
+  },
+
+  getObjectUniforms: (objectId: string) => {
+    const { uniformOverrides } = get();
+    return uniformOverrides.get(objectId);
   }
 }));
 
@@ -255,11 +510,30 @@ export const useSelectedObject = () => useSystemStore((state) => state.selectedO
 export const useIsGenerating = () => useSystemStore((state) => state.isGenerating);
 
 /**
+ * Hook to get current galaxy
+ */
+export const useCurrentGalaxy = () => useSystemStore((state) => state.currentGalaxy);
+
+/**
+ * Hook to get view mode
+ */
+export const useViewMode = () => useSystemStore((state) => state.viewMode);
+
+/**
+ * Hook to get focused system index
+ */
+export const useFocusedSystemIndex = () => useSystemStore((state) => state.focusedSystemIndex);
+
+/**
  * Hook to get all store actions
  */
 export const useSystemActions = () => useSystemStore((state) => ({
   generateSystem: state.generateSystem,
   clearSystem: state.clearSystem,
+  generateGalaxy: state.generateGalaxy,
+  clearGalaxy: state.clearGalaxy,
+  setViewMode: state.setViewMode,
+  focusSystem: state.focusSystem,
   toggleIDE: state.toggleIDE,
   openIDE: state.openIDE,
   closeIDE: state.closeIDE,

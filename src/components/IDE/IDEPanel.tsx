@@ -10,8 +10,9 @@ import { useSystemStore } from '../../store/system-store';
 import { SceneTree } from './SceneTree';
 import { DataInspector } from './DataInspector';
 import { ShaderViewer } from './ShaderViewer';
+import { ShaderControls } from './ShaderControls';
 
-type TabType = 'scene' | 'data' | 'shaders';
+type TabType = 'scene' | 'data' | 'shaders' | 'controls';
 
 export function IDEPanel() {
   const ideOpen = useSystemStore((state) => state.ideOpen);
@@ -48,7 +49,7 @@ export function IDEPanel() {
 
           {/* Tab bar */}
           <div style={styles.tabBar}>
-            {(['scene', 'data', 'shaders'] as TabType[]).map((tab) => (
+            {(['scene', 'data', 'shaders', 'controls'] as TabType[]).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
@@ -79,10 +80,57 @@ export function IDEPanel() {
             {activeTab === 'scene' && <SceneTree />}
             {activeTab === 'data' && <DataInspector />}
             {activeTab === 'shaders' && <ShaderViewer />}
+            {activeTab === 'controls' && <ShaderControlsWrapper />}
           </div>
         </>
       )}
     </div>
+  );
+}
+
+/**
+ * Wrapper component for ShaderControls that connects to store
+ */
+function ShaderControlsWrapper() {
+  const selectedObject = useSystemStore((state) => state.selectedObject);
+  const updateUniform = useSystemStore((state) => state.updateUniform);
+  const resetObjectUniforms = useSystemStore((state) => state.resetObjectUniforms);
+
+  // Show message if no object is selected
+  if (!selectedObject) {
+    return (
+      <div style={styles.emptyState}>
+        <span className="mdi mdi-cube-outline" style={styles.emptyIcon}></span>
+        <p style={styles.emptyText}>Select a celestial body to edit its shader parameters</p>
+        <p style={styles.emptySubtext}>Click on a star, planet, or moon in the 3D view</p>
+      </div>
+    );
+  }
+
+  // Get object ID based on type
+  const objectId = selectedObject.data.id;
+
+  // Handle uniform change
+  const handleUniformChange = (uniformName: string, value: any) => {
+    console.log(`[IDEPanel] Updating uniform ${uniformName}:`, value);
+    updateUniform(objectId, uniformName, value);
+    // Scene will update automatically via CanvasContainer's uniformOverrides effect
+  };
+
+  // Handle reset
+  const handleReset = () => {
+    console.log(`[IDEPanel] Resetting uniforms for ${objectId}`);
+    resetObjectUniforms(objectId);
+    // Scene will update automatically via CanvasContainer's uniformOverrides effect
+  };
+
+  return (
+    <ShaderControls
+      objectType={selectedObject.type}
+      objectData={selectedObject.data}
+      onUniformChange={handleUniformChange}
+      onReset={handleReset}
+    />
   );
 }
 
@@ -166,5 +214,30 @@ const styles = {
     flex: 1,
     overflow: 'hidden',
     background: '#1e1e1e',
+  } as React.CSSProperties,
+  emptyState: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: '100%',
+    padding: '40px',
+    textAlign: 'center',
+  } as React.CSSProperties,
+  emptyIcon: {
+    fontSize: '48px',
+    color: '#858585',
+    marginBottom: '16px',
+  } as React.CSSProperties,
+  emptyText: {
+    margin: '0 0 8px 0',
+    fontSize: '14px',
+    color: '#cccccc',
+    fontWeight: 500,
+  } as React.CSSProperties,
+  emptySubtext: {
+    margin: 0,
+    fontSize: '12px',
+    color: '#858585',
   } as React.CSSProperties,
 };
