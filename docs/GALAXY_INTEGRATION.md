@@ -32,39 +32,58 @@ This integration combines the best of both systems:
 
 ## Implementation Phases
 
-### Phase 0: Setup ✅
+### Phase 0: Setup ✅ COMPLETE
 - [x] Create branch `feature/galaxy-visual-integration`
 - [x] Create this documentation
-- [ ] Update TASKS.md with integration checklist
+- [x] Update TASKS.md with integration checklist
 
-### Phase 1: Core Integration (Sessions 1-2)
-- [ ] Port `galaxy-particle-system.js` → `src/rendering/GalaxyParticleSystem.ts`
-- [ ] Convert to TypeScript with proper types
-- [ ] Update `GalaxyRenderer.ts` to use particle system
-- [ ] Add `setSystemMarkers(systems)` method
-- [ ] Connect to `ThreeSceneManager.renderGalaxy()`
-- [ ] Test marker click → system view workflow
+### Phase 1: Core Integration (Sessions 1-2) ✅ COMPLETE
+- [x] Port `galaxy-particle-system.js` → `src/rendering/GalaxyParticleSystem.ts`
+- [x] Convert to TypeScript with proper types (5 galaxy types, multi-layer support)
+- [x] Update `GalaxyRenderer.ts` to use particle system
+- [x] Add `addSystemMarkers(systems)` method
+- [x] Connect to `ThreeSceneManager.renderGalaxy()`
+- [x] Test marker click → system view workflow
+- [x] Apply -36° rotation fix for alignment
+- [x] Add raycasting objects for click detection
+- [x] Implement spectral type color mapping
+- [x] Implement mass-based marker sizing
 
-### Phase 2: UI Integration (Session 3)
-- [ ] Add galaxy generation controls to UI
-- [ ] Add view mode toggle (Galaxy ↔ System)
-- [ ] Show galaxy metadata in IDE panel
-- [ ] Add "Return to Galaxy" navigation
-- [ ] Preserve panel hide/show functionality
+### Phase 2: UI Integration (Session 3) ✅ COMPLETE
+- [x] Add galaxy generation controls to UI (already implemented)
+- [x] Add view mode toggle (Galaxy ↔ System) (automatic via store)
+- [x] Show galaxy metadata in IDE panel (title + JSON inspector)
+- [x] Add "Return to Galaxy" navigation (breadcrumb button)
+- [x] Preserve panel hide/show functionality
+- [x] Add dynamic IDE panel title (Galaxy Inspector / System Inspector)
+- [x] Loading state during generation (already working)
 
-### Phase 3: Visual Polish (Session 4)
-- [ ] Color-code markers by star spectral type
-- [ ] Size markers by star mass
-- [ ] Map galaxy types to particle configs
-- [ ] Add multi-layer controls
-- [ ] Polish camera transitions
+### Phase 3: Visual Polish (Session 4) ✅ COMPLETE
+- [x] Color-code markers by star spectral type (O=blue → M=red)
+- [x] Size markers by star mass (logarithmic 3.0-8.0 scale)
+- [x] Map galaxy types to particle configs (spiral/elliptical/irregular)
+- [x] Add marker pulse effect (shader-based, frequency 2.0)
+- [x] Polish camera transitions (smooth ease-in-out cubic, 1.2-1.5s)
+- [-] Multi-layer controls (deferred to Phase 5 - next session)
 
-### Phase 4: Documentation & Testing (Session 5)
-- [ ] Add code documentation
-- [ ] Test all galaxy types
-- [ ] Test different system counts
-- [ ] Performance testing (60fps target)
-- [ ] Update TASKS.md completion status
+### Phase 4: Core Controls (Session 5) ✅ COMPLETE
+- [x] Add comprehensive galaxy core brightness controls
+- [x] Implement Core Brightness multiplier (0.0-1.0)
+- [x] Implement Core Alpha Falloff for graduated transparency (0.0-1.0)
+- [x] Implement Core Exclusion Radius for empty center zone (0.0-0.2)
+- [x] Update all 5 galaxy type generators with core controls
+- [x] Add Core Controls UI section in GalaxyControls
+- [x] Update ring galaxy radius sliders to 0.0-1.0 range
+- [x] Add code documentation and algorithm comments
+- [x] Update TASKS.md with Session 5 completion
+
+### Phase 5: Advanced Features (Next Session)
+- [ ] Multi-layer particle systems (layer management UI)
+- [ ] Custom marker placement (manual positioning)
+- [ ] Marker color customization (override procedural colors)
+- [ ] Preset configurations (save/load galaxy settings)
+- [ ] Performance testing (60fps target with 20 systems)
+- [ ] Full demo feature parity
 
 ---
 
@@ -220,26 +239,91 @@ function getStarColor(spectralType: SpectralType): THREE.Color {
 ## Timeline
 
 - **Session 0:** Setup ✅ (30 min)
-- **Session 1:** Port particle system (2-3 hrs)
-- **Session 2:** Connect markers (2 hrs)
-- **Session 3:** UI integration (2 hrs)
-- **Session 4:** Visual polish (2-3 hrs)
-- **Session 5:** Testing & docs (1-2 hrs)
+- **Session 1:** Port particle system ✅ (2-3 hrs) - TypeScript conversion, 5 galaxy types
+- **Session 2:** Connect markers ✅ (2 hrs) - Raycasting, spectral colors, mass sizing
+- **Session 3:** UI integration ✅ (2 hrs) - Galaxy controls, IDE panel updates
+- **Session 4:** Visual polish ✅ (2-3 hrs) - Camera animations, marker effects
+- **Session 5:** Core controls ✅ (2 hrs) - Advanced brightness controls
+- **Session 6:** Advanced features (planned) - Multi-layer, markers, presets
 
-**Total: 10-12 hours over 5 sessions**
+**Total Completed: 10-12 hours over 5 sessions**
+**Remaining: 3-4 hours (Session 6)**
+
+---
+
+## Session 5 Summary (November 15, 2025)
+
+### Problem Solved
+User reported persistent "solid cube or sphere" appearance at galaxy center despite previous optimizations. User wanted bright core but with better control to eliminate artifacts.
+
+### Solution Implemented
+**Advanced Core Control System** with 3 independent parameters:
+
+1. **Core Brightness** (0.0-1.0, default 0.5)
+   - Multiplier specifically for core region particles
+   - Independent from overall particle brightness
+   - Allows bright aesthetic without overwhelming center
+
+2. **Core Alpha Falloff** (0.0-1.0, default 0.6)
+   - Graduated transparency reduction approaching center
+   - Prevents solid appearance via alpha gradient
+   - Quadratic falloff based on distance from center
+
+3. **Core Exclusion Radius** (0.0-0.2, default 0.0)
+   - Optional empty zone at absolute center
+   - Helps eliminate super-bright center point
+   - Adjustable for different aesthetic preferences
+
+### Algorithm
+```typescript
+private calculateCoreAlpha(normalizedRadius: number, baseAlpha: number): number {
+  const { coreSize, coreBrightness, coreAlphaFalloff } = this.config;
+
+  if (normalizedRadius >= coreSize) {
+    return baseAlpha; // Outside core - normal brightness
+  }
+
+  // Inside core - apply graduated controls
+  const coreT = normalizedRadius / coreSize; // 0.0 at center, 1.0 at edge
+  const falloffReduction = (1.0 - coreT) * coreAlphaFalloff;
+  const falloffMultiplier = 1.0 - falloffReduction;
+
+  return baseAlpha * coreBrightness * falloffMultiplier;
+}
+```
+
+### Files Modified
+- `src/rendering/GalaxyParticleSystem.ts` - Core algorithm and config
+- `src/rendering/GalaxyRenderer.ts` - Default values
+- `src/components/IDE/GalaxyControls.tsx` - UI controls
+
+### Bonus Features
+- Ring galaxy inner/outer radius sliders now 0.0-1.0 (full flexibility)
+
+### Commit
+- **fa816fb** - "✨ GALAXY: Add advanced core brightness controls"
+- 10 files changed, 2251 insertions(+), 186 deletions(-)
 
 ---
 
 ## Notes
 
 - Based on galactic-assets repo created 2025-01-15
-- Particle system includes multi-layer support
+- Particle system includes multi-layer support (to be exposed in Phase 5)
 - Independent marker visibility already implemented
-- -36° rotation fix required for alignment
+- -36° rotation fix applied for alignment
 - Priority: Beautiful and polished (user preference)
 - Navigation: Click markers in 3D space (user preference)
+- Core controls solve bright center artifact while preserving aesthetics
+
+### Next Session Priorities
+1. Multi-layer particle system UI
+2. Custom marker placement and editing
+3. Marker color customization
+4. Preset save/load system
+5. Full feature parity with standalone demo
 
 ---
 
 *Created: 2025-01-15*
-*Last Updated: 2025-01-15*
+*Last Updated: 2025-11-15 (Session 5)*
