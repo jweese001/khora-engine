@@ -9,17 +9,48 @@ import { useSystemStore } from '../../store/system-store';
 
 export function DataInspector() {
   const selectedObject = useSystemStore((state) => state.selectedObject);
+  const currentGalaxy = useSystemStore((state) => state.currentGalaxy);
+  const currentSystem = useSystemStore((state) => state.currentSystem);
+  const viewMode = useSystemStore((state) => state.viewMode);
 
-  if (!selectedObject) {
+  // Determine what data to show
+  let jsonData: string;
+  let headerInfo: { type: string; name: string } | null = null;
+
+  if (selectedObject) {
+    // Show selected object data
+    jsonData = JSON.stringify(selectedObject.data, null, 2);
+    headerInfo = {
+      type: selectedObject.type.toUpperCase(),
+      name: selectedObject.data.name
+    };
+  } else if (viewMode === 'galaxy' && currentGalaxy) {
+    // Show galaxy data when in galaxy view
+    jsonData = JSON.stringify(currentGalaxy, null, 2);
+    headerInfo = {
+      type: 'GALAXY',
+      name: currentGalaxy.name
+    };
+  } else if (currentSystem) {
+    // Show current system data
+    jsonData = JSON.stringify(currentSystem, null, 2);
+    headerInfo = {
+      type: 'SYSTEM',
+      name: currentSystem.name
+    };
+  } else {
+    // Nothing to show
     return (
       <div style={styles.empty}>
-        <p style={styles.emptyText}>No object selected</p>
-        <p style={styles.emptyHint}>Select a star, planet, or moon to view its data</p>
+        <p style={styles.emptyText}>No data available</p>
+        <p style={styles.emptyHint}>
+          {viewMode === 'galaxy'
+            ? 'Generate a galaxy to view its data'
+            : 'Generate a system or select an object to view its data'}
+        </p>
       </div>
     );
   }
-
-  const jsonData = JSON.stringify(selectedObject.data, null, 2);
 
   const handleCopy = () => {
     navigator.clipboard.writeText(jsonData).then(
@@ -38,8 +69,8 @@ export function DataInspector() {
       {/* Header with object info and copy button */}
       <div style={styles.header}>
         <div style={styles.headerInfo}>
-          <span style={styles.objectType}>{selectedObject.type.toUpperCase()}</span>
-          <span style={styles.objectName}>{selectedObject.data.name}</span>
+          <span style={styles.objectType}>{headerInfo?.type || 'DATA'}</span>
+          <span style={styles.objectName}>{headerInfo?.name || 'Unknown'}</span>
         </div>
         <button onClick={handleCopy} style={styles.copyButton} title="Copy JSON to clipboard">
           <span style={styles.copyIcon}>📋</span>

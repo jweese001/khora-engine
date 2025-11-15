@@ -14,6 +14,7 @@ import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import type { StarSystem } from '../../types/celestial-bodies';
 import type { Galaxy } from '../../types/galaxy';
+import type { GalaxyConfig } from '../../rendering/GalaxyParticleSystem';
 import { createStarMesh, createStarLight, calculateSceneUnitsPerSolarRadius } from '../../rendering/StarRenderer';
 import { createTypedOrbitLine } from '../../rendering/OrbitRenderer';
 import { CelestialBodyLOD } from '../../rendering/CelestialBodyLOD';
@@ -54,6 +55,20 @@ export class ThreeSceneManager {
 
   // Debug mode (toggle with D key)
   private debugMode: number = 0; // 0=normal, 1-7=debug visualizations
+
+  // Time tracking for delta calculations
+  private lastTime: number = 0;
+
+  // Camera animation for smooth transitions
+  private cameraAnimation: {
+    active: boolean;
+    startPosition: THREE.Vector3;
+    targetPosition: THREE.Vector3;
+    startTarget: THREE.Vector3;
+    targetTarget: THREE.Vector3;
+    progress: number;
+    duration: number;
+  } | null = null;
 
   /**
    * Initialize Three.js scene manager
@@ -193,9 +208,9 @@ export class ThreeSceneManager {
     // Match reference demo: strong bloom for dramatic star glow
     const bloomPass = new UnrealBloomPass(
       new THREE.Vector2(window.innerWidth, window.innerHeight),
-      2.3,  // strength - strong (matches reference demo)
-      0.8,  // radius - matches reference demo
-      0.85  // threshold - high (only brightest areas glow)
+      1.5,  // strength - reduced from 2.3 to prevent galaxy particle artifacts
+      0.6,  // radius - reduced for cleaner galaxy rendering
+      0.9   // threshold - higher to only affect brightest elements
     );
     composer.addPass(bloomPass);
 
@@ -427,9 +442,23 @@ export class ThreeSceneManager {
     // not from (0,0,0). Without this, all planets use the same LOD level.
     this.scene.updateMatrixWorld();
 
+    // Calculate delta time for animations
+    const time = performance.now() * 0.001; // Convert to seconds
+    const deltaTime = this.lastTime === 0 ? 0 : time - this.lastTime;
+    this.lastTime = time;
+
+    // Update galaxy particle system animation (Phase 2)
+    if (this.currentViewMode === 'galaxy') {
+      this.galaxyRenderer.update(deltaTime);
+    }
+
+    // Update camera animation if active
+    if (this.cameraAnimation && this.cameraAnimation.active) {
+      this.updateCameraAnimation(deltaTime);
+    }
+
     // Update shader uniforms for all celestial bodies
     // CRITICAL: Camera position must be updated every frame for correct lighting and atmosphere
-    const time = performance.now() * 0.001; // Convert to seconds
     this.scene.traverse((object) => {
       // Update LOD objects (planets, moons)
       if (object instanceof THREE.LOD) {
@@ -477,6 +506,80 @@ export class ThreeSceneManager {
     // Render scene with post-processing (bloom)
     this.composer.render();
   };
+
+  // ==========================================================================
+  // Camera Animation
+  // ==========================================================================
+
+  /**
+   * Animate camera to a new position smoothly
+   * @param targetPosition - Target camera position
+   * @param targetLookAt - Target look-at point
+   * @param duration - Animation duration in seconds (default: 1.5s)
+   */
+  private animateCamera(
+    targetPosition: THREE.Vector3,
+    targetLookAt: THREE.Vector3,
+    duration: number = 1.5
+  ): void {
+    this.cameraAnimation = {
+      active: true,
+      startPosition: this.camera.position.clone(),
+      targetPosition: targetPosition.clone(),
+      startTarget: this.controls.target.clone(),
+      targetTarget: targetLookAt.clone(),
+      progress: 0,
+      duration
+    };
+  }
+
+  /**
+   * Update camera animation (called every frame)
+   * @param deltaTime - Time since last frame in seconds
+   */
+  private updateCameraAnimation(deltaTime: number): void {
+    if (!this.cameraAnimation) return;
+
+    // Update progress
+    this.cameraAnimation.progress += deltaTime / this.cameraAnimation.duration;
+
+    if (this.cameraAnimation.progress >= 1.0) {
+      // Animation complete - snap to final position
+      this.camera.position.copy(this.cameraAnimation.targetPosition);
+      this.controls.target.copy(this.cameraAnimation.targetTarget);
+      this.controls.update();
+      this.cameraAnimation.active = false;
+      console.log('[ThreeSceneManager] Camera animation complete');
+    } else {
+      // Ease-in-out interpolation for smooth motion
+      const t = this.easeInOutCubic(this.cameraAnimation.progress);
+
+      // Lerp position
+      this.camera.position.lerpVectors(
+        this.cameraAnimation.startPosition,
+        this.cameraAnimation.targetPosition,
+        t
+      );
+
+      // Lerp target
+      this.controls.target.lerpVectors(
+        this.cameraAnimation.startTarget,
+        this.cameraAnimation.targetTarget,
+        t
+      );
+
+      this.controls.update();
+    }
+  }
+
+  /**
+   * Ease-in-out cubic function for smooth camera motion
+   * @param t - Progress from 0 to 1
+   * @returns Eased value from 0 to 1
+   */
+  private easeInOutCubic(t: number): number {
+    return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+  }
 
   // ==========================================================================
   // System Rendering
@@ -716,15 +819,18 @@ export class ThreeSceneManager {
     const systemRadius = maxOrbitDistance * orbitScale;
     const cameraDistance = systemRadius * 2.5; // View from a comfortable distance
 
-    this.camera.position.set(cameraDistance * 0.5, cameraDistance * 0.5, cameraDistance);
-    this.camera.lookAt(0, 0, 0);
+    const targetPosition = new THREE.Vector3(
+      cameraDistance * 0.5,
+      cameraDistance * 0.5,
+      cameraDistance
+    );
+    const targetLookAt = new THREE.Vector3(0, 0, 0);
 
-    // Update controls target
-    this.controls.target.set(0, 0, 0);
-    this.controls.update();
+    // Animate camera to new position (1.2s duration)
+    this.animateCamera(targetPosition, targetLookAt, 1.2);
 
     console.log(
-      `[ThreeSceneManager] Camera focused on system (radius: ${systemRadius.toFixed(2)} units)`
+      `[ThreeSceneManager] Camera focusing on system (radius: ${systemRadius.toFixed(2)} units)`
     );
   }
 
@@ -767,6 +873,15 @@ export class ThreeSceneManager {
   }
 
   /**
+   * Update galaxy particle system configuration
+   * @param config - Partial galaxy config to apply
+   */
+  public updateGalaxyConfig(config: Partial<GalaxyConfig>): void {
+    console.log('[ThreeSceneManager] Updating galaxy config:', config);
+    this.galaxyRenderer.updateConfig(config);
+  }
+
+  /**
    * Adjust camera to view the entire galaxy
    * @param galaxy - Galaxy to focus on
    */
@@ -785,21 +900,22 @@ export class ThreeSceneManager {
     // Position camera to view the whole galaxy
     const cameraDistance = galaxyRadius * 2.5;
 
-    this.camera.position.set(
+    const targetPosition = new THREE.Vector3(
       cameraDistance * 0.5,
       cameraDistance * 0.8, // Higher angle for better overview
       cameraDistance
     );
-    this.camera.lookAt(0, 0, 0);
+    const targetLookAt = new THREE.Vector3(0, 0, 0);
 
-    // Update controls target and limits for galaxy scale
-    this.controls.target.set(0, 0, 0);
+    // Update controls limits for galaxy scale
     this.controls.minDistance = galaxyRadius * 0.1;
     this.controls.maxDistance = galaxyRadius * 5;
-    this.controls.update();
+
+    // Animate camera to new position (1.5s duration for galaxy view)
+    this.animateCamera(targetPosition, targetLookAt, 1.5);
 
     console.log(
-      `[ThreeSceneManager] Camera focused on galaxy (radius: ${galaxyRadius.toFixed(2)} light-years)`
+      `[ThreeSceneManager] Camera focusing on galaxy (radius: ${galaxyRadius.toFixed(2)} light-years)`
     );
   }
 

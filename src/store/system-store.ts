@@ -10,6 +10,7 @@ import { create } from 'zustand';
 import type * as THREE from 'three';
 import type { StarSystem } from '../types/celestial-bodies';
 import type { Galaxy } from '../types/galaxy';
+import type { GalaxyConfig } from '../rendering/GalaxyParticleSystem';
 import { SeededRandom } from '../utils/random';
 import { generateStar } from '../generation/star-generator';
 import { generatePlanets } from '../generation/planet-generator';
@@ -80,6 +81,9 @@ interface SystemStore {
 
   /** Currently focused system within galaxy (for system-detail view) */
   focusedSystemIndex: number | null;
+
+  /** Custom galaxy particle system configuration (overrides procedural defaults) */
+  galaxyConfig: Partial<GalaxyConfig> | null;
 
   // ===== IDE State =====
 
@@ -152,6 +156,17 @@ interface SystemStore {
   focusSystem: (index: number | null) => void;
 
   /**
+   * Update galaxy particle system configuration
+   * @param config - Partial galaxy config to merge with current settings
+   */
+  updateGalaxyConfig: (config: Partial<GalaxyConfig>) => void;
+
+  /**
+   * Reset galaxy configuration to procedural defaults
+   */
+  resetGalaxyConfig: () => void;
+
+  /**
    * Toggle IDE panel open/closed
    */
   toggleIDE: () => void;
@@ -222,6 +237,7 @@ export const useSystemStore = create<SystemStore>((set, get) => ({
   currentGalaxy: null,
   viewMode: 'system',
   focusedSystemIndex: null,
+  galaxyConfig: null,
   ideOpen: false,
   selectedObject: null,
   uniformOverrides: new Map(),
@@ -445,6 +461,21 @@ export const useSystemStore = create<SystemStore>((set, get) => ({
         selectedObject: null
       });
     }
+  },
+
+  updateGalaxyConfig: (config: Partial<GalaxyConfig>) => {
+    const { galaxyConfig } = get();
+
+    // Merge with existing config
+    const newConfig = { ...galaxyConfig, ...config };
+
+    console.log('[Store] Updating galaxy config:', config);
+    set({ galaxyConfig: newConfig });
+  },
+
+  resetGalaxyConfig: () => {
+    console.log('[Store] Resetting galaxy config to defaults');
+    set({ galaxyConfig: null });
   },
 
   // ===== Phase 3: Architect Mode Actions =====
