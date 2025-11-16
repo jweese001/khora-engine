@@ -115,6 +115,33 @@ export interface Star {
 /**
  * Planet - Orbiting body of a star
  */
+/**
+ * Visual properties for planet rendering
+ * Adds variety to planet appearance beyond base type
+ */
+export interface PlanetVisualProperties {
+  // Color variation
+  baseColor: [number, number, number]; // RGB 0-1, seed-based
+  waterColor?: [number, number, number]; // For rocky planets with water
+  atmosphereColor?: [number, number, number]; // For planets with atmosphere
+
+  // Rocky planet variation
+  terrainRoughness?: number; // 0.5-1.5, affects noise frequency
+  cloudDensity?: number; // 0.0-0.8, for planets with atmosphere
+
+  // Gas giant variation
+  bandColors?: [[number, number, number], [number, number, number], [number, number, number], ...Array<[number, number, number]>]; // 3-7 band colors
+  bandCount?: number; // 3-7
+  turbulenceIntensity?: number; // 0.3-1.5, affects band mixing
+  hasStorm?: boolean; // Great Red Spot style feature
+  stormColor?: [number, number, number];
+
+  // Ring system (optional)
+  hasRings?: boolean;
+  ringCount?: number; // 1-3 ring groups
+  ringThickness?: number; // 0.1-0.4
+}
+
 export interface Planet {
   id: string;
   name: string;
@@ -134,11 +161,25 @@ export interface Planet {
   surfaceTemperature: number; // Kelvin
   waterCoverage: number; // 0.0-1.0, for rendering blue oceans
 
+  // Visual properties (for rendering variety)
+  visualProperties: PlanetVisualProperties;
+
   // Resources
   resources: ResourceMap;
 
   // Satellites
   moons: Moon[];
+}
+
+/**
+ * Visual properties for moon rendering
+ * Similar to planets but typically more limited (barren surfaces)
+ */
+export interface MoonVisualProperties {
+  baseColor: [number, number, number]; // RGB 0-1, typically grays/browns
+  terrainRoughness?: number; // 0.5-1.5, affects crater patterns
+  hasIce?: boolean; // Ice caps or deposits
+  iceColor?: [number, number, number]; // For icy moons
 }
 
 /**
@@ -159,6 +200,10 @@ export interface Moon {
 
   // Surface properties
   surfaceTemperature: number; // Kelvin
+
+  // Visual properties (for rendering variety)
+  visualProperties: MoonVisualProperties;
+
   resources: ResourceMap;
 }
 

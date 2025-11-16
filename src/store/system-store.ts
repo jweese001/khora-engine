@@ -17,6 +17,7 @@ import { generatePlanets } from '../generation/planet-generator';
 import { generateMoons } from '../generation/moon-generator';
 import { distributePlanetResources, distributeMoonResources } from '../generation/resource-distributor';
 import { generateGalaxy } from '../generation/galaxy-generator';
+import { useGalaxyStore } from './galaxy-store';
 
 // ============================================================================
 // Store State Interface
@@ -400,6 +401,10 @@ export const useSystemStore = create<SystemStore>((set, get) => ({
         generationError: null
       });
 
+      // Initialize visual galaxy layers from procedural galaxy (Phase 2.5)
+      // All 3 layers become visible as variations of the generated galaxy
+      useGalaxyStore.getState().initializeFromProceduralGalaxy(galaxy);
+
       console.log('[Store] Galaxy generation complete:', galaxy);
     } catch (error) {
       console.error('[Store] Galaxy generation failed:', error);
@@ -420,6 +425,9 @@ export const useSystemStore = create<SystemStore>((set, get) => ({
       generationError: null,
       uniformOverrides: new Map() // Clear overrides when clearing galaxy
     });
+
+    // Deactivate visual galaxy particle system layers (Phase 2.5)
+    useGalaxyStore.getState().deactivateGalaxyLayers();
   },
 
   setViewMode: (mode: ViewMode) => {

@@ -598,6 +598,13 @@ export class GalaxyParticleSystem {
     this.markerPoints = new THREE.Points(geometry, material);
     this.markerPoints.rotation.x = -Math.PI / 5;
     this.markerPoints.name = 'systemMarkers';
+
+    // Store marker data in userData for raycasting/selection
+    this.markerPoints.userData = {
+      markers: systems, // Full array of SystemMarker objects with data
+      markerCount: systems.length
+    };
+
     this.group.add(this.markerPoints);
   }
 

@@ -25,12 +25,19 @@ import {
 } from '../utils/physics';
 import { generatePlanetName, generateId } from './name-generator';
 import { isInHabitableZone } from '../utils/physics';
+import {
+  generateRockyPlanetColor,
+  generateGasGiantPalette,
+  generateWaterColor,
+  generateAtmosphereColor
+} from '../utils/color-palette';
 import type {
   Star,
   Planet,
   PlanetType,
   Atmosphere,
-  HabitableZone
+  HabitableZone,
+  PlanetVisualProperties
 } from '../types/celestial-bodies';
 import { PlanetType as PlanetTypeEnum } from '../types/celestial-bodies';
 
@@ -325,6 +332,92 @@ function generateAtmosphere(
 }
 
 // ============================================================================
+// Visual Properties Generation
+// ============================================================================
+
+/**
+ * Generate visual properties for a planet
+ * Creates varied appearance within realistic constraints
+ */
+function generateVisualProperties(
+  type: PlanetType,
+  atmosphere: Atmosphere,
+  waterCoverage: number,
+  rng: SeededRandom
+): PlanetVisualProperties {
+  const props: PlanetVisualProperties = {
+    baseColor: [0, 0, 0] // Will be set below
+  };
+
+  if (type === PlanetTypeEnum.Rocky || type === PlanetTypeEnum.Barren) {
+    // Generate base terrain color
+    const baseColor = generateRockyPlanetColor(rng, type);
+    props.baseColor = [baseColor.r, baseColor.g, baseColor.b];
+
+    // Terrain variation
+    props.terrainRoughness = rng.randomFloat(0.6, 1.3); // Affects noise frequency
+
+    // Water color (if planet has water)
+    if (waterCoverage > 0.1) {
+      const waterColor = generateWaterColor(rng);
+      props.waterColor = [waterColor.r, waterColor.g, waterColor.b];
+    }
+
+    // Atmosphere properties (if present)
+    if (atmosphere.present) {
+      const atmosphereColor = generateAtmosphereColor(rng);
+      props.atmosphereColor = [atmosphereColor.r, atmosphereColor.g, atmosphereColor.b];
+
+      // Cloud density for rocky planets with atmosphere
+      props.cloudDensity = rng.randomFloat(0.2, 0.7);
+    }
+
+    // Ring system (rare for rocky planets, ~5%)
+    if (rng.random() < 0.05) {
+      props.hasRings = true;
+      props.ringCount = rng.randomInt(1, 2);
+      props.ringThickness = rng.randomFloat(0.05, 0.15);
+    }
+
+  } else if (type === PlanetTypeEnum.GasGiant || type === PlanetTypeEnum.IceGiant) {
+    // Generate band colors (3-7 bands)
+    const bandCount = rng.randomInt(3, 7);
+    const bandColors = generateGasGiantPalette(rng, bandCount);
+
+    props.bandCount = bandCount;
+    props.bandColors = bandColors.map(color => [color.r, color.g, color.b]) as any;
+
+    // Set base color to first band color
+    props.baseColor = [bandColors[0].r, bandColors[0].g, bandColors[0].b];
+
+    // Turbulence variation
+    props.turbulenceIntensity = rng.randomFloat(0.4, 1.2);
+
+    // Storm feature (Great Red Spot style) - 20% chance for gas giants
+    if (type === PlanetTypeEnum.GasGiant && rng.random() < 0.2) {
+      props.hasStorm = true;
+      // Storm color is usually a variation of one of the band colors
+      const stormColorBase = rng.choice(bandColors);
+      // Make it slightly different (more saturated/darker)
+      props.stormColor = [
+        Math.max(0, stormColorBase.r * 0.8),
+        Math.max(0, stormColorBase.g * 0.8),
+        Math.max(0, stormColorBase.b * 0.8)
+      ];
+    }
+
+    // Ring system (common for gas giants, ~60%)
+    if (rng.random() < 0.6) {
+      props.hasRings = true;
+      props.ringCount = rng.randomInt(1, 3);
+      props.ringThickness = rng.randomFloat(0.1, 0.4);
+    }
+  }
+
+  return props;
+}
+
+// ============================================================================
 // Planet Generation
 // ============================================================================
 
@@ -408,6 +501,9 @@ export function generatePlanets(star: Star, rng: SeededRandom): Planet[] {
     // Generate name
     const name = generatePlanetName(star.name, i, isInHZ, rng);
 
+    // Generate visual properties for variety
+    const visualProperties = generateVisualProperties(type, atmosphere, waterCoverage, rng);
+
     // Create planet object
     const planet: Planet = {
       id: generateId('planet', parseInt(star.id.split('-')[1]), i),
@@ -421,6 +517,7 @@ export function generatePlanets(star: Star, rng: SeededRandom): Planet[] {
       atmosphere,
       surfaceTemperature,
       waterCoverage,
+      visualProperties,
       resources: {}, // Will be populated by resource distributor
       moons: [] // Will be populated by moon generator
     };

@@ -161,7 +161,7 @@ function generateIrregularParams(rng: SeededRandom): IrregularGalaxyParams {
  * Generate all star systems for the galaxy
  * Positions them according to galaxy type and ensures minimum spacing
  */
-function generateGalaxySystems(
+export function generateGalaxySystems(
   count: number,
   galaxyType: GalaxyType,
   params: {

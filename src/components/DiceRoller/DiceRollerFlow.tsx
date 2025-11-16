@@ -73,11 +73,26 @@ export function DiceRollerFlow() {
     setAppMode('architect');
   };
 
+  const handleBypass = () => {
+    console.log('[DiceRollerFlow] Bypassing dice roll with default budget');
+    setResourceBudget(20000); // Default budget for testing
+    setAppMode('architect');
+  };
+
   return (
     <div style={styles.container}>
       {/* Start Screen */}
       {showStartScreen && (
         <div style={styles.startScreen}>
+          {/* Bypass button (temporary for testing) */}
+          <button
+            onClick={handleBypass}
+            style={styles.bypassBtn}
+            title="Skip to architect mode (dev only)"
+          >
+            bypass
+          </button>
+
           <div style={styles.startContent}>
             <span className="mdi mdi-cube-outline" style={styles.startIcon}></span>
             <h1 className="system-title" style={styles.startTitle}>
@@ -506,5 +521,21 @@ const styles = {
     fontSize: '14px',
     color: 'var(--text-secondary)',
     margin: 0
-  }
+  },
+  bypassBtn: {
+    position: 'fixed' as const,
+    top: '16px',
+    right: '16px',
+    padding: '8px 16px',
+    background: 'transparent',
+    border: '1px solid rgba(137, 207, 240, 0.3)',
+    borderRadius: '4px',
+    color: 'var(--text-secondary)',
+    fontSize: '12px',
+    cursor: 'pointer',
+    fontFamily: 'monospace',
+    transition: 'all 0.2s',
+    opacity: 0.6,
+    zIndex: 1000
+  } as React.CSSProperties
 };

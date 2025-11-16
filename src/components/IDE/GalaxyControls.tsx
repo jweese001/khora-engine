@@ -3,28 +3,55 @@
  *
  * Live editing interface for galaxy particle system parameters.
  * Comprehensive controls matching the standalone demo.
+ *
+ * Phase 2.5: Refactored to work with multi-layer galaxy system.
+ * Controls now operate on the active layer from galaxy-store.
  */
 
 import { HexColorPicker } from 'react-colorful';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import type { Galaxy } from '../../types/galaxy';
 import type { GalaxyConfig, GalaxyType } from '../../rendering/GalaxyParticleSystem';
 import * as THREE from 'three';
+import { useGalaxyStore } from '../../store/galaxy-store';
+import { LayerSelector } from './LayerSelector';
 
 interface GalaxyControlsProps {
-  galaxy: Galaxy;
-  onConfigChange: (config: Partial<GalaxyConfig>) => void;
-  onReset: () => void;
+  // Legacy props (optional for backward compatibility)
+  galaxy?: Galaxy;
+  onConfigChange?: (config: Partial<GalaxyConfig>) => void;
+  onReset?: () => void;
 }
 
 export function GalaxyControls({ galaxy, onConfigChange, onReset }: GalaxyControlsProps) {
   const [activeColorPicker, setActiveColorPicker] = useState<string | null>(null);
-  const [currentType, setCurrentType] = useState<GalaxyType>('spiral');
+
+  // Multi-layer galaxy system (Phase 2.5)
+  const {
+    layers,
+    activeLayerId,
+    markers,
+    sceneManagerRef,
+    updateLayerConfig,
+    updateMarkerConfig,
+    resetLayer
+  } = useGalaxyStore();
+  const activeLayer = layers[activeLayerId];
+
+  // Track current type from active layer config
+  const [currentType, setCurrentType] = useState<GalaxyType>(activeLayer.config.type || 'spiral');
+
+  // Update currentType when active layer changes
+  useEffect(() => {
+    if (activeLayer.config.type) {
+      setCurrentType(activeLayer.config.type);
+    }
+  }, [activeLayerId, activeLayer.config.type]);
 
   // Convert THREE.Color to hex string
-  const colorToHex = (r: number, g: number, b: number): string => {
-    const toHex = (n: number) => Math.round(n * 255).toString(16).padStart(2, '0');
-    return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+  const colorToHex = (color: THREE.Color | undefined): string => {
+    if (!color) return '#ffffff';
+    return `#${color.getHexString()}`;
   };
 
   // Convert hex to RGB for THREE.Color
@@ -32,29 +59,60 @@ export function GalaxyControls({ galaxy, onConfigChange, onReset }: GalaxyContro
     return new THREE.Color(hex);
   };
 
+  // Apply config change to active layer (with legacy support)
+  const applyConfigChange = (config: Partial<GalaxyConfig>) => {
+    // Use multi-layer store
+    updateLayerConfig(activeLayerId, config);
+
+    // Also call legacy callback if provided
+    if (onConfigChange) {
+      onConfigChange(config);
+    }
+  };
+
   const handleColorChange = (colorName: string, hex: string) => {
-    onConfigChange({ [colorName]: hexToColor(hex) });
+    applyConfigChange({ [colorName]: hexToColor(hex) });
   };
 
   const handleTypeChange = (type: GalaxyType) => {
     setCurrentType(type);
-    onConfigChange({ type });
+    applyConfigChange({ type });
   };
 
   const handleSliderChange = (param: string, value: number) => {
-    onConfigChange({ [param]: value });
+    applyConfigChange({ [param]: value });
+  };
+
+  const handleReset = () => {
+    // Reset active layer
+    resetLayer(activeLayerId);
+
+    // Reset local state
+    setCurrentType(activeLayer.config.type || 'spiral');
+
+    // Call legacy callback if provided
+    if (onReset) {
+      onReset();
+    }
   };
 
   return (
     <div style={styles.container}>
+      {/* Multi-Layer Selector (Phase 2.5) */}
+      <LayerSelector />
+
       {/* Header */}
       <div style={styles.header}>
         <div style={styles.headerInfo}>
-          <span style={styles.galaxyType}>{galaxy.type.toUpperCase()}</span>
-          <span style={styles.galaxyName}>{galaxy.name}</span>
+          <span style={styles.galaxyType}>
+            {activeLayer.config.type?.toUpperCase() || 'GALAXY'}
+          </span>
+          <span style={styles.galaxyName}>
+            {activeLayer.name} {galaxy ? `• ${galaxy.name}` : ''}
+          </span>
         </div>
-        <button onClick={onReset} style={styles.resetButton}>
-          Reset All
+        <button onClick={handleReset} style={styles.resetButton}>
+          Reset Layer
         </button>
       </div>
 
@@ -88,7 +146,7 @@ export function GalaxyControls({ galaxy, onConfigChange, onReset }: GalaxyContro
 
           <SliderControl
             label="Particle Count"
-            value={5000}
+            value={activeLayer.config.particleCount ?? 5000}
             min={1000}
             max={15000}
             step={500}
@@ -97,7 +155,7 @@ export function GalaxyControls({ galaxy, onConfigChange, onReset }: GalaxyContro
 
           <SliderControl
             label="Size Min"
-            value={0.5}
+            value={activeLayer.config.particleSizeMin ?? 0.5}
             min={0.1}
             max={2.0}
             step={0.1}
@@ -106,7 +164,7 @@ export function GalaxyControls({ galaxy, onConfigChange, onReset }: GalaxyContro
 
           <SliderControl
             label="Size Max"
-            value={2.5}
+            value={activeLayer.config.particleSizeMax ?? 2.5}
             min={1.0}
             max={6.0}
             step={0.1}
@@ -115,7 +173,7 @@ export function GalaxyControls({ galaxy, onConfigChange, onReset }: GalaxyContro
 
           <SliderControl
             label="Brightness"
-            value={0.8}
+            value={activeLayer.config.particleBrightness ?? 0.8}
             min={0.3}
             max={2.0}
             step={0.1}
@@ -124,7 +182,7 @@ export function GalaxyControls({ galaxy, onConfigChange, onReset }: GalaxyContro
 
           <SliderControl
             label="Galaxy Size"
-            value={100}
+            value={activeLayer.config.size ?? 100}
             min={50}
             max={200}
             step={5}
@@ -138,7 +196,7 @@ export function GalaxyControls({ galaxy, onConfigChange, onReset }: GalaxyContro
 
           <ColorControl
             label="Core Color"
-            defaultColor="#fff4e6"
+            defaultColor={colorToHex(activeLayer.config.coreColor)}
             activePicker={activeColorPicker}
             onTogglePicker={() => setActiveColorPicker(activeColorPicker === 'coreColor' ? null : 'coreColor')}
             onChange={(hex) => handleColorChange('coreColor', hex)}
@@ -146,7 +204,7 @@ export function GalaxyControls({ galaxy, onConfigChange, onReset }: GalaxyContro
 
           <ColorControl
             label="Mid Color"
-            defaultColor="#ffdd99"
+            defaultColor={colorToHex(activeLayer.config.midColor)}
             activePicker={activeColorPicker}
             onTogglePicker={() => setActiveColorPicker(activeColorPicker === 'midColor' ? null : 'midColor')}
             onChange={(hex) => handleColorChange('midColor', hex)}
@@ -154,7 +212,7 @@ export function GalaxyControls({ galaxy, onConfigChange, onReset }: GalaxyContro
 
           <ColorControl
             label="Edge Color"
-            defaultColor="#ff9966"
+            defaultColor={colorToHex(activeLayer.config.edgeColor)}
             activePicker={activeColorPicker}
             onTogglePicker={() => setActiveColorPicker(activeColorPicker === 'edgeColor' ? null : 'edgeColor')}
             onChange={(hex) => handleColorChange('edgeColor', hex)}
@@ -170,7 +228,7 @@ export function GalaxyControls({ galaxy, onConfigChange, onReset }: GalaxyContro
 
           <SliderControl
             label="Core Brightness"
-            value={0.5}
+            value={activeLayer.config.coreBrightness ?? 0.5}
             min={0.0}
             max={1.0}
             step={0.05}
@@ -179,7 +237,7 @@ export function GalaxyControls({ galaxy, onConfigChange, onReset }: GalaxyContro
 
           <SliderControl
             label="Core Alpha Falloff"
-            value={0.6}
+            value={activeLayer.config.coreAlphaFalloff ?? 0.6}
             min={0.0}
             max={1.0}
             step={0.05}
@@ -188,7 +246,7 @@ export function GalaxyControls({ galaxy, onConfigChange, onReset }: GalaxyContro
 
           <SliderControl
             label="Core Exclusion Radius"
-            value={0.0}
+            value={activeLayer.config.coreExclusionRadius ?? 0.0}
             min={0.0}
             max={0.2}
             step={0.01}
@@ -202,7 +260,7 @@ export function GalaxyControls({ galaxy, onConfigChange, onReset }: GalaxyContro
 
           <SliderControl
             label="Animation Speed"
-            value={0.3}
+            value={activeLayer.config.animationSpeed ?? 0.3}
             min={0.0}
             max={2.0}
             step={0.1}
@@ -211,7 +269,7 @@ export function GalaxyControls({ galaxy, onConfigChange, onReset }: GalaxyContro
 
           <SliderControl
             label="Rotation Speed"
-            value={0.005}
+            value={activeLayer.config.rotationSpeed ?? 0.005}
             min={0.0}
             max={0.05}
             step={0.005}
@@ -226,7 +284,7 @@ export function GalaxyControls({ galaxy, onConfigChange, onReset }: GalaxyContro
 
             <SliderControl
               label="Arm Count"
-              value={3}
+              value={activeLayer.config.armCount ?? 3}
               min={2}
               max={8}
               step={1}
@@ -235,7 +293,7 @@ export function GalaxyControls({ galaxy, onConfigChange, onReset }: GalaxyContro
 
             <SliderControl
               label="Spiral Tightness"
-              value={0.6}
+              value={activeLayer.config.spiralTightness ?? 0.6}
               min={0.2}
               max={1.5}
               step={0.1}
@@ -244,7 +302,7 @@ export function GalaxyControls({ galaxy, onConfigChange, onReset }: GalaxyContro
 
             <SliderControl
               label="Disk Thickness"
-              value={4.0}
+              value={activeLayer.config.diskThickness ?? 4.0}
               min={2}
               max={8}
               step={0.5}
@@ -253,7 +311,7 @@ export function GalaxyControls({ galaxy, onConfigChange, onReset }: GalaxyContro
 
             <SliderControl
               label="Core Size"
-              value={0.15}
+              value={activeLayer.config.coreSize ?? 0.15}
               min={0.05}
               max={0.5}
               step={0.05}
@@ -268,7 +326,7 @@ export function GalaxyControls({ galaxy, onConfigChange, onReset }: GalaxyContro
 
             <SliderControl
               label="Flattening"
-              value={0.6}
+              value={activeLayer.config.ellipticalFlatten ?? 0.6}
               min={0.3}
               max={1.0}
               step={0.05}
@@ -283,7 +341,7 @@ export function GalaxyControls({ galaxy, onConfigChange, onReset }: GalaxyContro
 
             <SliderControl
               label="Chaos Factor"
-              value={0.4}
+              value={activeLayer.config.irregularChaos ?? 0.4}
               min={0.1}
               max={1.0}
               step={0.05}
@@ -292,7 +350,7 @@ export function GalaxyControls({ galaxy, onConfigChange, onReset }: GalaxyContro
 
             <SliderControl
               label="Disk Thickness"
-              value={4.0}
+              value={activeLayer.config.diskThickness ?? 4.0}
               min={2}
               max={10}
               step={0.5}
@@ -307,7 +365,7 @@ export function GalaxyControls({ galaxy, onConfigChange, onReset }: GalaxyContro
 
             <SliderControl
               label="Inner Radius"
-              value={0.4}
+              value={activeLayer.config.ringInnerRadius ?? 0.4}
               min={0.0}
               max={1.0}
               step={0.05}
@@ -316,7 +374,7 @@ export function GalaxyControls({ galaxy, onConfigChange, onReset }: GalaxyContro
 
             <SliderControl
               label="Outer Radius"
-              value={0.9}
+              value={activeLayer.config.ringOuterRadius ?? 0.9}
               min={0.0}
               max={1.0}
               step={0.05}
@@ -325,7 +383,7 @@ export function GalaxyControls({ galaxy, onConfigChange, onReset }: GalaxyContro
 
             <SliderControl
               label="Disk Thickness"
-              value={4.0}
+              value={activeLayer.config.diskThickness ?? 4.0}
               min={1}
               max={8}
               step={0.5}
@@ -334,14 +392,129 @@ export function GalaxyControls({ galaxy, onConfigChange, onReset }: GalaxyContro
           </div>
         )}
 
+        {/* System Markers */}
+        <div style={styles.section}>
+          <h3 style={styles.sectionTitle}>System Markers</h3>
+
+          <div style={styles.control}>
+            <label style={styles.label}>
+              <span>Explorable Systems</span>
+              <span style={styles.labelValue}>{markers.count}</span>
+            </label>
+            <input
+              type="number"
+              min="0"
+              max="200"
+              value={markers.count}
+              onChange={(e) => updateMarkerConfig({ count: parseInt(e.target.value) || 0 })}
+              style={{
+                width: '100%',
+                padding: '8px',
+                background: '#3e3e42',
+                border: '1px solid #3e3e42',
+                borderRadius: '4px',
+                color: '#cccccc',
+                fontSize: '12px',
+              }}
+            />
+          </div>
+
+          <SliderControl
+            label="Marker Size"
+            value={markers.size}
+            min={1}
+            max={10}
+            step={0.5}
+            onChange={(v) => updateMarkerConfig({ size: v })}
+          />
+
+          <div style={styles.control}>
+            <label style={styles.label}>
+              <span>Marker Color</span>
+            </label>
+            <input
+              type="color"
+              value={markers.color}
+              onChange={(e) => updateMarkerConfig({ color: e.target.value })}
+              style={{
+                width: '100%',
+                height: '32px',
+                padding: '4px',
+                background: '#3e3e42',
+                border: '1px solid #3e3e42',
+                borderRadius: '4px',
+                cursor: 'pointer',
+              }}
+            />
+          </div>
+
+          <SliderControl
+            label="Pulse Speed"
+            value={markers.pulseFrequency}
+            min={0.0}
+            max={4.0}
+            step={0.1}
+            onChange={(v) => updateMarkerConfig({ pulseFrequency: v })}
+          />
+
+          <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
+            <button
+              onClick={() => sceneManagerRef?.generateMarkersForActiveLayer()}
+              disabled={!sceneManagerRef}
+              style={{
+                ...styles.resetButton,
+                flex: 1,
+                background: '#0e639c',
+                borderColor: '#007acc',
+              }}
+            >
+              Add Markers
+            </button>
+            <button
+              onClick={() => sceneManagerRef?.clearMarkers()}
+              disabled={!sceneManagerRef}
+              style={{
+                ...styles.resetButton,
+                flex: 1,
+              }}
+            >
+              Clear
+            </button>
+          </div>
+
+          <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
+            <button
+              onClick={() => sceneManagerRef?.toggleMarkersVisibility()}
+              disabled={!sceneManagerRef}
+              style={{
+                ...styles.resetButton,
+                flex: 1,
+              }}
+            >
+              {useGalaxyStore.getState().markersVisible ? 'Hide Markers' : 'Show Markers'}
+            </button>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '12px' }}>
+            <input
+              type="checkbox"
+              checked={markers.clickable}
+              onChange={(e) => updateMarkerConfig({ clickable: e.target.checked })}
+              style={{ width: 'auto', cursor: 'pointer' }}
+            />
+            <label style={{ fontSize: '12px', color: '#969696', cursor: 'pointer' }}>
+              Markers Clickable
+            </label>
+          </div>
+        </div>
+
         {/* Future Features Note */}
         <div style={styles.section}>
           <h3 style={styles.sectionTitle}>Coming Soon</h3>
           <div style={styles.comingSoon}>
-            <p style={styles.comingSoonText}>• Multi-layer particle systems</p>
-            <p style={styles.comingSoonText}>• Custom marker placement</p>
-            <p style={styles.comingSoonText}>• Marker color customization</p>
             <p style={styles.comingSoonText}>• Preset configurations</p>
+            <p style={styles.comingSoonText}>• Galaxy morphing animations</p>
+            <p style={styles.comingSoonText}>• Advanced marker distribution algorithms</p>
           </div>
         </div>
       </div>
