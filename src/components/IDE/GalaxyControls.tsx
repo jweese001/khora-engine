@@ -459,7 +459,15 @@ export function GalaxyControls({ galaxy, onConfigChange, onReset }: GalaxyContro
 
           <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
             <button
-              onClick={() => sceneManagerRef?.generateMarkersForActiveLayer()}
+              onClick={() => {
+                console.log('[GalaxyControls] Add Markers button clicked');
+                console.log('[GalaxyControls] sceneManagerRef:', sceneManagerRef);
+                if (sceneManagerRef) {
+                  sceneManagerRef.generateMarkersForActiveLayer();
+                } else {
+                  console.error('[GalaxyControls] sceneManagerRef is null!');
+                }
+              }}
               disabled={!sceneManagerRef}
               style={{
                 ...styles.resetButton,

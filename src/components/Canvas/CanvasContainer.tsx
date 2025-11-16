@@ -8,6 +8,7 @@
 import { useEffect, useRef } from 'react';
 import { ThreeSceneManager } from './ThreeSceneManager';
 import { useSystemStore } from '../../store/system-store';
+import { useGalaxyStore } from '../../store/galaxy-store';
 
 export function CanvasContainer() {
   // Reference to container DOM element
@@ -61,6 +62,10 @@ export function CanvasContainer() {
     setScene(sceneManagerRef.current.getScene());
     setCamera(sceneManagerRef.current.getCamera());
 
+    // Store scene manager reference in galaxy store (for marker controls)
+    const { setSceneManagerRef } = useGalaxyStore.getState();
+    setSceneManagerRef(sceneManagerRef.current);
+
     // Cleanup on unmount
     return () => {
       console.log('[CanvasContainer] Disposing ThreeSceneManager');
@@ -70,6 +75,10 @@ export function CanvasContainer() {
       }
       setScene(null);
       setCamera(null);
+
+      // Clear scene manager reference in galaxy store
+      const { setSceneManagerRef } = useGalaxyStore.getState();
+      setSceneManagerRef(null);
     };
   }, []); // Only run once on mount
 

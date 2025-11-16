@@ -112,7 +112,7 @@ const createDefaultGalaxyConfig = (): GalaxyConfig => ({
  */
 const createDefaultMarkerConfig = (): MarkerConfig => ({
   count: 50,
-  size: 1.0,
+  size: 4.0,
   color: '#fff3b3',  // Warm yellow-white
   pulseFrequency: 2.0,
   distribution: 'uniform',
@@ -319,6 +319,11 @@ interface GalaxyStoreState {
    * Load presets from localStorage (called on init)
    */
   loadPresetsFromStorage: () => void;
+
+  /**
+   * Set scene manager reference (called from CanvasContainer)
+   */
+  setSceneManagerRef: (ref: any) => void;
 }
 
 // ============================================================================
@@ -605,6 +610,13 @@ export const useGalaxyStore = create<GalaxyStoreState>((set, get) => ({
   loadPresetsFromStorage: () => {
     const presets = loadPresetsFromStorage();
     set({ presets });
+  },
+
+  /**
+   * Set scene manager reference (called from CanvasContainer)
+   */
+  setSceneManagerRef: (ref: any) => {
+    set({ sceneManagerRef: ref });
   },
 }));
 
