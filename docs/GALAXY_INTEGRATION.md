@@ -77,12 +77,30 @@ This integration combines the best of both systems:
 - [x] Add code documentation and algorithm comments
 - [x] Update TASKS.md with Session 5 completion
 
-### Phase 5: Advanced Features (Next Session)
+### Phase 5: Marker System Completion (Session 6) ✅ COMPLETE
+- [x] Fix Add Markers button (scene manager reference)
+- [x] Fix type mismatch between config types and GalaxyType enum
+- [x] Replace procedural algorithm with visual spiral algorithm
+- [x] Fix marker alignment to spiral arms
+- [x] Fix Y-axis distribution (variable thickness)
+- [x] Implement multi-layer raycasting for marker clicks
+- [x] Add system persistence to galaxy.systems array
+- [x] Track originalSystemCount for clean clearing
+- [x] Implement dual-mode system lookup (auto-generated vs custom)
+- [x] Fix view isolation (galaxy hidden in system view)
+- [x] Conditional galaxy layer updates based on view mode
+- [x] Restore layer visibility when returning to galaxy view
+- [x] Change default marker size to 4.0
+
+**Result:** Full marker functionality with persistence and proper view isolation
+
+### Phase 6: Advanced Features (Next Session)
+- [ ] UI cleanup and polish (galaxy controls layout)
 - [ ] Multi-layer particle systems (layer management UI)
-- [ ] Custom marker placement (manual positioning)
+- [ ] Custom marker placement controls (manual positioning)
 - [ ] Marker color customization (override procedural colors)
 - [ ] Preset configurations (save/load galaxy settings)
-- [ ] Performance testing (60fps target with 20 systems)
+- [ ] Performance testing (60fps target with 500+ markers)
 - [ ] Full demo feature parity
 
 ---
