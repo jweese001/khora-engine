@@ -439,7 +439,7 @@ export function GalaxyControls({ galaxy, onConfigChange, onReset }: GalaxyContro
                 label=""
                 defaultColor={markers.color}
                 activePicker={activeColorPicker}
-                onTogglePicker={() => setActiveColorPicker(activeColorPicker === 'markerColor' ? null : 'markerColor')}
+                onTogglePicker={() => setActiveColorPicker(activeColorPicker === '' ? null : '')}
                 onChange={(hex) => updateMarkerConfig({ color: hex })}
               />
             </div>
@@ -580,7 +580,6 @@ interface ColorControlProps {
 
 function ColorControl({ label, defaultColor, activePicker, onTogglePicker, onChange }: ColorControlProps) {
   const [color, setColor] = useState(defaultColor);
-  const [isHovered, setIsHovered] = useState(false);
   const pickerRef = useRef<HTMLDivElement>(null);
 
   // Convert label to match the picker ID format (e.g., "Core Color" -> "coreColor")
@@ -617,18 +616,17 @@ function ColorControl({ label, defaultColor, activePicker, onTogglePicker, onCha
 
   return (
     <div style={styles.colorControl} ref={pickerRef}>
-      <label style={styles.colorLabel}>{label}</label>
+      {label && <label style={styles.colorLabel}>{label}</label>}
       <div
         style={{
           ...styles.colorSwatch,
-          ...(isHovered && styles.colorSwatchHover)
+          backgroundColor: color,
         }}
         onClick={onTogglePicker}
-        onMouseEnter={() => setIsHovered(true)}
-        onMouseLeave={() => setIsHovered(false)}
-      >
-        <div style={{ ...styles.colorSwatchInner, backgroundColor: color }} />
-      </div>
+        onFocus={(e) => e.currentTarget.blur()}
+        tabIndex={-1}
+        onMouseDown={(e) => e.preventDefault()}
+      />
       {isActive && (
         <div style={styles.colorPickerPopup}>
           <HexColorPicker color={color} onChange={handleColorChange} />
@@ -778,14 +776,13 @@ const styles = {
   colorSwatch: {
     width: '100%',
     height: '32px',
-    padding: '6px',
-    background: '#3e3e42',
-    border: '1px solid #3e3e42',
+    border: '6px solid #3e3e42',
     borderRadius: '4px',
     cursor: 'pointer',
-    transition: 'all 0.3s ease',
     boxSizing: 'border-box',
-    display: 'flex',
+    outline: 'none !important',
+    overflow: 'hidden',
+    WebkitTapHighlightColor: 'transparent',
   } as React.CSSProperties,
   colorSwatchInner: {
     width: '100%',
@@ -793,14 +790,19 @@ const styles = {
     borderRadius: '2px',
     border: 'none',
     outline: 'none',
+    boxShadow: 'none',
+    WebkitAppearance: 'none',
+    MozAppearance: 'none',
+    appearance: 'none',
   } as React.CSSProperties,
   colorSwatchHover: {
     borderColor: '#4e4e52',
   } as React.CSSProperties,
   colorPickerPopup: {
     position: 'absolute',
-    top: '60px',
+    top: '100%',
     left: 0,
+    marginTop: '4px',
     zIndex: 1000,
     background: '#252526',
     padding: '12px',
