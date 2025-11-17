@@ -9,7 +9,7 @@
  */
 
 import { HexColorPicker } from 'react-colorful';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import type { Galaxy } from '../../types/galaxy';
 import type { GalaxyConfig, GalaxyType } from '../../rendering/GalaxyParticleSystem';
 import * as THREE from 'three';
@@ -194,29 +194,31 @@ export function GalaxyControls({ galaxy, onConfigChange, onReset }: GalaxyContro
         <div style={styles.section}>
           <h3 style={styles.sectionTitle}>Color Scheme</h3>
 
-          <ColorControl
-            label="Core Color"
-            defaultColor={colorToHex(activeLayer.config.coreColor)}
-            activePicker={activeColorPicker}
-            onTogglePicker={() => setActiveColorPicker(activeColorPicker === 'coreColor' ? null : 'coreColor')}
-            onChange={(hex) => handleColorChange('coreColor', hex)}
-          />
+          <div style={styles.colorSchemeRow}>
+            <ColorControl
+              label="Core Color"
+              defaultColor={colorToHex(activeLayer.config.coreColor)}
+              activePicker={activeColorPicker}
+              onTogglePicker={() => setActiveColorPicker(activeColorPicker === 'coreColor' ? null : 'coreColor')}
+              onChange={(hex) => handleColorChange('coreColor', hex)}
+            />
 
-          <ColorControl
-            label="Mid Color"
-            defaultColor={colorToHex(activeLayer.config.midColor)}
-            activePicker={activeColorPicker}
-            onTogglePicker={() => setActiveColorPicker(activeColorPicker === 'midColor' ? null : 'midColor')}
-            onChange={(hex) => handleColorChange('midColor', hex)}
-          />
+            <ColorControl
+              label="Mid Color"
+              defaultColor={colorToHex(activeLayer.config.midColor)}
+              activePicker={activeColorPicker}
+              onTogglePicker={() => setActiveColorPicker(activeColorPicker === 'midColor' ? null : 'midColor')}
+              onChange={(hex) => handleColorChange('midColor', hex)}
+            />
 
-          <ColorControl
-            label="Edge Color"
-            defaultColor={colorToHex(activeLayer.config.edgeColor)}
-            activePicker={activeColorPicker}
-            onTogglePicker={() => setActiveColorPicker(activeColorPicker === 'edgeColor' ? null : 'edgeColor')}
-            onChange={(hex) => handleColorChange('edgeColor', hex)}
-          />
+            <ColorControl
+              label="Edge Color"
+              defaultColor={colorToHex(activeLayer.config.edgeColor)}
+              activePicker={activeColorPicker}
+              onTogglePicker={() => setActiveColorPicker(activeColorPicker === 'edgeColor' ? null : 'edgeColor')}
+              onChange={(hex) => handleColorChange('edgeColor', hex)}
+            />
+          </div>
         </div>
 
         {/* Core Controls */}
@@ -432,20 +434,15 @@ export function GalaxyControls({ galaxy, onConfigChange, onReset }: GalaxyContro
             <label style={styles.label}>
               <span>Marker Color</span>
             </label>
-            <input
-              type="color"
-              value={markers.color}
-              onChange={(e) => updateMarkerConfig({ color: e.target.value })}
-              style={{
-                width: '100%',
-                height: '32px',
-                padding: '4px',
-                background: '#3e3e42',
-                border: '1px solid #3e3e42',
-                borderRadius: '4px',
-                cursor: 'pointer',
-              }}
-            />
+            <div style={{ width: '100%' }}>
+              <ColorControl
+                label=""
+                defaultColor={markers.color}
+                activePicker={activeColorPicker}
+                onTogglePicker={() => setActiveColorPicker(activeColorPicker === 'markerColor' ? null : 'markerColor')}
+                onChange={(hex) => updateMarkerConfig({ color: hex })}
+              />
+            </div>
           </div>
 
           <SliderControl
@@ -583,23 +580,55 @@ interface ColorControlProps {
 
 function ColorControl({ label, defaultColor, activePicker, onTogglePicker, onChange }: ColorControlProps) {
   const [color, setColor] = useState(defaultColor);
-  const isActive = activePicker === label.toLowerCase().replace(' ', '');
+  const [isHovered, setIsHovered] = useState(false);
+  const pickerRef = useRef<HTMLDivElement>(null);
+
+  // Convert label to match the picker ID format (e.g., "Core Color" -> "coreColor")
+  const pickerId = label.toLowerCase().split(' ').map((word, i) =>
+    i === 0 ? word : word.charAt(0).toUpperCase() + word.slice(1)
+  ).join('');
+  const isActive = activePicker === pickerId;
 
   const handleColorChange = (hex: string) => {
     setColor(hex);
     onChange(hex);
   };
 
+  // Update color when defaultColor prop changes (e.g., when switching layers)
+  useEffect(() => {
+    setColor(defaultColor);
+  }, [defaultColor]);
+
+  // Close picker when clicking outside
+  useEffect(() => {
+    if (!isActive) return;
+
+    const handleClickOutside = (event: MouseEvent) => {
+      if (pickerRef.current && !pickerRef.current.contains(event.target as Node)) {
+        onTogglePicker();
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isActive, onTogglePicker]);
+
   return (
-    <div style={styles.colorControl}>
-      <label style={styles.label}>{label}</label>
+    <div style={styles.colorControl} ref={pickerRef}>
+      <label style={styles.colorLabel}>{label}</label>
       <div
         style={{
           ...styles.colorSwatch,
-          backgroundColor: color
+          ...(isHovered && styles.colorSwatchHover)
         }}
         onClick={onTogglePicker}
-      />
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
+      >
+        <div style={{ ...styles.colorSwatchInner, backgroundColor: color }} />
+      </div>
       {isActive && (
         <div style={styles.colorPickerPopup}>
           <HexColorPicker color={color} onChange={handleColorChange} />
@@ -729,21 +758,48 @@ const styles = {
     fontSize: '10px',
     color: '#858585',
   } as React.CSSProperties,
+  colorSchemeRow: {
+    display: 'flex',
+    gap: '12px',
+    marginBottom: '8px',
+  } as React.CSSProperties,
   colorControl: {
     position: 'relative',
-    marginBottom: '16px',
+    flex: 1,
+    display: 'flex',
+    flexDirection: 'column',
+  } as React.CSSProperties,
+  colorLabel: {
+    fontSize: '11px',
+    color: '#969696',
+    marginBottom: '6px',
+    textAlign: 'center',
   } as React.CSSProperties,
   colorSwatch: {
     width: '100%',
     height: '32px',
-    borderRadius: '4px',
+    padding: '6px',
+    background: '#3e3e42',
     border: '1px solid #3e3e42',
+    borderRadius: '4px',
     cursor: 'pointer',
-    transition: 'border-color 0.2s',
+    transition: 'all 0.3s ease',
+    boxSizing: 'border-box',
+    display: 'flex',
+  } as React.CSSProperties,
+  colorSwatchInner: {
+    width: '100%',
+    height: '100%',
+    borderRadius: '2px',
+    border: 'none',
+    outline: 'none',
+  } as React.CSSProperties,
+  colorSwatchHover: {
+    borderColor: '#4e4e52',
   } as React.CSSProperties,
   colorPickerPopup: {
     position: 'absolute',
-    top: '40px',
+    top: '60px',
     left: 0,
     zIndex: 1000,
     background: '#252526',
