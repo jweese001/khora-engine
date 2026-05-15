@@ -20,7 +20,7 @@ export function UIControls() {
   const focusSystem = useSystemStore((state) => state.focusSystem);
 
   const [galaxySeedInput, setGalaxySeedInput] = useState('');
-  const [systemCount, setSystemCount] = useState('12');
+  const [systemCount, setSystemCount] = useState('16');
 
   // Show "Back to Galaxy" button when viewing a system that's part of a galaxy
   const showBackButton = currentGalaxy !== null && viewMode === 'system';
@@ -44,7 +44,7 @@ export function UIControls() {
       seed = Math.floor(Math.random() * 1000000);
     }
 
-    const count = parseInt(systemCount, 10) || 12;
+    const count = parseInt(systemCount, 10) || 16;
 
     console.log(`[UIControls] Generating galaxy with seed: ${seed}, ${count} systems`);
     generateGalaxy(seed, count);
@@ -63,63 +63,60 @@ export function UIControls() {
     <div style={styles.container}>
       {/* Left: Branding */}
       <div style={styles.leftSection}>
-        <div style={styles.brandingGroup}>
-          <span className="mdi mdi-atom" style={styles.icon}></span>
-          <h1 className="system-title" style={styles.title}>Khora Engine</h1>
-        </div>
-        <span className="label-text" style={styles.subtitle}>
-          Phase 2 - Galaxy Engine {currentGalaxy && `(${currentGalaxy.name})`}
-        </span>
+        <span className="mdi mdi-atom" style={styles.icon}></span>
+        <h1 className="system-title" style={styles.title}>Khora Engine</h1>
+        {currentGalaxy && (
+          <span className="label-text" style={styles.subtitle}>
+            {currentGalaxy.name}
+          </span>
+        )}
       </div>
 
-      {/* Center: Generation Controls */}
-      <div style={styles.centerSection}>
-        <div style={styles.generationGroup}>
-          <GenerateButton />
-
-          <div style={styles.separator}></div>
-
-          {/* Galaxy Generation */}
-          <div style={styles.galaxyControls}>
-            <input
-              type="text"
-              value={galaxySeedInput}
-              onChange={(e) => setGalaxySeedInput(e.target.value)}
-              onKeyPress={handleKeyPress}
-              placeholder="Galaxy seed (optional)"
-              className="hud-input"
-              style={styles.input}
-              disabled={isGenerating}
-            />
-            <input
-              type="number"
-              value={systemCount}
-              onChange={(e) => setSystemCount(e.target.value)}
-              placeholder="Systems"
-              className="hud-input"
-              style={styles.smallInput}
-              min="4"
-              max="100"
-              disabled={isGenerating}
-            />
-            <button
-              onClick={handleGenerateGalaxy}
-              disabled={isGenerating}
-              className="hud-btn"
-              style={isGenerating ? styles.buttonDisabled : undefined}
-            >
-              {isGenerating && (
-                <span className="loading-spinner" style={styles.spinner}></span>
-              )}
-              <span className="mdi mdi-galaxy" style={styles.buttonIcon}></span>
-              {isGenerating ? 'Generating...' : 'Generate Galaxy'}
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Right: Navigation + IDE Toggle */}
+      {/* Right: Compact Controls */}
       <div style={styles.rightSection}>
+        <GenerateButton />
+
+        <div style={styles.separator}></div>
+
+        {/* Galaxy Generation */}
+        <input
+          type="text"
+          value={galaxySeedInput}
+          onChange={(e) => setGalaxySeedInput(e.target.value)}
+          onKeyPress={handleKeyPress}
+          placeholder="Galaxy seed"
+          className="hud-input"
+          style={styles.input}
+          disabled={isGenerating}
+        />
+        <input
+          type="text"
+          value={systemCount}
+          onChange={(e) => {
+            // Only allow numeric input
+            const value = e.target.value.replace(/[^0-9]/g, '');
+            setSystemCount(value);
+          }}
+          placeholder="Systems"
+          className="hud-input"
+          style={styles.smallInput}
+          disabled={isGenerating}
+        />
+        <button
+          onClick={handleGenerateGalaxy}
+          disabled={isGenerating}
+          className="hud-btn"
+          style={isGenerating ? styles.buttonDisabled : undefined}
+        >
+          {isGenerating && (
+            <span className="loading-spinner" style={styles.spinner}></span>
+          )}
+          <span className="mdi mdi-weather-hurricane" style={styles.buttonIcon}></span>
+          Galaxy
+        </button>
+
+        <div style={styles.separator}></div>
+
         {showBackButton && (
           <button
             onClick={handleBackToGalaxy}
@@ -127,16 +124,16 @@ export function UIControls() {
             style={styles.backButton}
           >
             <span className="mdi mdi-arrow-left" style={styles.buttonIcon}></span>
-            Back to Galaxy
+            Back
           </button>
         )}
         <button
           onClick={toggleIDE}
           className={`hud-btn-secondary ${ideOpen ? 'active' : ''}`}
-          style={ideOpen ? { ...styles.ideButton, borderColor: 'var(--accent-cyan)', color: 'var(--accent-cyan)' } : styles.ideButton}
+          style={ideOpen ? { ...styles.ideButton, border: '1px solid var(--accent-cyan)', color: 'var(--accent-cyan)' } : styles.ideButton}
         >
           <span className={`mdi ${ideOpen ? 'mdi-code-braces' : 'mdi-code-braces-box'}`} style={styles.buttonIcon}></span>
-          {ideOpen ? 'Hide IDE' : 'Show IDE'}
+          IDE
         </button>
       </div>
     </div>
@@ -161,67 +158,52 @@ const styles = {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: '12px 24px',
+    padding: '12px 20px',
     backgroundColor: 'var(--bg-panel)',
     borderBottom: '1px solid var(--border-light)',
-    height: '60px',
+    height: '52px',
     boxSizing: 'border-box' as const,
-    backdropFilter: 'blur(10px)'
+    backdropFilter: 'blur(10px)',
+    fontSize: '13px'
   },
   leftSection: {
     display: 'flex',
     alignItems: 'center',
-    gap: '16px',
-    flex: 1
-  },
-  brandingGroup: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px'
+    gap: '12px'
   },
   icon: {
-    fontSize: '24px',
+    fontSize: '18px',
     color: 'var(--accent-cyan)'
   },
   title: {
-    margin: 0
+    margin: 0,
+    fontSize: '14px'
   },
   subtitle: {
-    paddingLeft: '16px',
-    borderLeft: '1px solid var(--border-light)'
-  },
-  centerSection: {
-    display: 'flex',
-    justifyContent: 'center',
-    flex: 1
-  },
-  generationGroup: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '16px'
+    paddingLeft: '12px',
+    borderLeft: '1px solid var(--border-light)',
+    fontSize: '12px'
   },
   separator: {
     width: '1px',
-    height: '30px',
-    backgroundColor: 'var(--border-light)'
-  },
-  galaxyControls: {
-    display: 'flex',
-    gap: '12px',
-    alignItems: 'center'
+    height: '24px',
+    backgroundColor: 'var(--border-light)',
+    margin: '0 8px'
   },
   input: {
-    width: '180px'
+    width: '120px',
+    fontSize: '12px'
   },
   smallInput: {
-    width: '80px'
+    width: '75px',
+    fontSize: '12px'
   },
   buttonIcon: {
-    fontSize: '16px',
+    fontSize: '14px',
     marginRight: '4px'
   },
   spinner: {
-    marginRight: '8px'
+    marginRight: '6px'
   },
   buttonDisabled: {
     opacity: 0.7,
@@ -230,17 +212,19 @@ const styles = {
   rightSection: {
     display: 'flex',
     justifyContent: 'flex-end',
-    gap: '12px',
-    flex: 1
+    alignItems: 'center',
+    gap: '8px'
   },
   backButton: {
     display: 'flex',
     alignItems: 'center',
-    gap: '8px'
+    gap: '6px',
+    fontSize: '12px'
   },
   ideButton: {
     display: 'flex',
     alignItems: 'center',
-    gap: '8px'
+    gap: '6px',
+    fontSize: '12px'
   }
 };

@@ -334,10 +334,17 @@ export function derivePlanetUniforms(
   let biomeVariation = 0.0;
 
   if (planetMode === 0) { // Rocky/Barren
+    // Use visual properties terrain roughness if available
+    if (planet.visualProperties.terrainRoughness !== undefined) {
+      terrainRoughness = planet.visualProperties.terrainRoughness;
+    }
+
     // Barren planets are rougher and more cratered
     if (planet.type === PlanetType.Barren) {
       terrainScale = 4.5;
-      terrainRoughness = 0.7;
+      if (!planet.visualProperties.terrainRoughness) {
+        terrainRoughness = 0.7;
+      }
       craterDensity = 0.6; // Heavy cratering
       continentSize = 0.8;  // Large continuous landmasses
       biomeVariation = 0.1; // Low variation (mostly similar terrain)
@@ -345,7 +352,9 @@ export function derivePlanetUniforms(
     // Rocky planets in habitable zone have diverse biomes
     else if (inHabitableZone) {
       terrainScale = 3.0;
-      terrainRoughness = 0.5;
+      if (!planet.visualProperties.terrainRoughness) {
+        terrainRoughness = 0.5;
+      }
       craterDensity = 0.0; // Little to no cratering (geologically active)
       continentSize = 0.5;  // Balanced land/water
       biomeVariation = 0.7; // High biome variation
@@ -353,7 +362,9 @@ export function derivePlanetUniforms(
     // Rocky planets outside habitable zone
     else {
       terrainScale = 4.0;
-      terrainRoughness = 0.6;
+      if (!planet.visualProperties.terrainRoughness) {
+        terrainRoughness = 0.6;
+      }
       craterDensity = 0.2; // Some cratering
       continentSize = 0.7;  // More land
       biomeVariation = 0.4; // Moderate variation
@@ -364,9 +375,28 @@ export function derivePlanetUniforms(
   // Colors
   // ========================================================================
 
-  const baseColor = getTerrainColor(planet, rng);
-  const atmosphereColor = getAtmosphereColor(planet);
-  // Band colors not used in unified shader (gas giants use their own color logic)
+  // Use visual properties colors if available, otherwise fall back to derived colors
+  let baseColor: THREE.Vector3;
+  if (planet.visualProperties.baseColor) {
+    baseColor = new THREE.Vector3(
+      planet.visualProperties.baseColor[0],
+      planet.visualProperties.baseColor[1],
+      planet.visualProperties.baseColor[2]
+    );
+  } else {
+    baseColor = getTerrainColor(planet, rng);
+  }
+
+  let atmosphereColor: THREE.Vector3;
+  if (planet.visualProperties.atmosphereColor) {
+    atmosphereColor = new THREE.Vector3(
+      planet.visualProperties.atmosphereColor[0],
+      planet.visualProperties.atmosphereColor[1],
+      planet.visualProperties.atmosphereColor[2]
+    );
+  } else {
+    atmosphereColor = getAtmosphereColor(planet);
+  }
 
   // Mountain/lowland/desert colors for biomes
   let mountainColor = new THREE.Vector3(0.55, 0.45, 0.33); // Brown
@@ -386,7 +416,18 @@ export function derivePlanetUniforms(
 
   let waterCoverage = planet.waterCoverage;
   let waterSpeed = 0.3;
-  const waterColor = new THREE.Vector3(0.12, 0.35, 0.52); // Deep blue
+
+  // Use visual properties water color if available, otherwise use default
+  let waterColor: THREE.Vector3;
+  if (planet.visualProperties.waterColor) {
+    waterColor = new THREE.Vector3(
+      planet.visualProperties.waterColor[0],
+      planet.visualProperties.waterColor[1],
+      planet.visualProperties.waterColor[2]
+    );
+  } else {
+    waterColor = new THREE.Vector3(0.12, 0.35, 0.52); // Deep blue
+  }
 
   // Adjust water parameters based on zone
   if (inHabitableZone && planet.type === PlanetType.Rocky) {
@@ -439,7 +480,10 @@ export function derivePlanetUniforms(
   let cloudShadow = 0.4;
   const cloudColor = new THREE.Vector3(1.0, 1.0, 1.0); // White
 
-  if (planet.type === PlanetType.Rocky && inHabitableZone && waterCoverage > 0.3) {
+  // Use visual properties cloud density if available
+  if (planet.visualProperties.cloudDensity !== undefined) {
+    cloudCoverage = planet.visualProperties.cloudDensity;
+  } else if (planet.type === PlanetType.Rocky && inHabitableZone && waterCoverage > 0.3) {
     // Habitable planets with water have clouds
     cloudCoverage = 0.55;
     cloudSpeed = 0.15;
@@ -467,74 +511,86 @@ export function derivePlanetUniforms(
   let stormColor = new THREE.Vector3(0.5, 0.5, 0.5);
 
   if (planetMode === 1) {
-    // Gas Giant - More varied appearance
-    // Band count: 10-18 (visually interesting range, user can override 0-24 in Controls)
-    bandCount = 10 + Math.floor(rng.random() * 8);
-    // Turbulence: 0.5-0.8 (visible variation, user can override 0-1 in Controls)
-    turbulence = 0.5 + rng.random() * 0.3;
+    // Gas Giant - Use visual properties if available
+    // Band count
+    if (planet.visualProperties.bandCount !== undefined) {
+      bandCount = planet.visualProperties.bandCount;
+    } else {
+      bandCount = 10 + Math.floor(rng.random() * 8);
+    }
+
+    // Turbulence
+    if (planet.visualProperties.turbulenceIntensity !== undefined) {
+      turbulence = planet.visualProperties.turbulenceIntensity;
+    } else {
+      turbulence = 0.5 + rng.random() * 0.3;
+    }
+
     // Band speed: 0.05-0.15 (wider range)
     bandSpeed = 0.05 + rng.random() * 0.1;
-    // Storm intensity: 0.3-0.6 (balanced range, user can override 0-1 in Controls)
-    stormIntensity = 0.3 + rng.random() * 0.3;
 
-    // Storm color: More varied reddish/orange/yellow for gas giants
-    const stormVariation = rng.random();
-    if (stormVariation < 0.33) {
-      // Red spots (Jupiter-like)
+    // Storm intensity and color
+    if (planet.visualProperties.hasStorm && planet.visualProperties.stormColor) {
+      stormIntensity = 0.5; // Visible storm
       stormColor = new THREE.Vector3(
-        0.7 + rng.random() * 0.25,  // 0.7-0.95 red
-        0.25 + rng.random() * 0.25, // 0.25-0.5 green
-        0.15 + rng.random() * 0.15  // 0.15-0.3 blue
+        planet.visualProperties.stormColor[0],
+        planet.visualProperties.stormColor[1],
+        planet.visualProperties.stormColor[2]
       );
-    } else if (stormVariation < 0.66) {
-      // Orange/amber spots
-      stormColor = new THREE.Vector3(
-        0.8 + rng.random() * 0.15,  // 0.8-0.95 red
-        0.5 + rng.random() * 0.2,   // 0.5-0.7 green
-        0.2 + rng.random() * 0.2    // 0.2-0.4 blue
-      );
+    } else if (planet.visualProperties.hasStorm) {
+      stormIntensity = 0.5;
+      // Fallback storm color
+      const stormVariation = rng.random();
+      if (stormVariation < 0.33) {
+        stormColor = new THREE.Vector3(0.85, 0.35, 0.2);
+      } else if (stormVariation < 0.66) {
+        stormColor = new THREE.Vector3(0.9, 0.6, 0.3);
+      } else {
+        stormColor = new THREE.Vector3(0.9, 0.75, 0.5);
+      }
     } else {
-      // Cream/pale yellow spots
-      stormColor = new THREE.Vector3(
-        0.85 + rng.random() * 0.1,  // 0.85-0.95 red
-        0.7 + rng.random() * 0.15,  // 0.7-0.85 green
-        0.4 + rng.random() * 0.2    // 0.4-0.6 blue
-      );
+      stormIntensity = 0.3 + rng.random() * 0.3;
     }
   } else if (planetMode === 2) {
-    // Ice Giant - More varied appearance
-    // Band count: 6-12 (smoother appearance than gas giants, user can override 0-24 in Controls)
-    bandCount = 6 + Math.floor(rng.random() * 6);
-    // Turbulence: 0.25-0.5 (subtler than gas giants, user can override 0-1 in Controls)
-    turbulence = 0.25 + rng.random() * 0.25;
+    // Ice Giant - Use visual properties if available
+    // Band count
+    if (planet.visualProperties.bandCount !== undefined) {
+      bandCount = planet.visualProperties.bandCount;
+    } else {
+      bandCount = 6 + Math.floor(rng.random() * 6);
+    }
+
+    // Turbulence
+    if (planet.visualProperties.turbulenceIntensity !== undefined) {
+      turbulence = planet.visualProperties.turbulenceIntensity;
+    } else {
+      turbulence = 0.25 + rng.random() * 0.25;
+    }
+
     // Band speed: 0.03-0.08 (slower, smoother motion)
     bandSpeed = 0.03 + rng.random() * 0.05;
-    // Storm intensity: 0.2-0.5 (balanced range, user can override 0-1 in Controls)
-    stormIntensity = 0.2 + rng.random() * 0.3;
 
-    // Storm color: More varied dark blues/teals for ice giants
-    const stormVariation = rng.random();
-    if (stormVariation < 0.33) {
-      // Very dark blue (Neptune-like Great Dark Spot)
+    // Storm intensity and color
+    if (planet.visualProperties.hasStorm && planet.visualProperties.stormColor) {
+      stormIntensity = 0.4; // Visible storm
       stormColor = new THREE.Vector3(
-        0.05 + rng.random() * 0.1,  // 0.05-0.15 red (very dark)
-        0.1 + rng.random() * 0.15,  // 0.1-0.25 green
-        0.2 + rng.random() * 0.25   // 0.2-0.45 blue
+        planet.visualProperties.stormColor[0],
+        planet.visualProperties.stormColor[1],
+        planet.visualProperties.stormColor[2]
       );
-    } else if (stormVariation < 0.66) {
-      // Teal/cyan dark spots
-      stormColor = new THREE.Vector3(
-        0.1 + rng.random() * 0.15,  // 0.1-0.25 red
-        0.25 + rng.random() * 0.2,  // 0.25-0.45 green
-        0.35 + rng.random() * 0.25  // 0.35-0.6 blue
-      );
+    } else if (planet.visualProperties.hasStorm) {
+      stormIntensity = 0.4;
+      // Fallback storm color
+      const stormVariation = rng.random();
+      if (stormVariation < 0.33) {
+        stormColor = new THREE.Vector3(0.1, 0.15, 0.35);
+      } else if (stormVariation < 0.66) {
+        stormColor = new THREE.Vector3(0.15, 0.35, 0.5);
+      } else {
+        stormColor = new THREE.Vector3(0.2, 0.3, 0.4);
+      }
     } else {
-      // Gray-blue spots
-      stormColor = new THREE.Vector3(
-        0.15 + rng.random() * 0.15, // 0.15-0.3 red
-        0.2 + rng.random() * 0.2,   // 0.2-0.4 green
-        0.3 + rng.random() * 0.2    // 0.3-0.5 blue
-      );
+      stormIntensity = 0.2 + rng.random() * 0.3;
     }
   }
 
@@ -635,7 +691,17 @@ export function deriveMoonUniforms(
   parentPlanet: Planet,
   camera: THREE.Camera
 ): MoonUniforms {
-  const baseColor = getMoonBaseColor(moon, parentPlanet);
+  // Use visual properties color if available, otherwise derive from parent planet
+  let baseColor: THREE.Vector3;
+  if (moon.visualProperties && moon.visualProperties.baseColor) {
+    baseColor = new THREE.Vector3(
+      moon.visualProperties.baseColor[0],
+      moon.visualProperties.baseColor[1],
+      moon.visualProperties.baseColor[2]
+    );
+  } else {
+    baseColor = getMoonBaseColor(moon, parentPlanet);
+  }
 
   // Generate seed from moon ID for deterministic noise
   const seed = hashString(moon.id);

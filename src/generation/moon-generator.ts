@@ -15,7 +15,8 @@ import {
 } from '../utils/constants';
 import { calculateHillSphere } from '../utils/physics';
 import { generateMoonName, generateId } from './name-generator';
-import type { Planet, Moon } from '../types/celestial-bodies';
+import { generateMoonColor } from '../utils/color-palette';
+import type { Planet, Moon, MoonVisualProperties } from '../types/celestial-bodies';
 
 // ============================================================================
 // Moon Count Determination
@@ -279,6 +280,24 @@ export function generateMoons(
     // Generate name
     const name = generateMoonName(planet.name, i, rng);
 
+    // Generate visual properties
+    const baseColor = generateMoonColor(rng, surfaceTemperature);
+    const visualProperties: MoonVisualProperties = {
+      baseColor: [baseColor.r, baseColor.g, baseColor.b],
+      terrainRoughness: rng.randomFloat(0.7, 1.4), // Crater patterns variation
+    };
+
+    // Icy moons (very cold, <150K) have ice
+    if (surfaceTemperature < 150) {
+      visualProperties.hasIce = true;
+      // Ice is slightly lighter than base color
+      visualProperties.iceColor = [
+        Math.min(baseColor.r + 0.1, 0.65),
+        Math.min(baseColor.g + 0.1, 0.65),
+        Math.min(baseColor.b + 0.1, 0.65)
+      ];
+    }
+
     // Create moon object
     const moon: Moon = {
       id: generateId('moon', parseInt(planet.id.split('-')[1]), parseInt(planet.id.split('-')[2]) * 100 + i),
@@ -289,6 +308,7 @@ export function generateMoons(
       radius,
       mass,
       surfaceTemperature,
+      visualProperties,
       resources: {} // Will be populated by resource distributor
     };
 

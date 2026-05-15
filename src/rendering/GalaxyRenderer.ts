@@ -1,22 +1,112 @@
 /**
  * Khora Engine - Galaxy Renderer
  *
- * Renders galaxy-scale view with star system positions
- * Uses instanced rendering for performance with 100+ systems
+ * Renders galaxy-scale view with beautiful particle system
+ * Maps procedurally generated star systems to visual markers
  */
 
 import * as THREE from 'three';
 import type { Galaxy, GalaxySystemPlacement } from '../types/galaxy';
 import { isSpiralGalaxy, isEllipticalGalaxy, isIrregularGalaxy } from '../types/galaxy';
+import { GalaxyParticleSystem } from './GalaxyParticleSystem';
+import type { SystemMarker, GalaxyConfig } from './GalaxyParticleSystem';
+import { SpectralType } from '../types/celestial-bodies';
 
 /**
- * Galaxy rendering system
+ * Map star spectral type to marker color
+ * Based on actual stellar colors from astronomy
+ */
+function getStarColor(spectralType: SpectralType): THREE.Color {
+  const colors: Record<string, THREE.Color> = {
+    'O': new THREE.Color(0x9bb0ff), // Blue
+    'B': new THREE.Color(0xaabfff), // Blue-white
+    'A': new THREE.Color(0xcad7ff), // White
+    'F': new THREE.Color(0xf8f7ff), // Yellow-white
+    'G': new THREE.Color(0xfff4ea), // Yellow (like our Sun)
+    'K': new THREE.Color(0xffd2a1), // Orange
+    'M': new THREE.Color(0xffcc6f), // Red
+  };
+  return colors[spectralType] || new THREE.Color(0xffffff);
+}
+
+/**
+ * Calculate marker size based on star mass
+ * Larger, more massive stars get bigger markers
+ */
+function getMarkerSize(mass: number): number {
+  // Mass is in solar masses
+  // Size range: 3.0 - 8.0 for visual distinction
+  const minSize = 3.0;
+  const maxSize = 8.0;
+
+  // Logarithmic scale for better visual distribution
+  const normalizedMass = Math.log10(mass + 1) / Math.log10(100); // Assume max ~100 solar masses
+  return minSize + (maxSize - minSize) * Math.min(normalizedMass, 1.0);
+}
+
+/**
+ * Map galaxy type to particle system configuration
+ */
+function mapGalaxyToParticleConfig(galaxy: Galaxy): GalaxyConfig {
+  const baseConfig: GalaxyConfig = {
+    particleCount: 5000,
+    size: 100, // Adjusted for galaxy scale
+    animationSpeed: 0.3,
+    rotationSpeed: 0.005,
+    coreSize: 0.10, // Reduced from 0.15 to minimize bright center
+    particleSizeMin: 0.5,
+    particleSizeMax: 2.5,
+    particleBrightness: 0.7, // Reduced from 0.8 for dimmer particles
+    // Core control parameters
+    coreBrightness: 0.5,      // 50% brightness for core region (adjustable)
+    coreAlphaFalloff: 0.6,    // 60% alpha reduction near center (prevents solid appearance)
+    coreExclusionRadius: 0.0, // No exclusion zone by default
+  };
+
+  if (isSpiralGalaxy(galaxy)) {
+    return {
+      ...baseConfig,
+      type: 'spiral',
+      armCount: galaxy.spiralParams.armCount,
+      spiralTightness: galaxy.spiralParams.armTightness,
+      diskThickness: galaxy.spiralParams.diskThickness / 100, // Scale down for rendering
+      // Color scheme: blue-purple for spiral
+      coreColor: new THREE.Color(0xe6f2ff),
+      midColor: new THREE.Color(0x99ccff),
+      edgeColor: new THREE.Color(0x4d79ff),
+    };
+  } else if (isEllipticalGalaxy(galaxy)) {
+    return {
+      ...baseConfig,
+      type: 'elliptical',
+      ellipticalFlatten: 1 - galaxy.ellipticalParams.eccentricity,
+      // Color scheme: yellow-orange for elliptical (older stars)
+      coreColor: new THREE.Color(0xfff4e6),
+      midColor: new THREE.Color(0xffdd99),
+      edgeColor: new THREE.Color(0xff9966),
+    };
+  } else if (isIrregularGalaxy(galaxy)) {
+    return {
+      ...baseConfig,
+      type: 'irregular',
+      irregularChaos: galaxy.irregularParams.dispersalFactor,
+      // Color scheme: mixed colors for irregular
+      coreColor: new THREE.Color(0xffe6f2),
+      midColor: new THREE.Color(0xffb3d9),
+      edgeColor: new THREE.Color(0xff66b3),
+    };
+  }
+
+  return { ...baseConfig, type: 'spiral' };
+}
+
+/**
+ * Galaxy rendering system with beautiful particle visualization
  * Handles galaxy-scale visualization and system positioning
  */
 export class GalaxyRenderer {
   private galaxyGroup: THREE.Group;
-  private systemMarkers: THREE.InstancedMesh | null = null;
-  private galaxyOutline: THREE.Line | null = null;
+  private particleSystem: GalaxyParticleSystem | null = null;
   private systemObjects: THREE.Object3D[] = []; // For raycasting
 
   constructor() {
@@ -32,162 +122,97 @@ export class GalaxyRenderer {
   }
 
   /**
-   * Render a complete galaxy
+   * Render a complete galaxy with particle system
    */
   public renderGalaxy(galaxy: Galaxy): void {
     // Clear previous galaxy
     this.clear();
 
-    // Render galaxy structure outline (optional guide)
-    this.renderGalaxyOutline(galaxy);
+    // Create particle system with galaxy-appropriate configuration
+    const particleConfig = mapGalaxyToParticleConfig(galaxy);
+    this.particleSystem = new GalaxyParticleSystem(particleConfig);
 
-    // Render all star systems
-    this.renderSystems(galaxy.systems);
+    // Add particle system to scene
+    this.galaxyGroup.add(this.particleSystem.getGroup());
 
-    console.log(`[GalaxyRenderer] Rendered ${galaxy.systems.length} star systems`);
+    // Map star systems to visual markers
+    this.renderSystemMarkers(galaxy.systems);
+
+    console.log(`[GalaxyRenderer] Rendered ${galaxy.systems.length} star systems with particle system`);
   }
 
   /**
-   * Render galaxy structure outline/guide
-   * Visual representation of galaxy shape
+   * Render star system markers on the particle galaxy
    */
-  private renderGalaxyOutline(galaxy: Galaxy): void {
-    const points: THREE.Vector3[] = [];
+  private renderSystemMarkers(systems: GalaxySystemPlacement[]): void {
+    if (systems.length === 0 || !this.particleSystem) return;
 
-    if (isSpiralGalaxy(galaxy)) {
-      // Render spiral arm guides
-      const params = galaxy.spiralParams;
-      const armCount = params.armCount;
-      const diskRadius = params.diskRadius;
-      const tightness = params.armTightness;
+    // Convert system placements to particle system markers
+    const markers: SystemMarker[] = systems.map((placement, index) => {
+      const star = placement.system.star;
 
-      // Create spiral arm curves
-      for (let arm = 0; arm < armCount; arm++) {
-        const armOffset = (arm / armCount) * Math.PI * 2;
-
-        // Generate points along spiral arm
-        for (let i = 0; i <= 50; i++) {
-          const t = i / 50;
-          const r = t * diskRadius;
-          const theta = t * Math.PI * 4 * (1 - tightness * 0.5) + armOffset;
-
-          const x = r * Math.cos(theta);
-          const z = r * Math.sin(theta);
-          const y = 0; // Arms in disk plane
-
-          points.push(new THREE.Vector3(x, y, z));
+      return {
+        position: new THREE.Vector3(
+          placement.position.x / 100, // Scale from light-years to render units
+          placement.position.y / 100,
+          placement.position.z / 100
+        ),
+        color: getStarColor(star.spectralType),
+        size: getMarkerSize(star.mass),
+        data: {
+          type: 'galaxy-system',
+          systemIndex: index,
+          system: placement.system,
+          position: placement.position,
+          region: placement.region,
         }
-      }
-    } else if (isEllipticalGalaxy(galaxy)) {
-      // Render elliptical outline (3 rings at different angles)
-      const params = galaxy.ellipticalParams;
-      const segments = 64;
-
-      // XZ plane
-      for (let i = 0; i <= segments; i++) {
-        const theta = (i / segments) * Math.PI * 2;
-        const x = params.majorAxis * Math.cos(theta);
-        const z = params.minorAxis * Math.sin(theta);
-        points.push(new THREE.Vector3(x, 0, z));
-      }
-
-      // XY plane
-      for (let i = 0; i <= segments; i++) {
-        const theta = (i / segments) * Math.PI * 2;
-        const x = params.majorAxis * Math.cos(theta);
-        const y = params.minorAxis * Math.sin(theta) * 0.5;
-        points.push(new THREE.Vector3(x, y, 0));
-      }
-    } else if (isIrregularGalaxy(galaxy)) {
-      // Render bounding sphere
-      const params = galaxy.irregularParams;
-      const segments = 32;
-
-      // Equator
-      for (let i = 0; i <= segments; i++) {
-        const theta = (i / segments) * Math.PI * 2;
-        const x = params.boundingRadius * Math.cos(theta);
-        const z = params.boundingRadius * Math.sin(theta);
-        points.push(new THREE.Vector3(x, 0, z));
-      }
-
-      // Meridian
-      for (let i = 0; i <= segments; i++) {
-        const theta = (i / segments) * Math.PI * 2;
-        const x = params.boundingRadius * Math.cos(theta);
-        const y = params.boundingRadius * Math.sin(theta);
-        points.push(new THREE.Vector3(x, y, 0));
-      }
-    }
-
-    // Create line geometry from points
-    if (points.length > 0) {
-      const geometry = new THREE.BufferGeometry().setFromPoints(points);
-      const material = new THREE.LineBasicMaterial({
-        color: 0x444444,
-        opacity: 0.2,
-        transparent: true,
-      });
-
-      this.galaxyOutline = new THREE.LineSegments(geometry, material);
-      this.galaxyGroup.add(this.galaxyOutline);
-    }
-  }
-
-  /**
-   * Render all star systems as instanced markers
-   */
-  private renderSystems(systems: GalaxySystemPlacement[]): void {
-    if (systems.length === 0) return;
-
-    // Create instanced mesh for all system markers
-    const markerGeometry = new THREE.SphereGeometry(2, 8, 8); // Small sphere
-    const markerMaterial = new THREE.MeshBasicMaterial({
-      color: 0xffaa00,
+      };
     });
 
-    this.systemMarkers = new THREE.InstancedMesh(
-      markerGeometry,
-      markerMaterial,
-      systems.length
-    );
+    // Add markers to particle system
+    this.particleSystem.addSystemMarkers(markers);
 
-    // Position each system marker
-    const matrix = new THREE.Matrix4();
-    const position = new THREE.Vector3();
-
-    systems.forEach((placement, index) => {
-      const pos = placement.position;
-      position.set(pos.x, pos.y, pos.z);
-
-      // Set instance matrix
-      matrix.makeTranslation(position.x, position.y, position.z);
-      this.systemMarkers!.setMatrixAt(index, matrix);
-
-      // Store system data for raycasting/selection
-      // Create invisible object at same position for raycasting
-      const marker = new THREE.Mesh(
-        new THREE.SphereGeometry(2, 8, 8),
+    // Create invisible raycasting objects for click detection
+    // These match the marker positions but are separate for raycasting
+    markers.forEach((marker) => {
+      const raycastObject = new THREE.Mesh(
+        new THREE.SphereGeometry(marker.size || 4.0, 8, 8),
         new THREE.MeshBasicMaterial({ visible: false })
       );
-      marker.position.copy(position);
-      marker.userData = {
-        type: 'galaxy-system',
-        systemIndex: index,
-        system: placement.system,
-        position: placement.position,
-        region: placement.region,
-      };
 
-      this.systemObjects.push(marker);
-      this.galaxyGroup.add(marker);
+      raycastObject.position.copy(marker.position);
+
+      // Apply same rotation as markers for alignment
+      const tempGroup = new THREE.Group();
+      tempGroup.rotation.x = -Math.PI / 5;
+      tempGroup.add(raycastObject);
+      tempGroup.updateMatrixWorld(true);
+
+      // Get world position after rotation
+      const worldPos = new THREE.Vector3();
+      raycastObject.getWorldPosition(worldPos);
+
+      // Remove from temp group and set world position
+      tempGroup.remove(raycastObject);
+      raycastObject.position.copy(worldPos);
+
+      // Store system data
+      raycastObject.userData = marker.data;
+
+      this.systemObjects.push(raycastObject);
+      this.galaxyGroup.add(raycastObject);
     });
 
-    this.systemMarkers.instanceMatrix.needsUpdate = true;
-    this.systemMarkers.name = 'SystemMarkers';
-    this.galaxyGroup.add(this.systemMarkers);
+    console.log(`[GalaxyRenderer] Created ${markers.length} system markers with raycasting`);
+  }
 
-    console.log(`[GalaxyRenderer] Created instanced mesh with ${systems.length} markers`);
+  /**
+   * Update animation (call each frame)
+   */
+  public update(deltaTime: number): void {
+    if (this.particleSystem) {
+      this.particleSystem.update(deltaTime);
+    }
   }
 
   /**
@@ -198,27 +223,24 @@ export class GalaxyRenderer {
   }
 
   /**
+   * Update galaxy particle system configuration
+   */
+  public updateConfig(config: Partial<GalaxyConfig>): void {
+    if (this.particleSystem) {
+      console.log('[GalaxyRenderer] Updating galaxy config:', config);
+      this.particleSystem.updateConfig(config);
+    }
+  }
+
+  /**
    * Clear all galaxy rendering
    */
   public clear(): void {
-    // Dispose of instanced mesh
-    if (this.systemMarkers) {
-      this.systemMarkers.geometry.dispose();
-      if (this.systemMarkers.material instanceof THREE.Material) {
-        this.systemMarkers.material.dispose();
-      }
-      this.galaxyGroup.remove(this.systemMarkers);
-      this.systemMarkers = null;
-    }
-
-    // Dispose of outline
-    if (this.galaxyOutline) {
-      this.galaxyOutline.geometry.dispose();
-      if (this.galaxyOutline.material instanceof THREE.Material) {
-        this.galaxyOutline.material.dispose();
-      }
-      this.galaxyGroup.remove(this.galaxyOutline);
-      this.galaxyOutline = null;
+    // Dispose of particle system
+    if (this.particleSystem) {
+      this.particleSystem.dispose();
+      this.galaxyGroup.remove(this.particleSystem.getGroup());
+      this.particleSystem = null;
     }
 
     // Clear system objects

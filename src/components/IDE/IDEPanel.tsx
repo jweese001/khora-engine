@@ -11,13 +11,21 @@ import { SceneTree } from './SceneTree';
 import { DataInspector } from './DataInspector';
 import { ShaderViewer } from './ShaderViewer';
 import { ShaderControls } from './ShaderControls';
+import { GalaxyControls } from './GalaxyControls';
 
 type TabType = 'scene' | 'data' | 'shaders' | 'controls';
 
 export function IDEPanel() {
   const ideOpen = useSystemStore((state) => state.ideOpen);
   const toggleIDE = useSystemStore((state) => state.toggleIDE);
+  const viewMode = useSystemStore((state) => state.viewMode);
+  const currentGalaxy = useSystemStore((state) => state.currentGalaxy);
   const [activeTab, setActiveTab] = useState<TabType>('scene');
+
+  // Dynamic title based on view mode
+  const panelTitle = viewMode === 'galaxy'
+    ? 'Galaxy Inspector'
+    : 'System Inspector';
 
   return (
     <div style={ideOpen ? { ...styles.container, ...styles.containerOpen } : styles.container}>
@@ -28,8 +36,12 @@ export function IDEPanel() {
           <div style={styles.header}>
             <div style={styles.headerContent}>
               <div>
-                <h2 style={styles.title}>System Inspector</h2>
-                <span style={styles.subtitle}>Read-only view</span>
+                <h2 style={styles.title}>{panelTitle}</h2>
+                <span style={styles.subtitle}>
+                  {viewMode === 'galaxy' && currentGalaxy
+                    ? `${currentGalaxy.type} Galaxy • ${currentGalaxy.systemCount} Systems`
+                    : 'Read-only view'}
+                </span>
               </div>
               <button
                 onClick={toggleIDE}
@@ -89,25 +101,49 @@ export function IDEPanel() {
 }
 
 /**
- * Wrapper component for ShaderControls that connects to store
+ * Wrapper component for Controls that connects to store
+ * Shows GalaxyControls when in galaxy view, ShaderControls when object is selected
  */
 function ShaderControlsWrapper() {
   const selectedObject = useSystemStore((state) => state.selectedObject);
+  const viewMode = useSystemStore((state) => state.viewMode);
+  const currentGalaxy = useSystemStore((state) => state.currentGalaxy);
   const updateUniform = useSystemStore((state) => state.updateUniform);
   const resetObjectUniforms = useSystemStore((state) => state.resetObjectUniforms);
+  const updateGalaxyConfig = useSystemStore((state) => state.updateGalaxyConfig);
+  const resetGalaxyConfig = useSystemStore((state) => state.resetGalaxyConfig);
 
-  // Show message if no object is selected
+  // Show galaxy controls when in galaxy view with no selected object
+  if (viewMode === 'galaxy' && currentGalaxy && !selectedObject) {
+    return (
+      <GalaxyControls
+        galaxy={currentGalaxy}
+        onConfigChange={updateGalaxyConfig}
+        onReset={resetGalaxyConfig}
+      />
+    );
+  }
+
+  // Show message if no object is selected (in system view)
   if (!selectedObject) {
     return (
       <div style={styles.emptyState}>
         <span className="mdi mdi-cube-outline" style={styles.emptyIcon}></span>
-        <p style={styles.emptyText}>Select a celestial body to edit its shader parameters</p>
-        <p style={styles.emptySubtext}>Click on a star, planet, or moon in the 3D view</p>
+        <p style={styles.emptyText}>
+          {viewMode === 'galaxy'
+            ? 'Click on the galaxy or a system marker to edit parameters'
+            : 'Select a celestial body to edit its shader parameters'}
+        </p>
+        <p style={styles.emptySubtext}>
+          {viewMode === 'galaxy'
+            ? 'Use the galaxy controls to customize the particle system'
+            : 'Click on a star, planet, or moon in the 3D view'}
+        </p>
       </div>
     );
   }
 
-  // Get object ID based on type
+  // Show shader controls for selected object
   const objectId = selectedObject.data.id;
 
   // Handle uniform change

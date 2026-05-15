@@ -11,7 +11,8 @@
  * - Resource abundances are in valid range (0.0-1.0)
  */
 
-import { generateSystem } from '../src/generation/star-generator.js';
+import { generateSystem } from '../src/generation/system-generator.ts';
+import { AU_TO_KM, SOLAR_RADIUS_KM, EARTH_RADIUS_KM } from '../src/utils/constants.ts';
 
 console.log('🧪 Physics Validation Test');
 console.log('Testing 100 procedurally generated systems...\n');
@@ -34,11 +35,12 @@ for (let seed = 1; seed <= 100; seed++) {
       totalPlanets++;
 
       // Test 1: Planet must orbit outside star radius
-      if (planet.orbitDistance <= star.radius) {
+      const starRadiusAU = (star.radius * SOLAR_RADIUS_KM) / AU_TO_KM;
+      if (planet.orbitDistance <= starRadiusAU) {
         violations.push({
           seed,
           type: 'PLANET_INSIDE_STAR',
-          detail: `Planet ${planet.name} orbits at ${planet.orbitDistance.toFixed(2)} AU, star radius is ${star.radius.toFixed(2)} AU`
+          detail: `Planet ${planet.name} orbits at ${planet.orbitDistance.toFixed(2)} AU, star radius is ${starRadiusAU.toFixed(4)} AU`
         });
       }
 
@@ -70,7 +72,7 @@ for (let seed = 1; seed <= 100; seed++) {
         totalMoons++;
 
         // Test 4: Moon must orbit outside planet radius
-        const planetRadiusKM = planet.radius * 6371; // Earth radii to km
+        const planetRadiusKM = planet.radius * EARTH_RADIUS_KM; // Earth radii to km
         if (moon.orbitDistanceKM <= planetRadiusKM) {
           violations.push({
             seed,
@@ -80,8 +82,8 @@ for (let seed = 1; seed <= 100; seed++) {
         }
 
         // Test 5: Moon size must be 0.5-30% of parent planet
-        const moonRadiusKM = moon.radius * 1737.4; // Lunar radii to km
-        const planetRadiusKM2 = planet.radius * 6371;
+        const moonRadiusKM = moon.radius; // Moon radius is already stored in km
+        const planetRadiusKM2 = planet.radius * EARTH_RADIUS_KM;
         const percentageOfPlanet = (moonRadiusKM / planetRadiusKM2) * 100;
 
         if (percentageOfPlanet < 0.5 || percentageOfPlanet > 30) {

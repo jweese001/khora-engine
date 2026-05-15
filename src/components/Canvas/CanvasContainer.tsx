@@ -8,6 +8,7 @@
 import { useEffect, useRef } from 'react';
 import { ThreeSceneManager } from './ThreeSceneManager';
 import { useSystemStore } from '../../store/system-store';
+import { useGalaxyStore } from '../../store/galaxy-store';
 
 export function CanvasContainer() {
   // Reference to container DOM element
@@ -21,6 +22,7 @@ export function CanvasContainer() {
   const currentGalaxy = useSystemStore((state) => state.currentGalaxy);
   const viewMode = useSystemStore((state) => state.viewMode);
   const uniformOverrides = useSystemStore((state) => state.uniformOverrides);
+  const galaxyConfig = useSystemStore((state) => state.galaxyConfig);
 
   // Initialize ThreeSceneManager on mount
   useEffect(() => {
@@ -60,6 +62,10 @@ export function CanvasContainer() {
     setScene(sceneManagerRef.current.getScene());
     setCamera(sceneManagerRef.current.getCamera());
 
+    // Store scene manager reference in galaxy store (for marker controls)
+    const { setSceneManagerRef } = useGalaxyStore.getState();
+    setSceneManagerRef(sceneManagerRef.current);
+
     // Cleanup on unmount
     return () => {
       console.log('[CanvasContainer] Disposing ThreeSceneManager');
@@ -69,6 +75,10 @@ export function CanvasContainer() {
       }
       setScene(null);
       setCamera(null);
+
+      // Clear scene manager reference in galaxy store
+      const { setSceneManagerRef } = useGalaxyStore.getState();
+      setSceneManagerRef(null);
     };
   }, []); // Only run once on mount
 
@@ -116,6 +126,16 @@ export function CanvasContainer() {
       });
     });
   }, [uniformOverrides]);
+
+  // Apply galaxy config changes to particle system (Phase 2: Galaxy customization)
+  useEffect(() => {
+    if (!sceneManagerRef.current) return;
+    if (viewMode !== 'galaxy') return;
+    if (!galaxyConfig) return;
+
+    console.log('[CanvasContainer] Applying galaxy config changes:', galaxyConfig);
+    sceneManagerRef.current.updateGalaxyConfig(galaxyConfig);
+  }, [galaxyConfig, viewMode]);
 
   return (
     <div

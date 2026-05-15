@@ -7,7 +7,10 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "verify": "npm run build && npm run validate-physics && npm run check:determinism",
+    "validate-physics": "tsx scripts/validate-physics.js",
+    "check:determinism": "tsx scripts/check-determinism.js"
   },
   "dependencies": {
     "@mdi/font": "^7.4.47",

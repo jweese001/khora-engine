@@ -13,11 +13,16 @@ import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import type { StarSystem } from '../../types/celestial-bodies';
-import type { Galaxy } from '../../types/galaxy';
+import type { Galaxy, GalaxySystemPlacement } from '../../types/galaxy';
+import type { GalaxyConfig } from '../../rendering/GalaxyParticleSystem';
 import { createStarMesh, createStarLight, calculateSceneUnitsPerSolarRadius } from '../../rendering/StarRenderer';
 import { createTypedOrbitLine } from '../../rendering/OrbitRenderer';
 import { CelestialBodyLOD } from '../../rendering/CelestialBodyLOD';
 import { GalaxyRenderer } from '../../rendering/GalaxyRenderer';
+import { GalaxyParticleSystem } from '../../rendering/GalaxyParticleSystem';
+import { useGalaxyStore, type GalaxyLayer } from '../../store/galaxy-store';
+import { useSystemStore } from '../../store/system-store';
+import { MarkerSystemManager } from './MarkerSystemManager';
 
 // ============================================================================
 // ThreeSceneManager Class
@@ -47,6 +52,19 @@ export class ThreeSceneManager {
   // Galaxy rendering (Phase 2)
   private galaxyRenderer: GalaxyRenderer;
   private currentViewMode: 'system' | 'galaxy' = 'system';
+  private hasAnimatedToGalaxyView: boolean = false; // Track if initial galaxy animation has played
+
+  // Multi-layer galaxy particle system (Phase 2.5)
+  // Array of exactly 3 independent galaxy particle systems for visual composition
+  private galaxyLayers: (GalaxyParticleSystem | null)[] = [null, null, null];
+  private galaxyStoreUnsubscribe: (() => void) | null = null;
+  private lastGalaxyStoreLayers: [GalaxyLayer, GalaxyLayer, GalaxyLayer] | null = null;
+  private galaxyLayersInitialized: boolean = false; // Track if layers have been created
+  private customMarkersSet: boolean = false; // Track if user has set custom markers (don't auto-regenerate)
+
+  // Independent marker system (separate from galaxy layers)
+  // Markers persist when layers are edited/switched
+  private markerManager: MarkerSystemManager;
 
   // Material tracking (Phase 3: Architect Mode)
   // Maps object ID -> THREE.Material for live uniform updates
@@ -54,6 +72,20 @@ export class ThreeSceneManager {
 
   // Debug mode (toggle with D key)
   private debugMode: number = 0; // 0=normal, 1-7=debug visualizations
+
+  // Time tracking for delta calculations
+  private lastTime: number = 0;
+
+  // Camera animation for smooth transitions
+  private cameraAnimation: {
+    active: boolean;
+    startPosition: THREE.Vector3;
+    targetPosition: THREE.Vector3;
+    startTarget: THREE.Vector3;
+    targetTarget: THREE.Vector3;
+    progress: number;
+    duration: number;
+  } | null = null;
 
   /**
    * Initialize Three.js scene manager
@@ -71,6 +103,12 @@ export class ThreeSceneManager {
     // Initialize raycasting
     this.raycaster = new THREE.Raycaster();
     this.mouse = new THREE.Vector2();
+
+    // Set threshold for Points raycasting (markers)
+    // This determines how close the mouse needs to be to a point for it to register as a hit
+    // Value is in scene units (NOT light-years - those are converted to scene units)
+    // Smaller values require more precise clicking
+    this.raycaster.params.Points.threshold = 0.4; // 0.4 scene units - requires clicking close to visible marker
 
     // Create scene
     this.scene = this.createScene();
@@ -92,6 +130,26 @@ export class ThreeSceneManager {
 
     // Initialize galaxy renderer (Phase 2)
     this.galaxyRenderer = new GalaxyRenderer();
+
+    // Multi-layer galaxy system (Phase 2.5) - Deferred until first galaxy generation
+    // Galaxy layers will be created when user generates a galaxy, NOT on app load
+    // This ensures no default galaxy appears before user interaction
+
+    // Independent marker system - Markers persist when galaxy layers change
+    this.markerManager = new MarkerSystemManager({
+      scene: this.scene,
+      getActiveGalaxyLayer: () => {
+        const { activeLayerId } = useGalaxyStore.getState();
+        return this.galaxyLayers[activeLayerId];
+      },
+      getGalaxyLayers: () => this.galaxyLayers,
+      setCustomMarkersSet: (value: boolean) => {
+        this.customMarkersSet = value;
+      }
+    });
+
+    // Register this scene manager with the galaxy store for UI access
+    useGalaxyStore.setState({ sceneManagerRef: this });
 
     // Add starfield background
     this.addStarfield();
@@ -193,9 +251,9 @@ export class ThreeSceneManager {
     // Match reference demo: strong bloom for dramatic star glow
     const bloomPass = new UnrealBloomPass(
       new THREE.Vector2(window.innerWidth, window.innerHeight),
-      2.3,  // strength - strong (matches reference demo)
-      0.8,  // radius - matches reference demo
-      0.85  // threshold - high (only brightest areas glow)
+      1.5,  // strength - reduced from 2.3 to prevent galaxy particle artifacts
+      0.6,  // radius - reduced for cleaner galaxy rendering
+      0.9   // threshold - higher to only affect brightest elements
     );
     composer.addPass(bloomPass);
 
@@ -320,15 +378,93 @@ export class ThreeSceneManager {
     // Update raycaster
     this.raycaster.setFromCamera(this.mouse, this.camera);
 
-    // In galaxy view, raycast against galaxy system markers
-    if (this.currentViewMode === 'galaxy') {
-      const systemObjects = this.galaxyRenderer.getSystemObjects();
-      const intersects = this.raycaster.intersectObjects(systemObjects, false);
+    console.log('[ThreeSceneManager] Click detected - viewMode:', this.currentViewMode, 'mouse:', this.mouse);
 
-      if (intersects.length > 0 && this.onObjectSelected) {
-        const selectedObject = intersects[0].object;
-        console.log('[ThreeSceneManager] Galaxy system selected:', selectedObject.userData);
-        this.onObjectSelected(selectedObject.userData);
+    // In galaxy view, raycast against marker systems
+    if (this.currentViewMode === 'galaxy') {
+      // Check if markers are clickable
+      const { markers } = useGalaxyStore.getState();
+      console.log('[ThreeSceneManager] Markers clickable?', markers.clickable);
+
+      if (!markers.clickable) {
+        console.log('[ThreeSceneManager] Click ignored - markers not clickable');
+        return; // Skip marker click detection when disabled
+      }
+
+      let intersects: THREE.Intersection[] = [];
+
+      // Check BOTH marker systems:
+      // 1. Independent marker system (from control panel)
+      const independentMarkerPoints = this.markerManager.getMarkerPoints();
+      if (independentMarkerPoints && independentMarkerPoints.visible) {
+        console.log('[ThreeSceneManager] Raycasting against independent marker system...');
+        intersects = this.raycaster.intersectObject(independentMarkerPoints, false);
+        console.log('[ThreeSceneManager] Independent markers raycast result:', {
+          intersectCount: intersects.length,
+          markerCount: independentMarkerPoints.geometry.attributes.position.count
+        });
+      }
+
+      // 2. Galaxy layer system markers (check ALL visible layers, not just layer 0)
+      if (intersects.length === 0) {
+        // Check all galaxy layers for markers
+        for (let i = 0; i < this.galaxyLayers.length; i++) {
+          const layer = this.galaxyLayers[i];
+          if (!layer) continue;
+
+          const galaxyGroup = layer.getGroup();
+          const galaxyMarkers = galaxyGroup.getObjectByName('systemMarkers');
+
+          if (galaxyMarkers) {
+            console.log(`[ThreeSceneManager] Raycasting against Layer ${i} markers...`);
+            const layerIntersects = this.raycaster.intersectObject(galaxyMarkers, false);
+
+            if (layerIntersects.length > 0) {
+              intersects = layerIntersects;
+              console.log(`[ThreeSceneManager] Found marker in Layer ${i}:`, {
+                intersectCount: intersects.length,
+                markerData: galaxyMarkers.userData
+              });
+              break; // Found a hit, stop checking other layers
+            }
+          }
+        }
+      }
+
+      if (intersects.length > 0) {
+        // Found an intersection with marker points
+        const intersection = intersects[0];
+        const markerIndex = intersection.index;
+
+        console.log('[ThreeSceneManager] Marker clicked at index:', markerIndex);
+
+        // Try to get system data from marker's userData first (works for both auto and custom markers)
+        const markerPoints = intersection.object as THREE.Points;
+        const markers = markerPoints.userData?.markers;
+
+        let clickedSystem = null;
+
+        // Method 1: Get from marker userData (always try this first)
+        if (markers && markerIndex !== undefined && markerIndex < markers.length) {
+          const markerData = markers[markerIndex];
+          clickedSystem = markerData?.data || markerData?.system;
+        }
+
+        // Method 2: Fallback to galaxy.systems array (for backward compatibility)
+        if (!clickedSystem) {
+          const store = useSystemStore.getState();
+          const currentGalaxy = store.currentGalaxy;
+          if (currentGalaxy && markerIndex !== undefined && markerIndex < currentGalaxy.systems.length) {
+            clickedSystem = currentGalaxy.systems[markerIndex].system;
+          }
+        }
+
+        if (clickedSystem) {
+          console.log('[ThreeSceneManager] Star system selected:', clickedSystem.star?.name || 'Unknown');
+          this.transitionToSystem(clickedSystem);
+        } else {
+          console.warn('[ThreeSceneManager] No system data found for marker at index:', markerIndex);
+        }
       }
       return;
     }
@@ -372,9 +508,63 @@ export class ThreeSceneManager {
   };
 
   /**
+   * Transition from galaxy view to system view
+   * Zooms camera to the selected star system and renders it
+   */
+  private transitionToSystem(system: any): void {
+    console.log('[ThreeSceneManager] Transitioning to system:', system.star?.name || 'Unknown');
+
+    // Find the index of this system in the current galaxy
+    const store = useSystemStore.getState();
+    const currentGalaxy = store.currentGalaxy;
+
+    if (!currentGalaxy) {
+      console.error('[ThreeSceneManager] No current galaxy to find system in');
+      return;
+    }
+
+    // Try to find the system index by matching the system ID or name
+    const systemIndex = currentGalaxy.systems.findIndex(
+      (placement: GalaxySystemPlacement) => placement.system.id === system.id || placement.system.name === system.name
+    );
+
+    if (systemIndex !== -1) {
+      // System found in galaxy - use store's focusSystem method
+      console.log(`[ThreeSceneManager] Found system at index ${systemIndex}, using store focus...`);
+      store.focusSystem(systemIndex);
+      // The store will trigger renderSystem() via the subscription
+    } else {
+      // System NOT in galaxy (custom marker) - render directly
+      console.log('[ThreeSceneManager] System not in galaxy (custom marker), rendering directly...');
+
+      // Switch to system view mode first (this will hide galaxy layers)
+      this.switchToSystemView();
+
+      // Set the current system in the store
+      store.setCurrentSystem(system);
+
+      // Switch view mode in store
+      store.setViewMode('system');
+
+      // Render the system directly (bypass store's focusSystem)
+      this.renderSystem(system);
+    }
+  }
+
+  /**
    * Handle keyboard input for debug controls
    */
   private handleKeyDown = (event: KeyboardEvent): void => {
+    // Press P to print current camera position
+    if (event.key === 'p' || event.key === 'P') {
+      console.log('═══════════════════════════════════════');
+      console.log('CAMERA POSITION:');
+      console.log(`  position: new THREE.Vector3(${this.camera.position.x.toFixed(2)}, ${this.camera.position.y.toFixed(2)}, ${this.camera.position.z.toFixed(2)})`);
+      console.log(`  lookAt: new THREE.Vector3(${this.controls.target.x.toFixed(2)}, ${this.controls.target.y.toFixed(2)}, ${this.controls.target.z.toFixed(2)})`);
+      console.log('═══════════════════════════════════════');
+      return;
+    }
+
     // Press D to cycle through debug modes
     if (event.key === 'd' || event.key === 'D') {
       this.debugMode = (this.debugMode + 1) % 8; // Cycle 0-7
@@ -427,9 +617,34 @@ export class ThreeSceneManager {
     // not from (0,0,0). Without this, all planets use the same LOD level.
     this.scene.updateMatrixWorld();
 
+    // Calculate delta time for animations
+    const time = performance.now() * 0.001; // Convert to seconds
+    const deltaTime = this.lastTime === 0 ? 0 : time - this.lastTime;
+    this.lastTime = time;
+
+    // Phase 2.5: Old GalaxyRenderer NO LONGER USED
+    // Multi-layer galaxy animation handled separately (see below)
+
+    // Update multi-layer galaxy particle systems (Phase 2.5)
+    // Only update when in galaxy view mode to prevent rendering when viewing systems
+    if (this.currentViewMode === 'galaxy') {
+      this.galaxyLayers.forEach((galaxy) => {
+        if (galaxy) {
+          galaxy.update(deltaTime);
+        }
+      });
+    }
+
+    // Update independent marker system
+    this.markerManager.updateFrame(time, this.currentViewMode);
+
+    // Update camera animation if active
+    if (this.cameraAnimation && this.cameraAnimation.active) {
+      this.updateCameraAnimation(deltaTime);
+    }
+
     // Update shader uniforms for all celestial bodies
     // CRITICAL: Camera position must be updated every frame for correct lighting and atmosphere
-    const time = performance.now() * 0.001; // Convert to seconds
     this.scene.traverse((object) => {
       // Update LOD objects (planets, moons)
       if (object instanceof THREE.LOD) {
@@ -477,6 +692,80 @@ export class ThreeSceneManager {
     // Render scene with post-processing (bloom)
     this.composer.render();
   };
+
+  // ==========================================================================
+  // Camera Animation
+  // ==========================================================================
+
+  /**
+   * Animate camera to a new position smoothly
+   * @param targetPosition - Target camera position
+   * @param targetLookAt - Target look-at point
+   * @param duration - Animation duration in seconds (default: 1.5s)
+   */
+  private animateCamera(
+    targetPosition: THREE.Vector3,
+    targetLookAt: THREE.Vector3,
+    duration: number = 1.5
+  ): void {
+    this.cameraAnimation = {
+      active: true,
+      startPosition: this.camera.position.clone(),
+      targetPosition: targetPosition.clone(),
+      startTarget: this.controls.target.clone(),
+      targetTarget: targetLookAt.clone(),
+      progress: 0,
+      duration
+    };
+  }
+
+  /**
+   * Update camera animation (called every frame)
+   * @param deltaTime - Time since last frame in seconds
+   */
+  private updateCameraAnimation(deltaTime: number): void {
+    if (!this.cameraAnimation) return;
+
+    // Update progress
+    this.cameraAnimation.progress += deltaTime / this.cameraAnimation.duration;
+
+    if (this.cameraAnimation.progress >= 1.0) {
+      // Animation complete - snap to final position
+      this.camera.position.copy(this.cameraAnimation.targetPosition);
+      this.controls.target.copy(this.cameraAnimation.targetTarget);
+      this.controls.update();
+      this.cameraAnimation.active = false;
+      console.log('[ThreeSceneManager] Camera animation complete');
+    } else {
+      // Ease-in-out interpolation for smooth motion
+      const t = this.easeInOutCubic(this.cameraAnimation.progress);
+
+      // Lerp position
+      this.camera.position.lerpVectors(
+        this.cameraAnimation.startPosition,
+        this.cameraAnimation.targetPosition,
+        t
+      );
+
+      // Lerp target
+      this.controls.target.lerpVectors(
+        this.cameraAnimation.startTarget,
+        this.cameraAnimation.targetTarget,
+        t
+      );
+
+      this.controls.update();
+    }
+  }
+
+  /**
+   * Ease-in-out cubic function for smooth camera motion
+   * @param t - Progress from 0 to 1
+   * @returns Eased value from 0 to 1
+   */
+  private easeInOutCubic(t: number): number {
+    return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+  }
 
   // ==========================================================================
   // System Rendering
@@ -716,15 +1005,18 @@ export class ThreeSceneManager {
     const systemRadius = maxOrbitDistance * orbitScale;
     const cameraDistance = systemRadius * 2.5; // View from a comfortable distance
 
-    this.camera.position.set(cameraDistance * 0.5, cameraDistance * 0.5, cameraDistance);
-    this.camera.lookAt(0, 0, 0);
+    const targetPosition = new THREE.Vector3(
+      cameraDistance * 0.5,
+      cameraDistance * 0.5,
+      cameraDistance
+    );
+    const targetLookAt = new THREE.Vector3(0, 0, 0);
 
-    // Update controls target
-    this.controls.target.set(0, 0, 0);
-    this.controls.update();
+    // Animate camera to new position (1.2s duration)
+    this.animateCamera(targetPosition, targetLookAt, 1.2);
 
     console.log(
-      `[ThreeSceneManager] Camera focused on system (radius: ${systemRadius.toFixed(2)} units)`
+      `[ThreeSceneManager] Camera focusing on system (radius: ${systemRadius.toFixed(2)} units)`
     );
   }
 
@@ -741,36 +1033,282 @@ export class ThreeSceneManager {
   public renderGalaxy(galaxy: Galaxy): void {
     console.log('[ThreeSceneManager] Rendering galaxy:', galaxy.name, `(${galaxy.systemCount} systems)`);
 
+    // Capture previous view mode before switching (for camera positioning logic)
+    const wasInSystemView = this.currentViewMode === 'system';
+
+    // Reset custom markers flag if this is a new galaxy generation (not returning from system)
+    if (!wasInSystemView) {
+      this.customMarkersSet = false;
+      console.log('[ThreeSceneManager] New galaxy - reset customMarkersSet flag');
+    }
+
     // Clear existing system objects (keep starfield)
     this.clearSystemObjects();
 
-    // Clear previous galaxy rendering
+    // Clear previous OLD galaxy rendering (if any)
     const previousGalaxyGroup = this.scene.getObjectByName('GalaxyGroup');
     if (previousGalaxyGroup) {
       this.scene.remove(previousGalaxyGroup);
     }
 
-    // Render galaxy
-    this.galaxyRenderer.renderGalaxy(galaxy);
+    // Phase 2.5: Multi-layer galaxy system handles visual rendering
+    // The old GalaxyRenderer is NO LONGER USED - multi-layer system renders instead
 
-    // Add galaxy group to scene
-    const galaxyGroup = this.galaxyRenderer.getGroup();
-    this.scene.add(galaxyGroup);
+    // Initialize galaxy layers on FIRST galaxy generation only
+    if (!this.galaxyLayersInitialized) {
+      this.initializeGalaxyLayers();
+      this.galaxyLayersInitialized = true;
+      console.log('[ThreeSceneManager] Galaxy layers initialized on first generation');
+    }
+
+    // Visual layers are automatically updated via store subscription
+    // galaxy-store.initializeFromProceduralGalaxy() configures layers based on galaxy type
+
+    // Add star system markers to Layer 0 (primary layer)
+    // Convert procedural star systems to visual markers
+    if (this.galaxyLayers[0]) {
+      // Calculate scale factors: Convert from light-years to scene units
+      // Galaxies have different scales for horizontal (X/Z) and vertical (Y)
+      // Visual: diskRadius ~55 units, diskThickness ~4 units
+      // Procedural: diskRadius ~100 LY, diskThickness ~10 LY
+
+      let proceduralRadius = 100; // Default fallback
+      let proceduralThickness = 10; // Default fallback
+
+      if (galaxy.type === 'Spiral' && galaxy.spiralParams) {
+        proceduralRadius = galaxy.spiralParams.diskRadius;
+        proceduralThickness = galaxy.spiralParams.diskThickness;
+      } else if (galaxy.type === 'Elliptical' && galaxy.ellipticalParams) {
+        proceduralRadius = galaxy.ellipticalParams.majorAxis;
+        proceduralThickness = galaxy.ellipticalParams.minorAxis; // For elliptical, use minor axis for Y
+      } else if (galaxy.type === 'Irregular' && galaxy.irregularParams) {
+        proceduralRadius = galaxy.irregularParams.boundingRadius;
+        proceduralThickness = galaxy.irregularParams.boundingRadius * 0.5; // Irregular uses ~half radius for thickness
+      }
+
+      const visualSize = 55; // From GalaxyParticleSystem default config
+      const visualThickness = 4.0; // From GalaxyParticleSystem default diskThickness
+
+      const scaleXZ = visualSize / proceduralRadius; // Horizontal scale
+      const scaleY = visualThickness / proceduralThickness; // Vertical scale (much smaller!)
+
+      // Only add auto-generated markers if user hasn't set custom markers
+      if (!this.customMarkersSet) {
+        const markers = galaxy.systems.map(systemPlacement => ({
+          position: new THREE.Vector3(
+            systemPlacement.position.x * scaleXZ,
+            systemPlacement.position.y * scaleY, // Different scale for Y!
+            systemPlacement.position.z * scaleXZ
+          ),
+          color: new THREE.Color(1.0, 1.0, 0.7), // Yellow-white for star systems
+          size: 5.0, // Bright, visible markers
+          data: systemPlacement.system // Store system data for interaction
+        }));
+
+        this.galaxyLayers[0].addSystemMarkers(markers);
+        console.log(`[ThreeSceneManager] Added ${markers.length} auto-generated star system markers to Layer 0`);
+        console.log(`[ThreeSceneManager] Scale factors: XZ=${scaleXZ.toFixed(3)} (${proceduralRadius.toFixed(1)} LY → ${visualSize} units), Y=${scaleY.toFixed(3)} (${proceduralThickness.toFixed(1)} LY → ${visualThickness} units)`);
+        console.log(`[ThreeSceneManager] Sample marker positions (scaled):`, markers.slice(0, 3).map(m => ({
+          x: m.position.x.toFixed(2),
+          y: m.position.y.toFixed(2),
+          z: m.position.z.toFixed(2)
+        })));
+      } else {
+        console.log(`[ThreeSceneManager] Skipping auto-generated markers (custom markers are set)`);
+      }
+    }
 
     // Switch to galaxy view mode
     this.currentViewMode = 'galaxy';
 
-    // Position camera to view entire galaxy
-    this.focusOnGalaxy(galaxy);
+    // Restore galaxy layer visibility based on store state
+    // (They were hidden when switching to system view)
+    const { layers } = useGalaxyStore.getState();
+    this.galaxyLayers.forEach((galaxy, index) => {
+      if (galaxy) {
+        const layerGroup = galaxy.getGroup();
+        layerGroup.visible = layers[index].visible;
+        console.log(`[ThreeSceneManager] Restored Layer ${index} visibility:`, layers[index].visible);
+      }
+    });
 
-    console.log('[ThreeSceneManager] Galaxy rendered successfully');
+    // Position camera to view entire galaxy
+    this.focusOnGalaxy(galaxy, wasInSystemView);
+
+    console.log('[ThreeSceneManager] Galaxy view activated (multi-layer rendering)');
+  }
+
+  /**
+   * Update galaxy particle system configuration
+   * Phase 2.5: This method is DEPRECATED - use galaxy-store actions instead
+   * Multi-layer system automatically updates via store subscription
+   * @param config - Partial galaxy config to apply
+   */
+  public updateGalaxyConfig(_config: Partial<GalaxyConfig>): void {
+    console.log('[ThreeSceneManager] DEPRECATED: updateGalaxyConfig called (use galaxy-store instead)');
+    // Legacy method - multi-layer system uses store-based updates now
+    // This is kept for backward compatibility but does nothing
+  }
+
+  // ==========================================================================
+  // Multi-Layer Galaxy System (Phase 2.5)
+  // ==========================================================================
+
+  /**
+   * Initialize multi-layer galaxy particle system
+   * Creates 3 independent galaxy instances and subscribes to store changes
+   */
+  private initializeGalaxyLayers(): void {
+    const { layers } = useGalaxyStore.getState();
+    this.lastGalaxyStoreLayers = layers;
+
+    // Create 3 galaxy particle system instances
+    layers.forEach((layer, index) => {
+      const galaxy = new GalaxyParticleSystem(layer.config);
+      const galaxyGroup = galaxy.getGroup();
+
+      // Set visibility based on layer state
+      galaxyGroup.visible = layer.visible;
+
+      // Store layer ID in userData for identification
+      galaxyGroup.userData = { layerId: index };
+      galaxyGroup.name = `GalaxyLayer${index}`;
+
+      // Add to scene
+      this.scene.add(galaxyGroup);
+
+      // Store reference
+      this.galaxyLayers[index] = galaxy;
+    });
+
+    // Subscribe to galaxy store changes
+    this.galaxyStoreUnsubscribe = useGalaxyStore.subscribe(
+      (state) => {
+        if (state.layers === this.lastGalaxyStoreLayers) {
+          return;
+        }
+
+        this.lastGalaxyStoreLayers = state.layers;
+        this.handleGalaxyLayersUpdate(state.layers);
+      }
+    );
+
+    console.log('[ThreeSceneManager] Multi-layer galaxy system initialized (3 layers)');
+  }
+
+  /**
+   * Handle galaxy layer updates from store
+   * @param layers - Updated layer configurations
+   */
+  private handleGalaxyLayersUpdate(layers: [GalaxyLayer, GalaxyLayer, GalaxyLayer]): void {
+    layers.forEach((layer, index) => {
+      const galaxy = this.galaxyLayers[index];
+      if (!galaxy) return;
+
+      const galaxyGroup = galaxy.getGroup();
+
+      // Update visibility
+      if (galaxyGroup.visible !== layer.visible) {
+        galaxyGroup.visible = layer.visible;
+        console.log(`[ThreeSceneManager] Layer ${index} visibility:`, layer.visible);
+      }
+
+      // Update configuration (galaxy will regenerate particles)
+      galaxy.updateConfig(layer.config);
+    });
+  }
+
+  /**
+   * Update a specific galaxy layer configuration
+   * @param layerId - Layer index (0, 1, or 2)
+   * @param config - Partial galaxy config to apply
+   */
+  public updateGalaxyLayer(layerId: 0 | 1 | 2, config: Partial<GalaxyConfig>): void {
+    const galaxy = this.galaxyLayers[layerId];
+    if (!galaxy) {
+      console.warn(`[ThreeSceneManager] Galaxy layer ${layerId} not initialized`);
+      return;
+    }
+
+    galaxy.updateConfig(config);
+    console.log(`[ThreeSceneManager] Updated galaxy layer ${layerId}:`, config);
+  }
+
+  /**
+   * Set visibility for a specific galaxy layer
+   * @param layerId - Layer index (0, 1, or 2)
+   * @param visible - Visibility state
+   */
+  public setGalaxyLayerVisibility(layerId: 0 | 1 | 2, visible: boolean): void {
+    const galaxy = this.galaxyLayers[layerId];
+    if (!galaxy) {
+      console.warn(`[ThreeSceneManager] Galaxy layer ${layerId} not initialized`);
+      return;
+    }
+
+    const galaxyGroup = galaxy.getGroup();
+    galaxyGroup.visible = visible;
+    console.log(`[ThreeSceneManager] Galaxy layer ${layerId} visibility:`, visible);
+  }
+
+  /**
+   * Dispose multi-layer galaxy system
+   * Called during cleanup
+   */
+  private disposeGalaxyLayers(): void {
+    // Unsubscribe from store
+    if (this.galaxyStoreUnsubscribe) {
+      this.galaxyStoreUnsubscribe();
+      this.galaxyStoreUnsubscribe = null;
+    }
+
+    this.lastGalaxyStoreLayers = null;
+
+    // Dispose each galaxy layer
+    this.galaxyLayers.forEach((galaxy, index) => {
+      if (galaxy) {
+        const galaxyGroup = galaxy.getGroup();
+        this.scene.remove(galaxyGroup);
+        galaxy.dispose();
+        this.galaxyLayers[index] = null;
+      }
+    });
+
+    console.log('[ThreeSceneManager] Multi-layer galaxy system disposed');
+  }
+
+  // ============================================================================
+  // Independent Marker System
+  // ============================================================================
+
+  /**
+   * Generate random markers for the active galaxy layer
+   * Adds procedurally positioned markers based on galaxy structure
+   */
+  public generateMarkersForActiveLayer(): void {
+    this.markerManager.generateMarkersForActiveLayer();
+  }
+
+  /**
+   * Clear all galaxy layer markers
+   */
+  public clearMarkers(): void {
+    this.markerManager.clearMarkers();
+  }
+
+  /**
+   * Toggle galaxy layer marker visibility
+   */
+  public toggleMarkersVisibility(): void {
+    this.markerManager.toggleMarkersVisibility();
   }
 
   /**
    * Adjust camera to view the entire galaxy
    * @param galaxy - Galaxy to focus on
+   * @param returningFromSystemView - True if returning from system view (reposition without animation)
    */
-  private focusOnGalaxy(galaxy: Galaxy): void {
+  private focusOnGalaxy(galaxy: Galaxy, returningFromSystemView: boolean = false): void {
     // Determine galaxy bounding radius based on type
     let galaxyRadius = 100; // Default
 
@@ -782,24 +1320,56 @@ export class ThreeSceneManager {
       galaxyRadius = galaxy.irregularParams.boundingRadius;
     }
 
-    // Position camera to view the whole galaxy
-    const cameraDistance = galaxyRadius * 2.5;
+    // Rest position (after animation, and when returning from system view)
+    const targetPosition = new THREE.Vector3(13.26, 81.14, 56.30);
+    const targetLookAt = new THREE.Vector3(2.31, 0.00, 6.86);
 
-    this.camera.position.set(
-      cameraDistance * 0.5,
-      cameraDistance * 0.8, // Higher angle for better overview
-      cameraDistance
-    );
-    this.camera.lookAt(0, 0, 0);
-
-    // Update controls target and limits for galaxy scale
-    this.controls.target.set(0, 0, 0);
+    // Update controls limits for galaxy scale
     this.controls.minDistance = galaxyRadius * 0.1;
     this.controls.maxDistance = galaxyRadius * 5;
+
+    // Determine what to do based on current state
+    if (this.hasAnimatedToGalaxyView && !returningFromSystemView) {
+      // Already animated once AND we're not returning from system view
+      // This is a regeneration - keep camera where it is
+      console.log('[ThreeSceneManager] Regeneration detected - camera stays in place');
+      return;
+    }
+
+    if (returningFromSystemView && this.hasAnimatedToGalaxyView) {
+      // Returning from system view - animate from close-up to rest position
+      console.log('[ThreeSceneManager] Returning from system view - animating camera pull-back to rest position');
+
+      const returnStartPosition = new THREE.Vector3(3.58, 9.41, 12.59);
+      const returnStartLookAt = new THREE.Vector3(2.31, 0.00, 6.86);
+
+      // Set camera to close-up starting position
+      this.camera.position.copy(returnStartPosition);
+      this.controls.target.copy(returnStartLookAt);
+      this.controls.update();
+
+      // Animate pull-back to rest position (0.8s duration for smooth transition)
+      this.animateCamera(targetPosition, targetLookAt, 0.8);
+      return;
+    }
+
+    // First generation: Start camera farther back and fly IN dramatically
+    const startPosition = new THREE.Vector3(65.23, 286.34, 311.32);
+    const startLookAt = new THREE.Vector3(0.00, 0.00, 0.00);
+
+    // Set camera to distant starting position
+    this.camera.position.copy(startPosition);
+    this.controls.target.copy(startLookAt);
     this.controls.update();
 
+    // Animate camera flying INTO the galaxy view (quick and dramatic: 1.0s)
+    this.animateCamera(targetPosition, targetLookAt, 1.0);
+
+    // Mark that we've done the initial animation
+    this.hasAnimatedToGalaxyView = true;
+
     console.log(
-      `[ThreeSceneManager] Camera focused on galaxy (radius: ${galaxyRadius.toFixed(2)} light-years)`
+      `[ThreeSceneManager] Camera flying into galaxy (radius: ${galaxyRadius.toFixed(2)} light-years)`
     );
   }
 
@@ -809,12 +1379,21 @@ export class ThreeSceneManager {
   public switchToSystemView(): void {
     console.log('[ThreeSceneManager] Switching to system view');
 
-    // Clear galaxy rendering
+    // Clear old galaxy rendering (Phase 2 legacy)
     const galaxyGroup = this.scene.getObjectByName('GalaxyGroup');
     if (galaxyGroup) {
       this.scene.remove(galaxyGroup);
     }
     this.galaxyRenderer.clear();
+
+    // Hide all galaxy layers (Phase 2.5 multi-layer system)
+    this.galaxyLayers.forEach((layer, index) => {
+      if (layer) {
+        const layerGroup = layer.getGroup();
+        layerGroup.visible = false;
+        console.log(`[ThreeSceneManager] Hid galaxy layer ${index}`);
+      }
+    });
 
     // Reset camera controls for system scale
     this.controls.minDistance = 5;
@@ -827,14 +1406,18 @@ export class ThreeSceneManager {
   }
 
   /**
-   * Clear all system objects from scene (keep starfield)
+   * Clear all system objects from scene (keep starfield and galaxy layers)
    */
   private clearSystemObjects(): void {
     const objectsToRemove: THREE.Object3D[] = [];
 
     // Only collect DIRECT children of scene (not nested objects like moons)
+    // Preserve: starfield, GalaxyLayer0, GalaxyLayer1, GalaxyLayer2
     this.scene.children.forEach((object) => {
-      if (object.name !== 'starfield') {
+      const isStarfield = object.name === 'starfield';
+      const isGalaxyLayer = object.name?.startsWith('GalaxyLayer');
+
+      if (!isStarfield && !isGalaxyLayer) {
         objectsToRemove.push(object);
       }
     });
@@ -981,6 +1564,12 @@ export class ThreeSceneManager {
 
     // Dispose galaxy renderer (Phase 2)
     this.galaxyRenderer.dispose();
+
+    // Dispose multi-layer galaxy system (Phase 2.5)
+    this.disposeGalaxyLayers();
+
+    // Dispose independent marker system
+    this.markerManager.dispose();
 
     // Clear scene
     this.clearSystemObjects();

@@ -81,6 +81,7 @@ export function generateGalaxy(params: GalaxyGenerationParams): Galaxy {
     irregularParams,
     systems,
     systemCount: systems.length,
+    originalSystemCount: systems.length,
     generatedAt: new Date(),
     age,
   };
@@ -161,7 +162,7 @@ function generateIrregularParams(rng: SeededRandom): IrregularGalaxyParams {
  * Generate all star systems for the galaxy
  * Positions them according to galaxy type and ensures minimum spacing
  */
-function generateGalaxySystems(
+export function generateGalaxySystems(
   count: number,
   galaxyType: GalaxyType,
   params: {
@@ -173,6 +174,8 @@ function generateGalaxySystems(
   rng: SeededRandom
 ): GalaxySystemPlacement[] {
   const placements: GalaxySystemPlacement[] = [];
+  const maxAttempts = 50;
+  let relaxedPlacementCount = 0;
 
   for (let i = 0; i < count; i++) {
     // Generate a unique seed for this star system
@@ -181,23 +184,31 @@ function generateGalaxySystems(
     // Generate position based on galaxy type
     let position: GalacticPosition;
     let attempts = 0;
-    const maxAttempts = 50;
+    let placedWithRelaxedSpacing = false;
 
     do {
       position = generateSystemPosition(galaxyType, params, rng);
       attempts++;
 
+      // Progressively relax spacing late in the retry cycle to reduce noisy hard failures
+      // while preserving the original minimum distance when space allows.
+      const relaxationProgress = attempts / maxAttempts;
+      const relaxedMinDistance = minDistance * (1 - 0.35 * relaxationProgress);
+
       // Check if position is valid (not too close to other systems)
       const isValid = placements.every(
-        (placement) => distanceBetweenPositions(position, placement.position) >= minDistance
+        (placement) => distanceBetweenPositions(position, placement.position) >= relaxedMinDistance
       );
 
-      if (isValid) break;
-      if (attempts >= maxAttempts) {
-        console.warn(`Failed to place system ${i} after ${maxAttempts} attempts, using last position`);
+      if (isValid) {
+        placedWithRelaxedSpacing = relaxedMinDistance < minDistance;
         break;
       }
     } while (attempts < maxAttempts);
+
+    if (placedWithRelaxedSpacing) {
+      relaxedPlacementCount++;
+    }
 
     // Generate the star system
     const system = generateSystem(systemSeed);
@@ -210,6 +221,13 @@ function generateGalaxySystems(
       position,
       region,
     });
+  }
+
+  if (relaxedPlacementCount > 0) {
+    console.warn(
+      `[GalaxyGen] Relaxed minimum system spacing for ${relaxedPlacementCount}/${count} placements ` +
+      `(base minDistance=${minDistance}ly)`
+    );
   }
 
   return placements;

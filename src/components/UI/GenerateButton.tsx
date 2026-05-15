@@ -48,7 +48,7 @@ export function GenerateButton() {
         value={seedInput}
         onChange={(e) => setSeedInput(e.target.value)}
         onKeyPress={handleKeyPress}
-        placeholder="Enter seed (optional)"
+        placeholder="System seed"
         className="hud-input"
         style={styles.input}
         disabled={isGenerating}
@@ -63,7 +63,7 @@ export function GenerateButton() {
           <span className="loading-spinner" style={styles.spinner}></span>
         )}
         <span className="mdi mdi-atom-variant" style={styles.buttonIcon}></span>
-        {isGenerating ? 'Generating...' : 'Generate System'}
+        System
       </button>
     </div>
   );
@@ -85,18 +85,19 @@ function hashString(str: string): number {
 const styles = {
   container: {
     display: 'flex',
-    gap: '12px',
+    gap: '8px',
     alignItems: 'center'
   },
   input: {
-    width: '220px'
+    width: '120px',
+    fontSize: '12px'
   },
   buttonIcon: {
-    fontSize: '16px',
+    fontSize: '14px',
     marginRight: '4px'
   },
   spinner: {
-    marginRight: '8px'
+    marginRight: '6px'
   },
   buttonDisabled: {
     opacity: 0.7,

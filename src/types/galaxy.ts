@@ -110,6 +110,12 @@ export interface Galaxy {
   // System placements
   systems: GalaxySystemPlacement[];
   systemCount: number;     // Total number of star systems
+  /**
+   * Baseline count from the original procedural galaxy generation.
+   * Scene marker workflows may temporarily append extra systems at runtime,
+   * and use this value to restore the generated baseline safely.
+   */
+  originalSystemCount?: number;
 
   // Metadata
   generatedAt: Date;
