@@ -470,7 +470,7 @@ export function GalaxyControls({ galaxy, onConfigChange, onReset }: GalaxyContro
                 ...styles.resetButton,
                 flex: 1,
                 background: '#0e639c',
-                borderColor: '#007acc',
+                border: '1px solid #007acc',
               }}
             >
               Add Markers
@@ -539,6 +539,10 @@ interface SliderControlProps {
 
 function SliderControl({ label, value, min, max, step, onChange }: SliderControlProps) {
   const [currentValue, setCurrentValue] = useState(value);
+
+  useEffect(() => {
+    setCurrentValue(value);
+  }, [value]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newValue = Number(e.target.value);
@@ -717,7 +721,7 @@ const styles = {
   } as React.CSSProperties,
   typeButtonActive: {
     background: '#0e639c',
-    borderColor: '#007acc',
+    border: '1px solid #007acc',
     color: '#ffffff',
   } as React.CSSProperties,
   hint: {

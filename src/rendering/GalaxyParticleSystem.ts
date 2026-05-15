@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { SeededRandom } from '../utils/random';
 
 /**
  * Galaxy types supported by the particle system
@@ -11,6 +12,7 @@ export type GalaxyType = 'spiral' | 'barred' | 'elliptical' | 'irregular' | 'rin
 export interface GalaxyConfig {
   // Galaxy structure
   type?: GalaxyType;
+  seed?: number;
   particleCount?: number;
   armCount?: number;
   spiralTightness?: number;
@@ -45,9 +47,9 @@ export interface GalaxyConfig {
   particleBrightness?: number;
 
   // Core controls
-  coreBrightness?: number;          // Brightness multiplier for core region (0.0-1.0)
-  coreAlphaFalloff?: number;        // How much to reduce alpha near center (0.0-1.0)
-  coreExclusionRadius?: number;     // Radius with no particles (0.0-0.2)
+  coreBrightness?: number; // Brightness multiplier for core region (0.0-1.0)
+  coreAlphaFalloff?: number; // How much to reduce alpha near center (0.0-1.0)
+  coreExclusionRadius?: number; // Radius with no particles (0.0-0.2)
 }
 
 /**
@@ -80,21 +82,22 @@ interface ParticleData {
  */
 export class GalaxyParticleSystem {
   private config: Required<GalaxyConfig>;
-  private systemMarkers: SystemMarker[];
   private particlePoints: THREE.Points | null;
   private markerPoints: THREE.Points | null;
   private group: THREE.Group;
+  private generationRng: SeededRandom;
 
   constructor(config: GalaxyConfig = {}) {
     // Configuration with defaults
     this.config = {
       type: config.type || 'spiral',
+      seed: config.seed ?? 0,
       particleCount: config.particleCount || 5000,
       armCount: config.armCount || 3,
       spiralTightness: config.spiralTightness || 0.6,
-      coreColor: config.coreColor || new THREE.Color(1.0, 0.8, 0.9),  // Pink
-      midColor: config.midColor || new THREE.Color(0.8, 0.4, 0.85),    // Purple
-      edgeColor: config.edgeColor || new THREE.Color(0.4, 0.2, 0.6),   // Dark purple
+      coreColor: config.coreColor || new THREE.Color(1.0, 0.8, 0.9), // Pink
+      midColor: config.midColor || new THREE.Color(0.8, 0.4, 0.85), // Purple
+      edgeColor: config.edgeColor || new THREE.Color(0.4, 0.2, 0.6), // Dark purple
       size: config.size || 55,
       diskThickness: config.diskThickness || 4.0,
       coreSize: config.coreSize || 0.25,
@@ -117,14 +120,11 @@ export class GalaxyParticleSystem {
       coreExclusionRadius: config.coreExclusionRadius !== undefined ? config.coreExclusionRadius : 0.0,
     };
 
-    // System markers (explorable star systems)
-    this.systemMarkers = [];
-
     // Three.js objects
     this.particlePoints = null;
     this.markerPoints = null;
     this.group = new THREE.Group();
-
+    this.generationRng = new SeededRandom(this.config.seed);
     this.generate();
   }
 
@@ -132,17 +132,17 @@ export class GalaxyParticleSystem {
    * Generate galaxy particles based on type
    */
   private generate(): void {
+    this.generationRng = new SeededRandom(this.config.seed);
+
     const positions: number[] = [];
     const sizes: number[] = [];
     const colors: number[] = [];
     const alphas: number[] = [];
     const shifts: number[] = [];
-
     const { type, particleCount } = this.config;
 
     for (let i = 0; i < particleCount; i++) {
       let particleData: ParticleData;
-
       switch (type) {
         case 'spiral':
           particleData = this.generateSpiralParticle();
@@ -168,10 +168,10 @@ export class GalaxyParticleSystem {
       colors.push(particleData.r, particleData.g, particleData.b);
       alphas.push(particleData.alpha);
       shifts.push(
-        Math.random() * Math.PI,
-        Math.random() * Math.PI * 2,
-        (Math.random() * 0.9 + 0.1) * Math.PI * 0.20,
-        Math.random() * 0.5 + 0.2
+        this.random() * Math.PI,
+        this.random() * Math.PI * 2,
+        (this.random() * 0.9 + 0.1) * Math.PI * 0.20,
+        this.random() * 0.5 + 0.2
       );
     }
 
@@ -190,7 +190,12 @@ export class GalaxyParticleSystem {
     if (this.particlePoints) {
       this.group.remove(this.particlePoints);
       this.particlePoints.geometry.dispose();
-      this.particlePoints.material.dispose();
+      // FIX: Type guard for Material | Material[]
+      if (Array.isArray(this.particlePoints.material)) {
+        this.particlePoints.material.forEach(m => m.dispose());
+      } else {
+        this.particlePoints.material.dispose();
+      }
     }
 
     this.particlePoints = new THREE.Points(geometry, material);
@@ -198,35 +203,45 @@ export class GalaxyParticleSystem {
     this.group.add(this.particlePoints);
   }
 
+  private random(): number {
+    return this.generationRng.random();
+  }
+
+  private sampleRadiusOutsideExclusion(maxRadius: number, exponent: number, exclusionMin: number): number {
+    if (exclusionMin <= 0) {
+      return Math.pow(this.random(), exponent) * maxRadius;
+    }
+
+    const clampedExclusion = Math.min(exclusionMin, maxRadius * 0.95);
+    const availableRange = maxRadius - clampedExclusion;
+
+    return clampedExclusion + Math.pow(this.random(), exponent) * availableRange;
+  }
+
   /**
    * Generate particle for SPIRAL galaxy
    */
   private generateSpiralParticle(): ParticleData {
-    const { size, armCount, spiralTightness, diskThickness, coreExclusionRadius } = this.config;
-
-    // Radius with concentration toward center (power of 3 for better distribution)
-    let radius = Math.pow(Math.random(), 3) * size;
-
-    // Apply core exclusion radius (prevents particles at absolute center)
+    const { size, coreExclusionRadius } = this.config;
     const exclusionMin = size * coreExclusionRadius;
-    if (radius < exclusionMin) {
-      radius = exclusionMin + Math.random() * (size * 0.05); // Small scatter outside exclusion
-    }
+
+    // Radius with concentration toward center, sampled outside exclusion zone
+    const radius = this.sampleRadiusOutsideExclusion(size, 3, exclusionMin);
 
     // Normalized radius for core calculations (0.0 at center, 1.0 at edge)
     const normalizedRadius = radius / size;
 
     // Determine which arm
-    const armIndex = Math.floor(Math.random() * armCount);
-    const armAngle = (armIndex / armCount) * Math.PI * 2;
+    const armIndex = Math.floor(this.random() * this.config.armCount);
+    const armAngle = (armIndex / this.config.armCount) * Math.PI * 2;
 
     // Logarithmic spiral
-    const spiralOffset = Math.log(radius / 5 + 1) * spiralTightness * 10;
+    const spiralOffset = Math.log(radius / 5 + 1) * this.config.spiralTightness * 10;
     const baseAngle = armAngle + spiralOffset;
 
     // Scatter for organic look
     const armWidth = 1.2;
-    const scatter = (Math.random() - 0.5) * armWidth;
+    const scatter = (this.random() - 0.5) * armWidth;
 
     // Noise for clustering
     const noise = Math.sin(baseAngle * 4) * Math.cos(radius * 0.2) * 2;
@@ -237,20 +252,22 @@ export class GalaxyParticleSystem {
     const z = radius * Math.sin(angle);
 
     // Y position - flattened disk, thinner at edges
-    const thickness = Math.pow(1 - normalizedRadius, 1.5) * diskThickness;
-    const y = (Math.random() - 0.5) * thickness;
+    const thickness = Math.pow(1 - normalizedRadius, 1.5) * this.config.diskThickness;
+    const y = (this.random() - 0.5) * thickness;
 
     const { particleSizeMin, particleSizeMax, particleBrightness } = this.config;
     const sizeRange = particleSizeMax - particleSizeMin;
 
     // Base alpha before core adjustments
-    const baseAlpha = (0.3 + Math.random() * 0.7) * particleBrightness;
+    const baseAlpha = (0.3 + this.random() * 0.7) * particleBrightness;
 
     return {
-      x, y, z,
+      x,
+      y,
+      z,
       ...this.getParticleColor(normalizedRadius),
-      size: Math.random() * sizeRange + particleSizeMin,
-      alpha: this.calculateCoreAlpha(normalizedRadius, baseAlpha)
+      size: this.random() * sizeRange + particleSizeMin,
+      alpha: this.calculateCoreAlpha(normalizedRadius, baseAlpha),
     };
   }
 
@@ -258,29 +275,21 @@ export class GalaxyParticleSystem {
    * Generate particle for BARRED SPIRAL galaxy
    */
   private generateBarredSpiralParticle(): ParticleData {
-    const { size, armCount, spiralTightness, diskThickness, coreSize, coreExclusionRadius } = this.config;
-
-    let radius = Math.pow(Math.random(), 3) * size;
-
-    // Apply core exclusion radius
+    const { size, coreSize, coreExclusionRadius } = this.config;
     const exclusionMin = size * coreExclusionRadius;
-    if (radius < exclusionMin) {
-      radius = exclusionMin + Math.random() * (size * 0.05);
-    }
+    const radius = this.sampleRadiusOutsideExclusion(size, 3, exclusionMin);
 
-    const normalizedRadius = radius / size;
-    const isBar = radius < (size * coreSize) && Math.random() < 0.6;
+    const isBar = radius < (size * coreSize) && this.random() < 0.6;
 
     if (isBar) {
       // Central bar structure
       const barLength = size * coreSize * 0.8;
-      const barAngle = Math.random() * Math.PI * 2;
-      const barRadius = (Math.random() - 0.5) * barLength;
+      const barAngle = this.random() * Math.PI * 2;
+      const barRadius = (this.random() - 0.5) * barLength;
       const barWidth = 2.0;
-
-      const x = barRadius * Math.cos(barAngle) + (Math.random() - 0.5) * barWidth;
-      const z = barRadius * Math.sin(barAngle) + (Math.random() - 0.5) * barWidth;
-      const y = (Math.random() - 0.5) * 1.5;
+      const x = barRadius * Math.cos(barAngle) + (this.random() - 0.5) * barWidth;
+      const z = barRadius * Math.sin(barAngle) + (this.random() - 0.5) * barWidth;
+      const y = (this.random() - 0.5) * 1.5;
 
       const { particleSizeMin, particleSizeMax, particleBrightness } = this.config;
       const sizeRange = particleSizeMax - particleSizeMin;
@@ -288,14 +297,15 @@ export class GalaxyParticleSystem {
       // Calculate actual distance from center for bar particles
       const barDistance = Math.sqrt(x * x + z * z);
       const barNormalizedRadius = barDistance / size;
-
-      const baseAlpha = (0.5 + Math.random() * 0.5) * particleBrightness;
+      const baseAlpha = (0.5 + this.random() * 0.5) * particleBrightness;
 
       return {
-        x, y, z,
+        x,
+        y,
+        z,
         ...this.getParticleColor(0.1), // Core color
-        size: Math.random() * sizeRange + particleSizeMin,
-        alpha: this.calculateCoreAlpha(barNormalizedRadius, baseAlpha)
+        size: this.random() * sizeRange + particleSizeMin,
+        alpha: this.calculateCoreAlpha(barNormalizedRadius, baseAlpha),
       };
     } else {
       // Regular spiral arms (starting from bar ends)
@@ -309,19 +319,15 @@ export class GalaxyParticleSystem {
   private generateEllipticalParticle(): ParticleData {
     const { size, ellipticalFlatten, coreExclusionRadius } = this.config;
 
-    // Spherical distribution with concentration toward center
-    let radius = Math.pow(Math.random(), 4) * size * 0.8;
-
-    // Apply core exclusion radius
+    const maxRadius = size * 0.8;
     const exclusionMin = size * coreExclusionRadius;
-    if (radius < exclusionMin) {
-      radius = exclusionMin + Math.random() * (size * 0.05);
-    }
+
+    // Spherical distribution with concentration toward center, sampled outside exclusion zone
+    const radius = this.sampleRadiusOutsideExclusion(maxRadius, 4, exclusionMin);
 
     const normalizedRadius = radius / (size * 0.8);
-
-    const theta = Math.random() * Math.PI * 2;
-    const phi = Math.acos(2 * Math.random() - 1);
+    const theta = this.random() * Math.PI * 2;
+    const phi = Math.acos(2 * this.random() - 1);
 
     // Elliptical shape (configurable flattening)
     const x = radius * Math.sin(phi) * Math.cos(theta);
@@ -330,14 +336,15 @@ export class GalaxyParticleSystem {
 
     const { particleSizeMin, particleSizeMax, particleBrightness } = this.config;
     const sizeRange = particleSizeMax - particleSizeMin;
-
-    const baseAlpha = (0.2 + Math.random() * 0.6) * particleBrightness;
+    const baseAlpha = (0.2 + this.random() * 0.6) * particleBrightness;
 
     return {
-      x, y, z,
+      x,
+      y,
+      z,
       ...this.getParticleColor(normalizedRadius),
-      size: Math.random() * sizeRange + particleSizeMin,
-      alpha: this.calculateCoreAlpha(normalizedRadius, baseAlpha)
+      size: this.random() * sizeRange + particleSizeMin,
+      alpha: this.calculateCoreAlpha(normalizedRadius, baseAlpha),
     };
   }
 
@@ -349,25 +356,24 @@ export class GalaxyParticleSystem {
 
     // Chaotic distribution with multiple density clusters
     const clusterCount = 3;
-    const clusterIndex = Math.floor(Math.random() * clusterCount);
-    const clusterAngle = (clusterIndex / clusterCount) * Math.PI * 2 + (Math.random() - 0.5) * Math.PI;
-    const clusterDistance = Math.random() * size * 0.5;
+    const clusterIndex = Math.floor(this.random() * clusterCount);
+    const clusterAngle = (clusterIndex / clusterCount) * Math.PI * 2 + (this.random() - 0.5) * Math.PI;
+    const clusterDistance = this.random() * size * 0.5;
 
     // Configurable scatter for chaotic look (0.0 = tight clusters, 1.0 = very chaotic)
-    const scatter = (Math.random() - 0.5) * size * irregularChaos;
+    const scatter = (this.random() - 0.5) * size * irregularChaos;
     let radius = clusterDistance + scatter;
 
     // Apply core exclusion radius
     const exclusionMin = size * coreExclusionRadius;
     if (Math.abs(radius) < exclusionMin) {
-      radius = (radius >= 0 ? 1 : -1) * (exclusionMin + Math.random() * (size * 0.05));
+      radius = (radius >= 0 ? 1 : -1) * (exclusionMin + this.random() * (size * 0.05));
     }
 
-    const angle = clusterAngle + (Math.random() - 0.5) * Math.PI;
-
+    const angle = clusterAngle + (this.random() - 0.5) * Math.PI;
     const x = radius * Math.cos(angle);
     const z = radius * Math.sin(angle);
-    const y = (Math.random() - 0.5) * diskThickness * 2;
+    const y = (this.random() - 0.5) * diskThickness * 2;
 
     // Calculate normalized radius for core controls
     const distance = Math.sqrt(x * x + z * z);
@@ -375,14 +381,15 @@ export class GalaxyParticleSystem {
 
     const { particleSizeMin, particleSizeMax, particleBrightness } = this.config;
     const sizeRange = particleSizeMax - particleSizeMin;
-
-    const baseAlpha = (0.2 + Math.random() * 0.7) * particleBrightness;
+    const baseAlpha = (0.2 + this.random() * 0.7) * particleBrightness;
 
     return {
-      x, y, z,
-      ...this.getParticleColor(Math.random()), // Random colors
-      size: Math.random() * sizeRange + particleSizeMin,
-      alpha: this.calculateCoreAlpha(normalizedRadius, baseAlpha)
+      x,
+      y,
+      z,
+      ...this.getParticleColor(this.random()), // Random colors
+      size: this.random() * sizeRange + particleSizeMin,
+      alpha: this.calculateCoreAlpha(normalizedRadius, baseAlpha),
     };
   }
 
@@ -395,27 +402,27 @@ export class GalaxyParticleSystem {
     // Ring with configurable inner and outer bounds
     const minRadius = size * ringInnerRadius;
     const maxRadius = size * ringOuterRadius;
-    const radius = minRadius + Math.random() * (maxRadius - minRadius);
-
+    const radius = minRadius + this.random() * (maxRadius - minRadius);
     const normalizedRadius = radius / size;
 
-    const angle = Math.random() * Math.PI * 2;
+    const angle = this.random() * Math.PI * 2;
     const x = radius * Math.cos(angle);
     const z = radius * Math.sin(angle);
 
     // Thin disk
-    const y = (Math.random() - 0.5) * diskThickness * 0.5;
+    const y = (this.random() - 0.5) * diskThickness * 0.5;
 
     const { particleSizeMin, particleSizeMax, particleBrightness } = this.config;
     const sizeRange = particleSizeMax - particleSizeMin;
-
-    const baseAlpha = (0.4 + Math.random() * 0.6) * particleBrightness;
+    const baseAlpha = (0.4 + this.random() * 0.6) * particleBrightness;
 
     return {
-      x, y, z,
+      x,
+      y,
+      z,
       ...this.getParticleColor((radius - minRadius) / (maxRadius - minRadius)),
-      size: Math.random() * sizeRange + particleSizeMin,
-      alpha: this.calculateCoreAlpha(normalizedRadius, baseAlpha)
+      size: this.random() * sizeRange + particleSizeMin,
+      alpha: this.calculateCoreAlpha(normalizedRadius, baseAlpha),
     };
   }
 
@@ -425,7 +432,6 @@ export class GalaxyParticleSystem {
   private getParticleColor(t: number): { r: number; g: number; b: number } {
     const { coreColor, midColor, edgeColor } = this.config;
     let color: THREE.Color;
-
     if (t < 0.4) {
       // Core to mid
       const localT = t / 0.4;
@@ -435,7 +441,6 @@ export class GalaxyParticleSystem {
       const localT = (t - 0.4) / 0.6;
       color = new THREE.Color().lerpColors(midColor, edgeColor, localT);
     }
-
     return { r: color.r, g: color.g, b: color.b };
   }
 
@@ -450,7 +455,6 @@ export class GalaxyParticleSystem {
 
     // Check if particle is in core region
     const isInCore = normalizedRadius < coreSize;
-
     if (!isInCore) {
       // Outside core - use base alpha
       return baseAlpha;
@@ -460,9 +464,10 @@ export class GalaxyParticleSystem {
     const coreT = normalizedRadius / coreSize; // 0.0 at center, 1.0 at core edge
 
     // Apply alpha falloff (reduces alpha near center to prevent solid appearance)
+    // Use a quadratic curve so center changes remain visually noticeable under additive blending.
     // coreAlphaFalloff: 0.0 = no reduction, 1.0 = maximum reduction
-    const falloffReduction = (1.0 - coreT) * coreAlphaFalloff;
-    const falloffMultiplier = 1.0 - falloffReduction;
+    const centerWeight = Math.pow(1.0 - coreT, 2);
+    const falloffMultiplier = 1.0 - (centerWeight * coreAlphaFalloff);
 
     // Apply core brightness multiplier
     return baseAlpha * coreBrightness * falloffMultiplier;
@@ -473,10 +478,9 @@ export class GalaxyParticleSystem {
    */
   private createParticleMaterial(): THREE.ShaderMaterial {
     const PI2 = Math.PI * 2;
-
     return new THREE.ShaderMaterial({
       uniforms: {
-        time: { value: 0 }
+        time: { value: 0 },
       },
       vertexShader: `
         uniform float time;
@@ -484,22 +488,17 @@ export class GalaxyParticleSystem {
         attribute vec3 color;
         attribute float alpha;
         attribute vec4 shift;
-
         varying vec3 vColor;
         varying float vAlpha;
-
         void main() {
           vColor = color;
           vAlpha = alpha;
-
           vec3 pos = position;
-
           // Particle motion
           float t = time;
           float moveT = mod(shift.x + shift.z * t, ${PI2.toFixed(10)});
           float moveS = mod(shift.y + shift.z * t, ${PI2.toFixed(10)});
           pos += vec3(cos(moveS) * sin(moveT), cos(moveT), sin(moveS) * sin(moveT)) * shift.w;
-
           vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
           gl_PointSize = size * 3.0 * (300.0 / -mvPosition.z);
           gl_Position = projectionMatrix * mvPosition;
@@ -508,7 +507,6 @@ export class GalaxyParticleSystem {
       fragmentShader: `
         varying vec3 vColor;
         varying float vAlpha;
-
         void main() {
           vec2 center = gl_PointCoord - vec2(0.5);
           float dist = length(center);
@@ -518,22 +516,25 @@ export class GalaxyParticleSystem {
       `,
       transparent: true,
       depthWrite: false,
-      blending: THREE.AdditiveBlending
+      blending: THREE.AdditiveBlending,
     });
   }
 
   /**
    * Add system markers (explorable star systems)
    */
-  public addSystemMarkers(systems: SystemMarker[]): void {
+  public addSystemMarkers(systems: SystemMarker[], pulseFrequency = 1.0): void {
     // Remove old markers
     if (this.markerPoints) {
       this.group.remove(this.markerPoints);
       this.markerPoints.geometry.dispose();
-      this.markerPoints.material.dispose();
+      // FIX: Type guard for Material | Material[]
+      if (Array.isArray(this.markerPoints.material)) {
+        this.markerPoints.material.forEach(m => m.dispose());
+      } else {
+        this.markerPoints.material.dispose();
+      }
     }
-
-    this.systemMarkers = systems;
 
     const positions: number[] = [];
     const colors: number[] = [];
@@ -541,11 +542,9 @@ export class GalaxyParticleSystem {
 
     systems.forEach(system => {
       positions.push(system.position.x, system.position.y, system.position.z);
-
       // Marker color - slightly brighter than particle colors
       const color = system.color || new THREE.Color(1.0, 1.0, 0.6); // Yellow-white
       colors.push(color.r, color.g, color.b);
-
       sizes.push(system.size || 4.0);
     });
 
@@ -557,55 +556,61 @@ export class GalaxyParticleSystem {
     // Marker material - brighter, more visible
     const material = new THREE.ShaderMaterial({
       uniforms: {
-        time: { value: 0 }
+        time: { value: 0 },
+        pulseFrequency: { value: pulseFrequency },
       },
       vertexShader: `
         uniform float time;
+        uniform float pulseFrequency;
         attribute float size;
         attribute vec3 color;
         varying vec3 vColor;
-
         void main() {
           vColor = color;
           vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
-
           // Pulsing effect
-          float pulse = 1.0 + sin(time * 2.0) * 0.2;
+          float pulse = 1.0 + sin(time * pulseFrequency * 2.0) * 0.2;
           gl_PointSize = size * pulse * (300.0 / -mvPosition.z);
           gl_Position = projectionMatrix * mvPosition;
         }
       `,
       fragmentShader: `
         varying vec3 vColor;
-
         void main() {
           vec2 center = gl_PointCoord - vec2(0.5);
           float dist = length(center);
-
           // Sharp core with glow
           float core = 1.0 - smoothstep(0.0, 0.2, dist);
           float glow = smoothstep(0.5, 0.0, dist);
           float alpha = core + glow * 0.5;
-
           gl_FragColor = vec4(vColor * 1.3, alpha);
         }
       `,
       transparent: true,
       depthWrite: false,
-      blending: THREE.AdditiveBlending
+      blending: THREE.AdditiveBlending,
     });
 
     this.markerPoints = new THREE.Points(geometry, material);
     this.markerPoints.rotation.x = -Math.PI / 5;
     this.markerPoints.name = 'systemMarkers';
-
     // Store marker data in userData for raycasting/selection
     this.markerPoints.userData = {
       markers: systems, // Full array of SystemMarker objects with data
-      markerCount: systems.length
+      markerCount: systems.length,
     };
-
     this.group.add(this.markerPoints);
+  }
+
+  public updateSystemMarkerPulseFrequency(pulseFrequency: number): void {
+    if (!this.markerPoints) {
+      return;
+    }
+
+    const material = this.markerPoints.material as THREE.ShaderMaterial;
+    if (material.uniforms.pulseFrequency) {
+      material.uniforms.pulseFrequency.value = pulseFrequency;
+    }
   }
 
   /**
@@ -613,12 +618,16 @@ export class GalaxyParticleSystem {
    */
   public update(deltaTime: number): void {
     if (this.particlePoints) {
-      this.particlePoints.material.uniforms.time.value += deltaTime * this.config.animationSpeed;
+      // FIX: Type guard - we know it's a ShaderMaterial from createParticleMaterial()
+      const material = this.particlePoints.material as THREE.ShaderMaterial;
+      material.uniforms.time.value += deltaTime * this.config.animationSpeed;
       this.particlePoints.rotation.y += this.config.rotationSpeed * deltaTime;
     }
 
     if (this.markerPoints) {
-      this.markerPoints.material.uniforms.time.value += deltaTime * this.config.animationSpeed;
+      // FIX: Type guard - we know it's a ShaderMaterial from addSystemMarkers()
+      const material = this.markerPoints.material as THREE.ShaderMaterial;
+      material.uniforms.time.value += deltaTime * this.config.animationSpeed;
       this.markerPoints.rotation.y += this.config.rotationSpeed * deltaTime;
     }
   }
@@ -644,11 +653,22 @@ export class GalaxyParticleSystem {
   public dispose(): void {
     if (this.particlePoints) {
       this.particlePoints.geometry.dispose();
-      this.particlePoints.material.dispose();
+      // FIX: Type guard for Material | Material[]
+      if (Array.isArray(this.particlePoints.material)) {
+        this.particlePoints.material.forEach(m => m.dispose());
+      } else {
+        this.particlePoints.material.dispose();
+      }
     }
+
     if (this.markerPoints) {
       this.markerPoints.geometry.dispose();
-      this.markerPoints.material.dispose();
+      // FIX: Type guard for Material | Material[]
+      if (Array.isArray(this.markerPoints.material)) {
+        this.markerPoints.material.forEach(m => m.dispose());
+      } else {
+        this.markerPoints.material.dispose();
+      }
     }
   }
 }

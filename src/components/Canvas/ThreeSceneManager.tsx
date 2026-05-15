@@ -20,11 +20,9 @@ import { createTypedOrbitLine } from '../../rendering/OrbitRenderer';
 import { CelestialBodyLOD } from '../../rendering/CelestialBodyLOD';
 import { GalaxyRenderer } from '../../rendering/GalaxyRenderer';
 import { GalaxyParticleSystem } from '../../rendering/GalaxyParticleSystem';
-import { useGalaxyStore, type GalaxyLayer, generateMarkerPositions } from '../../store/galaxy-store';
+import { useGalaxyStore, type GalaxyLayer } from '../../store/galaxy-store';
 import { useSystemStore } from '../../store/system-store';
-import { generateGalaxySystems } from '../../generation/galaxy-generator';
-import { generateSystem } from '../../generation/system-generator';
-import { SeededRandom } from '../../utils/random';
+import { MarkerSystemManager } from './MarkerSystemManager';
 
 // ============================================================================
 // ThreeSceneManager Class
@@ -60,15 +58,13 @@ export class ThreeSceneManager {
   // Array of exactly 3 independent galaxy particle systems for visual composition
   private galaxyLayers: (GalaxyParticleSystem | null)[] = [null, null, null];
   private galaxyStoreUnsubscribe: (() => void) | null = null;
+  private lastGalaxyStoreLayers: [GalaxyLayer, GalaxyLayer, GalaxyLayer] | null = null;
   private galaxyLayersInitialized: boolean = false; // Track if layers have been created
   private customMarkersSet: boolean = false; // Track if user has set custom markers (don't auto-regenerate)
 
   // Independent marker system (separate from galaxy layers)
   // Markers persist when layers are edited/switched
-  private markerGroup: THREE.Group;
-  private markerPoints: THREE.Points | null = null;
-  private markerMaterial: THREE.ShaderMaterial | null = null;
-  private markerStoreUnsubscribe: (() => void) | null = null;
+  private markerManager: MarkerSystemManager;
 
   // Material tracking (Phase 3: Architect Mode)
   // Maps object ID -> THREE.Material for live uniform updates
@@ -140,12 +136,17 @@ export class ThreeSceneManager {
     // This ensures no default galaxy appears before user interaction
 
     // Independent marker system - Markers persist when galaxy layers change
-    this.markerGroup = new THREE.Group();
-    this.markerGroup.name = 'independentMarkers';
-    this.scene.add(this.markerGroup);
-
-    // Subscribe to marker store changes
-    this.subscribeToMarkerStore();
+    this.markerManager = new MarkerSystemManager({
+      scene: this.scene,
+      getActiveGalaxyLayer: () => {
+        const { activeLayerId } = useGalaxyStore.getState();
+        return this.galaxyLayers[activeLayerId];
+      },
+      getGalaxyLayers: () => this.galaxyLayers,
+      setCustomMarkersSet: (value: boolean) => {
+        this.customMarkersSet = value;
+      }
+    });
 
     // Register this scene manager with the galaxy store for UI access
     useGalaxyStore.setState({ sceneManagerRef: this });
@@ -394,12 +395,13 @@ export class ThreeSceneManager {
 
       // Check BOTH marker systems:
       // 1. Independent marker system (from control panel)
-      if (this.markerPoints && this.markerPoints.visible) {
+      const independentMarkerPoints = this.markerManager.getMarkerPoints();
+      if (independentMarkerPoints && independentMarkerPoints.visible) {
         console.log('[ThreeSceneManager] Raycasting against independent marker system...');
-        intersects = this.raycaster.intersectObject(this.markerPoints, false);
+        intersects = this.raycaster.intersectObject(independentMarkerPoints, false);
         console.log('[ThreeSceneManager] Independent markers raycast result:', {
           intersectCount: intersects.length,
-          markerCount: this.markerPoints.geometry.attributes.position.count
+          markerCount: independentMarkerPoints.geometry.attributes.position.count
         });
       }
 
@@ -504,65 +506,6 @@ export class ThreeSceneManager {
       }
     }
   };
-
-  /**
-   * Find the closest marker to a clicked point
-   * Used for determining which star system marker was clicked
-   */
-  private findClosestMarker(layer: GalaxyParticleSystem, clickPoint: THREE.Vector3): any {
-    // GalaxyParticleSystem stores markers internally but doesn't expose them
-    // We need to access the marker data through the Points geometry
-    const group = layer.getGroup();
-    const markerPoints = group.children.find(child => child.name === 'systemMarkers') as THREE.Points;
-
-    if (!markerPoints || !markerPoints.geometry) {
-      console.warn('[ThreeSceneManager] No marker geometry found');
-      return null;
-    }
-
-    const positions = markerPoints.geometry.getAttribute('position');
-    if (!positions) {
-      console.warn('[ThreeSceneManager] No position attribute in marker geometry');
-      return null;
-    }
-
-    // We need to get the system data from somewhere
-    // The marker data is stored in the GalaxyParticleSystem's private systemMarkers array
-    // For now, we'll access it through a public getter that we'll add to GalaxyParticleSystem
-    // Or we can access the userData if we stored it there
-
-    // Find the closest marker position to the click point
-    let closestIndex = -1;
-    let closestDistance = Infinity;
-
-    for (let i = 0; i < positions.count; i++) {
-      const markerPos = new THREE.Vector3(
-        positions.getX(i),
-        positions.getY(i),
-        positions.getZ(i)
-      );
-
-      // Transform to world space (account for marker rotation)
-      markerPos.applyMatrix4(markerPoints.matrixWorld);
-
-      const distance = markerPos.distanceTo(clickPoint);
-      if (distance < closestDistance) {
-        closestDistance = distance;
-        closestIndex = i;
-      }
-    }
-
-    console.log(`[ThreeSceneManager] Closest marker index: ${closestIndex}, distance: ${closestDistance.toFixed(2)}`);
-
-    // We need to get the actual system data for this marker
-    // Store it in userData when creating markers
-    if (markerPoints.userData?.markers && markerPoints.userData.markers[closestIndex]) {
-      return markerPoints.userData.markers[closestIndex];
-    }
-
-    console.warn('[ThreeSceneManager] No marker data found in userData');
-    return null;
-  }
 
   /**
    * Transition from galaxy view to system view
@@ -693,22 +636,7 @@ export class ThreeSceneManager {
     }
 
     // Update independent marker system
-    // Sync rotation with active galaxy layer so markers rotate with galaxy
-    if (this.currentViewMode === 'galaxy') {
-      const { activeLayerId } = useGalaxyStore.getState();
-      const activeGalaxy = this.galaxyLayers[activeLayerId];
-
-      if (activeGalaxy && this.markerPoints) {
-        // Copy rotation from active galaxy layer to marker group
-        const galaxyGroup = activeGalaxy.getGroup();
-        this.markerGroup.rotation.copy(galaxyGroup.rotation);
-
-        // Update time uniform for pulsing effect
-        if (this.markerMaterial && this.markerMaterial.uniforms.time) {
-          this.markerMaterial.uniforms.time.value = time;
-        }
-      }
-    }
+    this.markerManager.updateFrame(time, this.currentViewMode);
 
     // Update camera animation if active
     if (this.cameraAnimation && this.cameraAnimation.active) {
@@ -1232,6 +1160,7 @@ export class ThreeSceneManager {
    */
   private initializeGalaxyLayers(): void {
     const { layers } = useGalaxyStore.getState();
+    this.lastGalaxyStoreLayers = layers;
 
     // Create 3 galaxy particle system instances
     layers.forEach((layer, index) => {
@@ -1255,6 +1184,11 @@ export class ThreeSceneManager {
     // Subscribe to galaxy store changes
     this.galaxyStoreUnsubscribe = useGalaxyStore.subscribe(
       (state) => {
+        if (state.layers === this.lastGalaxyStoreLayers) {
+          return;
+        }
+
+        this.lastGalaxyStoreLayers = state.layers;
         this.handleGalaxyLayersUpdate(state.layers);
       }
     );
@@ -1328,6 +1262,8 @@ export class ThreeSceneManager {
       this.galaxyStoreUnsubscribe = null;
     }
 
+    this.lastGalaxyStoreLayers = null;
+
     // Dispose each galaxy layer
     this.galaxyLayers.forEach((galaxy, index) => {
       if (galaxy) {
@@ -1346,411 +1282,25 @@ export class ThreeSceneManager {
   // ============================================================================
 
   /**
-   * Subscribe to marker store changes
-   * Watches for marker position, config, and visibility updates
-   */
-  private subscribeToMarkerStore(): void {
-    this.markerStoreUnsubscribe = useGalaxyStore.subscribe(
-      (state) => {
-        // Update markers when positions or visibility changes
-        this.handleMarkerUpdate(
-          state.markerPositions,
-          state.markers,
-          state.markersVisible
-        );
-      }
-    );
-  }
-
-  /**
-   * Handle marker updates from store
-   * Recreates marker Points when positions, config, or visibility changes
-   */
-  private handleMarkerUpdate(
-    positions: THREE.Vector3[],
-    config: any,
-    visible: boolean
-  ): void {
-    // Clear existing markers
-    if (this.markerPoints) {
-      this.markerGroup.remove(this.markerPoints);
-      this.markerPoints.geometry.dispose();
-      if (this.markerMaterial) {
-        this.markerMaterial.dispose();
-      }
-      this.markerPoints = null;
-      this.markerMaterial = null;
-    }
-
-    // If no positions, we're done
-    if (positions.length === 0) {
-      return;
-    }
-
-    // Create new markers
-    this.createMarkerPoints(positions, config);
-
-    // Set visibility
-    if (this.markerPoints) {
-      this.markerPoints.visible = visible;
-    }
-  }
-
-  /**
-   * Create THREE.Points for markers with shader material
-   * Matches demo implementation with pulsing effect
-   */
-  private createMarkerPoints(
-    positions: THREE.Vector3[],
-    config: any
-  ): void {
-    const positionsArray: number[] = [];
-    const colorsArray: number[] = [];
-    const sizesArray: number[] = [];
-
-    const markerColor = new THREE.Color(config.color || '#fff3b3');
-
-    positions.forEach((pos) => {
-      positionsArray.push(pos.x, pos.y, pos.z);
-      colorsArray.push(markerColor.r, markerColor.g, markerColor.b);
-      sizesArray.push(config.size || 4.0);
-    });
-
-    const geometry = new THREE.BufferGeometry();
-    geometry.setAttribute('position', new THREE.Float32BufferAttribute(positionsArray, 3));
-    geometry.setAttribute('color', new THREE.Float32BufferAttribute(colorsArray, 3));
-    geometry.setAttribute('size', new THREE.Float32BufferAttribute(sizesArray, 1));
-
-    // Marker shader material - matches demo with pulsing effect
-    this.markerMaterial = new THREE.ShaderMaterial({
-      uniforms: {
-        time: { value: 0 },
-        pulseFrequency: { value: config.pulseFrequency || 2.0 }
-      },
-      vertexShader: `
-        uniform float time;
-        uniform float pulseFrequency;
-        attribute float size;
-        attribute vec3 color;
-        varying vec3 vColor;
-
-        void main() {
-          vColor = color;
-          vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
-
-          // Pulsing effect with configurable frequency
-          // When pulseFrequency = 0, pulse = 1.0 (no pulsing)
-          float pulse = 1.0 + sin(time * pulseFrequency) * 0.2;
-          gl_PointSize = size * pulse * (300.0 / -mvPosition.z);
-          gl_Position = projectionMatrix * mvPosition;
-        }
-      `,
-      fragmentShader: `
-        varying vec3 vColor;
-
-        void main() {
-          vec2 center = gl_PointCoord - vec2(0.5);
-          float dist = length(center);
-
-          // Sharp core with glow
-          float core = 1.0 - smoothstep(0.0, 0.2, dist);
-          float glow = smoothstep(0.5, 0.0, dist);
-          float alpha = core + glow * 0.5;
-
-          gl_FragColor = vec4(vColor * 1.3, alpha);
-        }
-      `,
-      transparent: true,
-      depthWrite: false,
-      blending: THREE.AdditiveBlending
-    });
-
-    this.markerPoints = new THREE.Points(geometry, this.markerMaterial);
-    this.markerPoints.name = 'systemMarkers';
-
-    // Apply the same tilt as galaxy particles (-36 degrees on X-axis)
-    // This ensures markers rotate with the galaxy
-    this.markerPoints.rotation.x = -Math.PI / 5;
-
-    this.markerGroup.add(this.markerPoints);
-
-    console.log(`[ThreeSceneManager] Created ${positions.length} marker points`);
-  }
-
-  /**
    * Generate random markers for the active galaxy layer
    * Adds procedurally positioned markers based on galaxy structure
    */
   public generateMarkersForActiveLayer(): void {
-    console.log('═══════════════════════════════════════');
-    console.log('[ThreeSceneManager] generateMarkersForActiveLayer() called');
-
-    try {
-      const galaxyStore = useGalaxyStore.getState();
-      const { activeLayerId, markers, layers } = galaxyStore;
-
-      console.log('[ThreeSceneManager] Active layer ID:', activeLayerId, 'Marker count requested:', markers.count);
-      console.log('[ThreeSceneManager] Galaxy layers:', this.galaxyLayers);
-
-      // Verify galaxy layers are initialized
-      const activeGalaxy = this.galaxyLayers[activeLayerId];
-      if (!activeGalaxy) {
-        console.error('[ThreeSceneManager] ❌ Cannot generate markers - galaxy layers not initialized');
-        console.error('[ThreeSceneManager] Available galaxy layers:', Object.keys(this.galaxyLayers));
-        return;
-      }
-
-      console.log('[ThreeSceneManager] ✓ Active galaxy found:', activeGalaxy);
-
-      // Get the procedural galaxy from system store (has the original parameters!)
-      const store = useSystemStore.getState();
-      const proceduralGalaxy = store.currentGalaxy;
-
-      if (!proceduralGalaxy) {
-        console.error('[ThreeSceneManager] ❌ No procedural galaxy available in system store');
-        return;
-      }
-
-      console.log('[ThreeSceneManager] Using procedural galaxy:', proceduralGalaxy.name);
-      console.log('[ThreeSceneManager] Procedural galaxy type:', proceduralGalaxy.type);
-
-      // Use the ACTUAL procedural parameters from the galaxy, not reconstructed from visual config
-      const galaxyType = proceduralGalaxy.type; // Already capitalized: 'Spiral' | 'Elliptical' | 'Irregular'
-      const params: any = {};
-
-      if (galaxyType === 'Spiral' && proceduralGalaxy.spiralParams) {
-        params.spiralParams = proceduralGalaxy.spiralParams;
-        console.log('[ThreeSceneManager] Using original spiral params:', params.spiralParams);
-      } else if (galaxyType === 'Elliptical' && proceduralGalaxy.ellipticalParams) {
-        params.ellipticalParams = proceduralGalaxy.ellipticalParams;
-        console.log('[ThreeSceneManager] Using original elliptical params:', params.ellipticalParams);
-      } else if (galaxyType === 'Irregular' && proceduralGalaxy.irregularParams) {
-        params.irregularParams = proceduralGalaxy.irregularParams;
-        console.log('[ThreeSceneManager] Using original irregular params:', params.irregularParams);
-      }
-
-      // Create a new RNG for this generation
-      const seed = Math.floor(Math.random() * 1000000);
-      const rng = new SeededRandom(seed);
-      console.log('[ThreeSceneManager] Using seed:', seed);
-
-      console.log('[ThreeSceneManager] Generated params:', params);
-      console.log('[ThreeSceneManager] Generating', markers.count, 'markers using VISUAL spiral algorithm');
-
-      // Generate marker positions using the SAME algorithm as GalaxyParticleSystem
-      // This ensures markers match the visual spiral pattern on screen
-      const systemPlacements: any[] = [];
-      const activeLayer = layers[activeLayerId];
-      const visualConfig = activeLayer.config;
-
-      for (let i = 0; i < markers.count; i++) {
-        let position: { x: number; y: number; z: number };
-
-        if (galaxyType === 'Spiral') {
-          // Use VISUAL spiral algorithm (matches GalaxyParticleSystem.generateSpiralParticle)
-          const size = visualConfig.size || 55;
-          const armCount = visualConfig.armCount || 3;
-          const spiralTightness = visualConfig.spiralTightness || 0.6;
-          const diskThickness = visualConfig.diskThickness || 0.1;
-
-          // Radius with concentration toward center (power of 3 for better distribution)
-          let radius = Math.pow(rng.random(), 3) * size;
-
-          // Normalized radius for thickness calculation (0.0 at center, 1.0 at edge)
-          const normalizedRadius = radius / size;
-
-          // Determine which arm
-          const armIndex = Math.floor(rng.random() * armCount);
-          const armAngle = (armIndex / armCount) * Math.PI * 2;
-
-          // Logarithmic spiral (SAME as visual particles)
-          const spiralOffset = Math.log(radius / 5 + 1) * spiralTightness * 10;
-          const baseAngle = armAngle + spiralOffset;
-
-          // Scatter for organic look
-          const armWidth = 1.2; // Match visual
-          const scatter = (rng.random() - 0.5) * armWidth;
-
-          // Noise for clustering
-          const noise = Math.sin(baseAngle * 4) * Math.cos(radius * 0.2) * 2;
-          const angle = baseAngle + scatter + noise * 0.2;
-
-          // Convert to cartesian
-          const x = radius * Math.cos(angle);
-          const z = radius * Math.sin(angle);
-
-          // Y position - flattened disk, thinner at edges (EXACT match to visual)
-          const thickness = Math.pow(1 - normalizedRadius, 1.5) * diskThickness * size;
-          const y = (rng.random() - 0.5) * thickness;
-
-          position = { x, y, z };
-        } else if (galaxyType === 'Elliptical') {
-          // Simple elliptical distribution for now
-          const theta = rng.random() * Math.PI * 2;
-          const phi = rng.random() * Math.PI;
-          const radiusRoll = Math.pow(rng.random(), 1.5);
-          const size = visualConfig.size || 55;
-
-          position = {
-            x: Math.sin(phi) * Math.cos(theta) * size * radiusRoll,
-            y: Math.cos(phi) * size * 0.8 * radiusRoll,
-            z: Math.sin(phi) * Math.sin(theta) * size * radiusRoll
-          };
-        } else {
-          // Irregular - simple scattered distribution
-          const size = visualConfig.size || 55;
-          const theta = rng.random() * Math.PI * 2;
-          const radius = Math.pow(rng.random(), 2) * size;
-
-          position = {
-            x: Math.cos(theta) * radius,
-            y: (rng.random() - 0.5) * size * 0.5,
-            z: Math.sin(theta) * radius
-          };
-        }
-
-        // Generate a star system for this position
-        const systemSeed = Math.floor(rng.random() * 1000000);
-        const system = generateSystem(systemSeed);
-
-        systemPlacements.push({
-          system,
-          position,
-          region: 'disk' // Simplified
-        });
-      }
-
-      console.log('[ThreeSceneManager] Generated', systemPlacements.length, 'systems with visual-matched positions');
-
-      if (systemPlacements.length === 0) {
-        console.warn('[ThreeSceneManager] ⚠️ No systems generated');
-        return;
-      }
-
-      // Convert to SystemMarker objects with actual star system data
-      // Positions are ALREADY in visual scene coordinates (generated using visual algorithm)
-      // No scaling needed!
-      console.log('[ThreeSceneManager] Creating markers from visual positions (no scaling needed)');
-
-      const markerColor = new THREE.Color(markers.color || '#fff3b3');
-      const systemMarkers = systemPlacements.map(placement => ({
-        position: new THREE.Vector3(
-          placement.position.x,
-          placement.position.y,
-          placement.position.z
-        ),
-        color: markerColor,
-        size: markers.size || 5.0,
-        data: placement.system // Actual star system data
-      }));
-
-      // Add markers to galaxy layer (replaces existing markers)
-      console.log('[ThreeSceneManager] Adding markers to galaxy layer...');
-      activeGalaxy.addSystemMarkers(systemMarkers);
-
-      // Add the generated systems to the galaxy's persistent systems array
-      // This ensures the systems persist when you visit them and make edits
-      // Reuse 'proceduralGalaxy' from above (already declared at line 1491)
-      if (proceduralGalaxy) {
-        // Store the original system count before adding custom systems (for clearing later)
-        if (!proceduralGalaxy.originalSystemCount) {
-          proceduralGalaxy.originalSystemCount = proceduralGalaxy.systems.length;
-        }
-
-        // Add new system placements to the galaxy
-        proceduralGalaxy.systems.push(...systemPlacements);
-        proceduralGalaxy.systemCount = proceduralGalaxy.systems.length;
-
-        console.log(`[ThreeSceneManager] Added ${systemPlacements.length} systems to galaxy (original: ${proceduralGalaxy.originalSystemCount}, total: ${proceduralGalaxy.systemCount})`);
-      }
-
-      // Mark that custom markers have been set (prevent auto-regeneration on galaxy return)
-      this.customMarkersSet = true;
-
-      console.log(`[ThreeSceneManager] ✅ Generated ${systemMarkers.length} star systems with markers for galaxy layer`);
-      console.log('═══════════════════════════════════════');
-    } catch (error) {
-      console.error('[ThreeSceneManager] ❌ Error generating markers:', error);
-      console.error('[ThreeSceneManager] Stack trace:', (error as Error).stack);
-      console.log('═══════════════════════════════════════');
-    }
+    this.markerManager.generateMarkersForActiveLayer();
   }
 
   /**
    * Clear all galaxy layer markers
    */
   public clearMarkers(): void {
-    console.log('[ThreeSceneManager] clearMarkers() called');
-
-    // Clear markers from galaxy layer
-    if (this.galaxyLayers[0]) {
-      this.galaxyLayers[0].addSystemMarkers([]); // Pass empty array to clear
-      this.customMarkersSet = false; // Reset flag - allow auto-generation on next galaxy render
-      console.log('[ThreeSceneManager] Galaxy layer markers cleared');
-    } else {
-      console.warn('[ThreeSceneManager] No galaxy layer to clear markers from');
-    }
-
-    // Remove custom systems from the galaxy (revert to original system count)
-    const store = useSystemStore.getState();
-    const currentGalaxy = store.currentGalaxy;
-
-    if (currentGalaxy && currentGalaxy.originalSystemCount !== undefined) {
-      const removedCount = currentGalaxy.systems.length - currentGalaxy.originalSystemCount;
-      currentGalaxy.systems = currentGalaxy.systems.slice(0, currentGalaxy.originalSystemCount);
-      currentGalaxy.systemCount = currentGalaxy.systems.length;
-
-      console.log(`[ThreeSceneManager] Removed ${removedCount} custom systems, back to ${currentGalaxy.systemCount} original systems`);
-    }
+    this.markerManager.clearMarkers();
   }
 
   /**
    * Toggle galaxy layer marker visibility
    */
   public toggleMarkersVisibility(): void {
-    console.log('[ThreeSceneManager] toggleMarkersVisibility() called');
-
-    if (this.galaxyLayers[0]) {
-      const galaxyGroup = this.galaxyLayers[0].getGroup();
-      const markerPoints = galaxyGroup.getObjectByName('systemMarkers');
-
-      if (markerPoints) {
-        markerPoints.visible = !markerPoints.visible;
-        console.log('[ThreeSceneManager] Galaxy layer markers visibility toggled to:', markerPoints.visible);
-      } else {
-        console.warn('[ThreeSceneManager] No galaxy layer markers found to toggle');
-      }
-    } else {
-      console.warn('[ThreeSceneManager] No galaxy layer to toggle markers on');
-    }
-  }
-
-  /**
-   * Dispose independent marker system
-   * Called during cleanup
-   */
-  private disposeMarkers(): void {
-    // Unsubscribe from store
-    if (this.markerStoreUnsubscribe) {
-      this.markerStoreUnsubscribe();
-      this.markerStoreUnsubscribe = null;
-    }
-
-    // Clean up marker Points
-    if (this.markerPoints) {
-      this.markerGroup.remove(this.markerPoints);
-      this.markerPoints.geometry.dispose();
-      if (this.markerMaterial) {
-        this.markerMaterial.dispose();
-      }
-      this.markerPoints = null;
-      this.markerMaterial = null;
-    }
-
-    // Remove marker group from scene
-    this.scene.remove(this.markerGroup);
-
-    console.log('[ThreeSceneManager] Independent marker system disposed');
+    this.markerManager.toggleMarkersVisibility();
   }
 
   /**
@@ -2019,7 +1569,7 @@ export class ThreeSceneManager {
     this.disposeGalaxyLayers();
 
     // Dispose independent marker system
-    this.disposeMarkers();
+    this.markerManager.dispose();
 
     // Clear scene
     this.clearSystemObjects();

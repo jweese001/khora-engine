@@ -2,11 +2,13 @@
 
 **Interactive Procedural Star System Generator**
 
-Version: **Phase 1.0 (Genesis Engine)** ✅
-Status: **Ready for Acceptance Testing**
-Date: October 31, 2025
+Version: **Phase A Stabilization (post-Phase-1 branch)**
+Status: **Not currently acceptance-ready on this branch**
+Date: May 13, 2026
 
 Built with React + TypeScript + Three.js + Zustand + Vite
+
+> **Current branch note (2026-05-13):** This branch is in Phase A stabilization. Historical Phase 1 completion details are preserved below as milestone context, but they do not mean the current branch is acceptance-test ready.
 
 ---
 
@@ -51,6 +53,24 @@ window.__KHORA_STORE__.getState().generateSystem(42);     // K-type orange dwarf
 ```
 
 ---
+
+
+## 🏷️ Stability Status (Phase A)
+
+**Stabilized (Core):**
+- ✅ Single star system generation (deterministic)
+- ✅ LOD system (3-level optimization, 60fps)
+- ✅ Procedural shaders (star, planets, moons)
+- ✅ IDE inspection (scene tree, data, shaders)
+
+**Experimental (Sandbox):**
+- ⚠️ Galaxy sandbox generation and rendering
+- ⚠️ System marker workflows
+- ⚠️ Orbit customization (Phase B)
+
+> **Phase A Focus:** Stabilizing core system generation. Galaxy features are functional but not part of the stabilization baseline.
+>
+> **Current branch note (post-Phase-A smoke follow-ups):** The primary galaxy inspector/marker loop has now been manually smoke-tested on this branch, including galaxy render, marker generation, marker visibility toggle, marker click into system view, return to galaxy view, and follow-up fixes for marker distribution, core controls, pulse-speed behavior, and non-structural control stability. The galaxy sandbox should still be treated as experimental, but these core interaction paths are in a better verified state than the broader sandbox surface.
 
 ## 📚 Documentation Structure
 
@@ -99,13 +119,13 @@ Location: `/Users/kraken/Documents/khora/`
 
 ---
 
-## 🎯 Phase 1 Status
+## 🎯 Historical Phase 1 Status
 
-**Phase 1 - Genesis Engine: COMPLETE** ✅
+**Phase 1 - Genesis Engine: COMPLETE** ✅ *(historical milestone context)*
 
 **Timeline:** 12 weeks (completed on schedule)
 **Milestones Complete:** 6 / 6
-**Overall Progress:** 100% (ready for acceptance testing)
+**Overall Progress:** 100% at Phase 1 release time
 
 ### Completed Milestones
 
@@ -116,7 +136,7 @@ Location: `/Users/kraken/Documents/khora/`
 - ✅ **M5:** Procedural Shaders (Weeks 8-9) - Planet shaders, star bloom
 - ✅ **M6:** IDE Integration (Weeks 10-11) - Scene tree, data inspector, shader viewer
 
-### Acceptance Testing
+### Historical Acceptance Testing Record
 
 **Verified Features:** 15/20 criteria automatically verified
 **Pending Tests:** 5 manual tests require user execution
@@ -135,7 +155,7 @@ See `PHASE-1-ACCEPTANCE-TESTS.md` for complete test procedures.
 ## 🌟 Features
 
 ### ✨ Procedural Generation
-- **Deterministic**: Same seed always produces identical system
+- **Deterministic (canonical output)**: Same seed produces identical normalized `generateSystem(seed)` output within the same codebase/version
 - **Realistic Astrophysics**: Proper orbital distances, habitable zones, planet types
 - **Stellar Diversity**: 7 spectral types (O, B, A, F, G, K, M) with accurate distributions
 - **Complete Hierarchies**: Stars → Planets → Moons with realistic compositions
@@ -333,7 +353,7 @@ store.getState().generateSystem(12345);  // Specific seed
 
 ### Key Principles
 
-1. **Deterministic Generation**: Same seed = identical system (use SeededRandom, never Math.random())
+1. **Deterministic Generation**: Same seed = identical canonical system data (use SeededRandom, never Math.random(); `generatedAt` is metadata and excluded from canonical determinism checks)
 2. **Performance First**: 60fps non-negotiable (LOD required)
 3. **Real Physics**: No placeholder data (habitable zones, orbital mechanics)
 4. **LOD Required**: All celestial bodies use 3-level LOD
@@ -369,6 +389,33 @@ See `CLAUDE.md` for detailed development guide.
 
 ## 🧪 Testing
 
+### Verification Harness
+
+For the minimal Phase A verification baseline, run:
+
+```bash
+npm run verify
+```
+
+This runs:
+- `npm run build`
+- `npm run validate-physics`
+- `npm run check:determinism`
+
+For exact expectations and the small manual smoke checklist, see `docs/verification.md`.
+
+### Determinism Contract
+
+Khora's minimal determinism contract for this branch is:
+- **Canonical deterministic scope:** normalized `generateSystem(seed)` output
+- **Excluded metadata:** top-level `generatedAt`
+- **Not part of this contract:** Zustand/store state, scene/camera/selection state, and rendering/presentation-only behavior
+
+Verify it with:
+```bash
+npm run check:determinism
+```
+
 ### Acceptance Testing
 
 Run manual acceptance tests from `PHASE-1-ACCEPTANCE-TESTS.md`:
@@ -390,12 +437,11 @@ npm run validate-physics
 ```
 
 **Determinism Test:**
-```javascript
-// In browser console
-const s1 = JSON.stringify(store.getState().generateSystem(12345));
-const s2 = JSON.stringify(store.getState().generateSystem(12345));
-console.log(s1 === s2);  // Should be true
+```bash
+npm run check:determinism
 ```
+
+This compares normalized `generateSystem(seed)` output for fixed seeds and excludes top-level `generatedAt` from equality.
 
 ### Build Verification
 
@@ -403,7 +449,7 @@ console.log(s1 === s2);  // Should be true
 # TypeScript compilation
 npm run build
 
-# Expected: No errors, ~793KB bundle
+# Expected: Build completes successfully. Bundle size may vary by branch.
 ```
 
 ### Known Test Seeds
@@ -570,9 +616,9 @@ This is a personal project, but feedback is welcome!
 
 ---
 
-## 🎉 Phase 1 Complete!
+## 🎉 Historical Phase 1 Completion
 
-**Khora Engine - Genesis** is feature-complete and ready for acceptance testing.
+**Khora Engine - Genesis** reached feature-complete, acceptance-test-ready status at the Phase 1 milestone.
 
 All 6 milestones delivered:
 - ✅ Foundation
@@ -592,4 +638,4 @@ All 6 milestones delivered:
 
 *Phase 1 Target: 12 weeks ✅*
 *Completed: October 31, 2025*
-*Status: Ready for Acceptance Testing*
+*Historical milestone status: Ready for Acceptance Testing*

@@ -38,7 +38,7 @@ export function ModeCard({
         ...styles.card,
         ...(isHovered && !disabled ? styles.cardHover : {}),
         ...(disabled ? styles.cardDisabled : {}),
-        borderColor: isHovered && !disabled ? accentColor : 'var(--border-light)'
+        border: `2px solid ${isHovered && !disabled ? accentColor : 'var(--border-light)'}`
       }}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
@@ -49,7 +49,7 @@ export function ModeCard({
         style={{
           ...styles.iconContainer,
           backgroundColor: isHovered && !disabled ? accentColor : 'transparent',
-          borderColor: accentColor
+          border: `2px solid ${accentColor}`
         }}
       >
         <span

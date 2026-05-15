@@ -174,7 +174,7 @@ export class GalaxyRenderer {
 
     // Create invisible raycasting objects for click detection
     // These match the marker positions but are separate for raycasting
-    markers.forEach((marker, index) => {
+    markers.forEach((marker) => {
       const raycastObject = new THREE.Mesh(
         new THREE.SphereGeometry(marker.size || 4.0, 8, 8),
         new THREE.MeshBasicMaterial({ visible: false })

@@ -157,6 +157,12 @@ interface SystemStore {
   focusSystem: (index: number | null) => void;
 
   /**
+   * Set the current system directly (for custom markers not in galaxy)
+   * @param system - StarSystem to set as current (or null to clear)
+   */
+  setCurrentSystem: (system: StarSystem | null) => void;
+
+  /**
    * Update galaxy particle system configuration
    * @param config - Partial galaxy config to merge with current settings
    */
@@ -469,6 +475,15 @@ export const useSystemStore = create<SystemStore>((set, get) => ({
         selectedObject: null
       });
     }
+  },
+
+  setCurrentSystem: (system: StarSystem | null) => {
+    if (system) {
+      console.log(`[Store] Setting current system: ${system.name}`);
+    } else {
+      console.log('[Store] Clearing current system');
+    }
+    set({ currentSystem: system });
   },
 
   updateGalaxyConfig: (config: Partial<GalaxyConfig>) => {

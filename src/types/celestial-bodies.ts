@@ -216,7 +216,7 @@ export interface StarSystem {
   name: string; // Derived from star name
   seed: number; // For deterministic regeneration
   star: Star;
-  generatedAt: Date;
+  generatedAt: Date; // Metadata only; excluded from canonical determinism checks
 }
 
 // ============================================================================

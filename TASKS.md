@@ -1,11 +1,12 @@
-# Khora Engine - Phase 1 Task Tracking
-*12-Week Development Timeline*
+# Khora Engine - Task Tracking
+*Historical milestones + current stabilization priorities*
 
-**Project:** Khora Engine - Genesis Engine (Phase 1)
-**Timeline:** 12 weeks ✅ COMPLETE
-**Status:** ✅ **RELEASED v1.0.0** - Production Ready
-**Release Date:** November 2, 2025
-**Last Updated:** November 2, 2025 - Phase 1 Released!
+**Project:** Khora Engine
+**Historical Milestone:** Phase 1 Genesis Engine completed
+**Current Reality:** Active post-Phase-1 integration and stabilization work
+**Current Priority Order:** A) Stabilization → B) Star System Customization + Orbit Systems → C) Galaxy Sandbox
+**Status:** ⚠️ **NOT currently production-ready on this branch**
+**Last Updated:** May 13, 2026 - Phase A stabilization planning added
 
 **Working Copy:** This file is synchronized from Obsidian vault
 **Source of Truth:** This file (code repo) - sync back to Obsidian weekly
@@ -41,9 +42,75 @@
 
 ---
 
-## 🎉 Phase 1 Completion Summary
+## Current Program: Phase A Stabilization
 
-**Status:** ✅ **RELEASED v1.0.0 - PRODUCTION READY**
+**Intent:** Restore repo trust and make Khora safe for measured, verifiable feature delivery with `pi-dev-team`.
+
+**Primary reference docs:**
+- `docs/specs/2026-05-13-phase-a-stabilization-plan.md`
+- `docs/specs/2026-05-13-phase-a-execution-tickets.md`
+- `docs/specs/2026-05-13-orbit-systems-design-spec.md`
+
+### Current Priorities
+1. **A — Stabilization**
+   - restore build health
+   - align docs/scripts with reality
+   - define determinism boundaries
+   - add a minimal verification harness
+   - contain `ThreeSceneManager.tsx` complexity
+2. **B — Star System Depth**
+   - star system customization
+   - planetary orbit systems
+   - shader assignment/presentation policy
+3. **C — Galaxy Sandbox**
+   - keep compatible and documented
+   - treat as secondary/experimental until A is healthy and B is underway
+
+### Phase A Ticket Queue
+- [x] **A-01 (P0):** Build Repair — Scene/Store Contract Mismatches
+- [x] **A-02 (P0):** Build Repair — Galaxy Type Contract
+- [x] **A-03 (P0):** Build Repair — Galaxy Rendering Typing and Disposal
+- [x] **A-04 (P1):** Docs/Script Alignment
+- [x] **A-05 (P1):** Determinism Contract and Check
+- [x] **A-06 (P1):** Verification Harness Setup
+- [x] **A-07 (P2):** Scene Containment Pass I
+- [x] **A-08 (P2):** Experimental Boundary Labeling
+
+### Execution Model
+For non-trivial work, use a measured pipeline:
+- `scout` → inspect scope and risks
+- `architect` → define minimal approach and verification
+- `impl-worker` → implement within bounds
+- `test-engineer` → gather evidence and report verification
+
+**Definition of done for Phase A:**
+- `npm run build` passes
+- core docs/scripts are honest and aligned
+- determinism claims are explicit and testable
+- small verification commands exist for future team execution
+
+### Phase A Progress Notes
+- **A-01 complete:** added `setCurrentSystem` store contract for custom-marker system selection flow
+- **A-02 complete:** formalized `Galaxy.originalSystemCount` to match runtime galaxy marker workflows
+- **A-03 complete:** resolved strict TypeScript/type-narrowing issues across galaxy rendering code; repo build is green again
+- **A-04 complete:** aligned README/package scripts/current-branch messaging; verified `npm run validate-physics` exists and passes
+- **A-05 complete:** defined canonical determinism boundary around normalized `generateSystem(seed)` output, documented `generatedAt` as excluded metadata, and added `npm run check:determinism`
+- **A-06 complete:** added a minimal verification harness surface via `npm run verify` plus `docs/verification.md`, and linked README verification guidance to the same baseline
+- **A-07 complete:** extracted the marker system into `src/components/Canvas/MarkerSystemManager.ts` and converted `ThreeSceneManager` marker APIs into thin delegators while preserving existing marker behavior and UI wiring
+- **A-08 complete:** added a concise README stability-status label that separates stabilized core system work from experimental galaxy sandbox and marker workflows without changing runtime behavior
+- **Post-Phase-A smoke follow-ups complete:** manual browser smoke testing exposed and fixed several galaxy/marker UX regressions, including marker distribution using the active visual layer shape, core exclusion/falloff control effectiveness, marker pulse-speed wiring/default tuning, stable galaxy particles across non-structural control edits, and prevention of galaxy reshuffling when editing marker-only controls
++
++### Current Verified Reality
++- `npm run build` passes
++- `npm run verify` passes
++- manual smoke test covered galaxy render, marker generation, marker visibility toggle, marker click into system, and return-to-galaxy flow
++- current caveat: galaxy sandbox remains experimental even though the primary marker and inspector flows are now manually smoke-validated on this branch
+
+---
+
+## 🎉 Historical Phase 1 Completion Summary
+
+**Status:** ✅ **Historical release milestone: v1.0.0 - production-ready at release time**
 
 **Git Tag:** v1.0.0 (November 2, 2025)
 **Final Commit:** b59ee9b - Geometry overlap fixes merged to main
@@ -2090,6 +2157,129 @@ this.galaxyLayers.forEach((galaxy, index) => {
 
 ---
 
-**Last Updated:** November 16, 2025 - Session 6 Complete
-**Next Session:** UI cleanup and polish
+### Session 7: Galaxy Controls UI Polish (November 17, 2025) ✅
+
+**Status:** ✅ **COMPLETE** - Color Picker Bug Fixes and UI Simplification
+
+**Goal:** Fix persistent white border/outline artifact on galaxy color swatches.
+
+**Problem Statement:**
+- White border appeared on color swatches in default state
+- Border disappeared on hover, reappeared on mouse rolloff (mouseLeave)
+- Multiple attempts with outline/border/focus prevention didn't work
+- Issue traced to nested div structure and hover state transitions
+
+**Implementation:**
+
+**Phase 1: Click-Outside Detection** ✅
+- Added useRef hook for color picker container reference
+- Implemented document-level mousedown listener
+- Color picker now closes when clicking anywhere outside picker
+- Fixed React import issue (changed from React.useRef to direct useRef import)
+
+**Phase 2: Layer Switching Synchronization** ✅
+- Added useEffect hook watching defaultColor prop changes
+- Color swatches now update when switching between galaxy layers
+- Eliminates stale color display
+- All controls (not just colors) now sync properly
+
+**Phase 3: Horizontal Layout** ✅
+- Wrapped three color controls (Core, Mid, Edge) in flex container
+- Changed from vertical stack to side-by-side horizontal layout
+- Labels positioned above each color swatch
+- Better space utilization in control panel
+
+**Phase 4: Color Control Structure Simplification** ✅
+- **Root Cause:** Nested div structure (outer padding + inner color div) created gaps
+- **Root Cause:** Hover state transitions on border color created white line artifact
+- **Solution:** Simplified to single div with thick border frame
+  - Removed inner div completely
+  - Changed from padding-based to border-based frame (6px solid #3e3e42)
+  - Applied color directly as backgroundColor on main div
+  - Eliminated all hover effects and state changes
+  - Removed all CSS transitions
+
+**Phase 5: Final Simplification** ✅
+- Removed isHovered state completely (no longer needed)
+- Removed onMouseEnter/onMouseLeave handlers
+- Added onMouseDown preventDefault to block browser defaults
+- Added overflow: hidden to prevent sub-pixel rendering gaps
+- Added WebkitTapHighlightColor: transparent
+- Border now static grey #3e3e42 (never changes)
+
+**Files Modified:**
+- `src/components/IDE/GalaxyControls.tsx`
+  - Updated ColorControl component structure
+  - Removed nested div, simplified to single div
+  - Changed from padding to thick border frame
+  - Eliminated hover state and transitions
+  - Added horizontal layout for color controls
+  - Fixed layer switching synchronization
+  - Added click-outside detection
+
+**Algorithm Changes:**
+```typescript
+// Before: Nested div structure with padding and hover effects
+<div style={outerFrame with padding}>
+  <div style={innerColor}>{color}</div>
+</div>
+
+// After: Single div with border frame, no hover
+<div style={{
+  border: '6px solid #3e3e42',
+  backgroundColor: color,
+  // No transitions, no hover, no state changes
+}} />
+```
+
+**Success Criteria:**
+- ✅ Color picker closes on click-outside
+- ✅ Colors sync when switching layers
+- ✅ Horizontal layout for color controls
+- ✅ No white border on default state
+- ✅ No white border on hover
+- ✅ No white border on rolloff
+- ✅ Static grey border at all times
+- ✅ TypeScript compilation successful
+- ✅ All color picker features working
+
+**Technical Details:**
+
+**White Border Root Cause:**
+- Nested div structure allowed gaps between elements
+- CSS transitions on border color created visual artifacts
+- Hover state changes caused white line to appear/disappear
+- Browser sub-pixel rendering created visible gaps
+
+**Solution Architecture:**
+- Single div = no gaps between nested elements
+- Thick border = frame effect without padding
+- No hover effects = no state-related artifacts
+- No transitions = no animation artifacts
+- Direct backgroundColor = color fills entire div
+- overflow: hidden = prevents sub-pixel rendering issues
+
+**Performance:**
+- No impact on 60fps target
+- Simplified DOM structure (fewer elements)
+- Fewer event listeners (removed hover handlers)
+- No transition calculations
+
+**Git Commit:**
+- Commit: 2f9b35d
+- Message: "🐛 FIX: Eliminate white border artifact on galaxy color swatches"
+- Files: 1 changed, 17 insertions, 15 deletions
+
+**Next Session Priorities:**
+1. **Multi-layer customization** - Per-layer marker controls (if needed)
+2. **Marker presets** - Save/load marker configurations
+3. **Additional UI polish** - Improve control panel layout, spacing, grouping
+4. **Performance testing** - Verify 60fps with 500+ markers
+
+**Goal:** Continue UI refinement and polish before additional feature work.
+
+---
+
+**Last Updated:** November 17, 2025 - Session 7 Complete
+**Next Session:** Continued UI polish or feature work
 

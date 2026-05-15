@@ -13,7 +13,7 @@
 
 import { create } from 'zustand';
 import * as THREE from 'three';
-import type { GalaxyConfig, GalaxyType } from '../rendering/GalaxyParticleSystem';
+import type { GalaxyConfig } from '../rendering/GalaxyParticleSystem';
 import { SeededRandom } from '../utils/random';
 import { generateGalaxyPalette } from '../utils/color-palette';
 
@@ -68,6 +68,7 @@ export interface GalaxyPreset {
  */
 const createDefaultGalaxyConfig = (): GalaxyConfig => ({
   type: 'spiral',
+  seed: 0,
   particleCount: 5000,
   armCount: 3,
   spiralTightness: 0.6,
@@ -114,7 +115,7 @@ const createDefaultMarkerConfig = (): MarkerConfig => ({
   count: 50,
   size: 4.0,
   color: '#fff3b3',  // Warm yellow-white
-  pulseFrequency: 2.0,
+  pulseFrequency: 1.0,
   distribution: 'uniform',
   clickable: true,
 });
@@ -395,7 +396,6 @@ export const useGalaxyStore = create<GalaxyStoreState>((set, get) => ({
     const galaxyType = galaxy.type; // 'Spiral', 'Elliptical', or 'Irregular'
 
     // Create RNG from galaxy seed for consistent color generation
-    const rng = new SeededRandom(galaxy.seed);
 
     set((state) => {
       const updatedLayers = state.layers.map((layer) => {
@@ -477,6 +477,7 @@ export const useGalaxyStore = create<GalaxyStoreState>((set, get) => ({
           visible,
           config: {
             ...layer.config,
+            seed: galaxy.seed + layer.id * 1000,
             type: layerType,
             particleCount,
             coreColor,
@@ -642,90 +643,115 @@ export function generateMarkerPositions(
   const galaxyType = galaxyConfig.type;
   const galaxySize = galaxyConfig.size || 55;
   const diskThickness = galaxyConfig.diskThickness || 4.0;
+  const coreExclusionRadius = galaxyConfig.coreExclusionRadius || 0.0;
+  const minMarkerSpacing = Math.max(0.75, (galaxySize / Math.sqrt(Math.max(count, 1))) * 0.35);
+  const maxPlacementAttempts = 24;
+
+  const sampleRadiusOutsideExclusion = (maxRadius: number, exponent: number, exclusionMin: number): number => {
+    if (exclusionMin <= 0) {
+      return Math.pow(Math.random(), exponent) * maxRadius;
+    }
+
+    const clampedExclusion = Math.min(exclusionMin, maxRadius * 0.9);
+    const availableRange = maxRadius - clampedExclusion;
+    return clampedExclusion + Math.pow(Math.random(), exponent) * availableRange;
+  };
+
+  const hasEnoughSpacing = (candidate: THREE.Vector3): boolean => {
+    return positions.every((existing) => existing.distanceTo(candidate) >= minMarkerSpacing);
+  };
 
   for (let i = 0; i < count; i++) {
-    let position: THREE.Vector3;
+    let position = new THREE.Vector3();
+    let placed = false;
 
-    if (galaxyType === 'spiral' || galaxyType === 'barred') {
-      // SPIRAL: Follow spiral arm structure (same algorithm as particle generation)
-      const armCount = galaxyConfig.armCount || 3;
-      const spiralTightness = galaxyConfig.spiralTightness || 0.6;
+    for (let attempt = 0; attempt < maxPlacementAttempts; attempt++) {
+      let candidate: THREE.Vector3;
 
-      // Radius with concentration toward center (less extreme than particles)
-      const radius = Math.pow(Math.random(), 5) * galaxySize * 0.8;
+      if (galaxyType === 'spiral' || galaxyType === 'barred') {
+        // SPIRAL/BARRED: follow arms, but distribute markers more evenly across the radius
+        const armCount = galaxyConfig.armCount || 3;
+        const spiralTightness = galaxyConfig.spiralTightness || 0.6;
+        const maxRadius = galaxySize * 0.85;
+        const exclusionMin = galaxySize * coreExclusionRadius;
+        const radius = sampleRadiusOutsideExclusion(maxRadius, 1.6, exclusionMin);
 
-      // Choose which arm to place marker on
-      const armIndex = Math.floor(Math.random() * armCount);
-      const armAngle = (armIndex / armCount) * Math.PI * 2;
+        const armIndex = Math.floor(Math.random() * armCount);
+        const armAngle = (armIndex / armCount) * Math.PI * 2;
+        const spiralOffset = Math.log(radius / 5 + 1) * spiralTightness * 10;
+        const baseAngle = armAngle + spiralOffset;
 
-      // Logarithmic spiral calculation
-      const spiralOffset = Math.log(radius / 5 + 1) * spiralTightness * 10;
-      const baseAngle = armAngle + spiralOffset;
+        // Slightly wider than before to reduce click-hostile stacking near the core
+        const armWidth = 0.45;
+        const scatter = (Math.random() - 0.5) * armWidth;
+        const noise = Math.sin(baseAngle * 4) * Math.cos(radius * 0.2) * 2;
+        const angle = baseAngle + scatter + noise * 0.08;
 
-      // Small scatter to keep markers on arms but not perfectly aligned
-      const armWidth = 0.3; // Tighter than particles (was 1.2)
-      const scatter = (Math.random() - 0.5) * armWidth;
+        const x = radius * Math.cos(angle);
+        const z = radius * Math.sin(angle);
+        const thickness = Math.pow(1 - Math.min(radius / galaxySize, 1), 1.5) * diskThickness;
+        const y = (Math.random() - 0.5) * thickness;
 
-      // Add slight noise for natural clustering
-      const noise = Math.sin(baseAngle * 4) * Math.cos(radius * 0.2) * 2;
-      const angle = baseAngle + scatter + noise * 0.1;
+        candidate = new THREE.Vector3(x, y, z);
+      } else if (galaxyType === 'ring') {
+        // RING: Empty center with outer ring (using configured bounds)
+        const minR = galaxySize * Math.max(galaxyConfig.ringInnerRadius || 0.4, coreExclusionRadius);
+        const maxR = galaxySize * (galaxyConfig.ringOuterRadius || 0.9);
+        const radius = minR + Math.random() * (maxR - minR);
+        const angle = Math.random() * Math.PI * 2;
 
-      // Convert to cartesian
-      const x = radius * Math.cos(angle);
-      const z = radius * Math.sin(angle);
+        candidate = new THREE.Vector3(
+          radius * Math.cos(angle),
+          (Math.random() - 0.5) * diskThickness * 0.5,
+          radius * Math.sin(angle)
+        );
+      } else if (galaxyType === 'irregular') {
+        // IRREGULAR: chaotic multi-cluster distribution with less center crowding
+        const clusterCount = 3;
+        const clusterIndex = Math.floor(Math.random() * clusterCount);
+        const clusterAngle = (clusterIndex / clusterCount) * Math.PI * 2 + (Math.random() - 0.5) * Math.PI;
+        const minClusterDistance = galaxySize * Math.max(coreExclusionRadius, 0.15);
+        const clusterDistance = minClusterDistance + Math.random() * galaxySize * 0.35;
+        const chaosLevel = (galaxyConfig.irregularChaos || 0.4) * 0.75;
+        const scatter = (Math.random() - 0.5) * galaxySize * chaosLevel;
+        const radius = clusterDistance + scatter;
+        const angle = clusterAngle + (Math.random() - 0.5) * Math.PI;
 
-      // Y position - keep relatively flat
-      const thickness = Math.pow(1 - (radius / galaxySize), 1.5) * diskThickness;
-      const y = (Math.random() - 0.5) * thickness;
+        candidate = new THREE.Vector3(
+          radius * Math.cos(angle),
+          (Math.random() - 0.5) * diskThickness * 2,
+          radius * Math.sin(angle)
+        );
+      } else {
+        // ELLIPTICAL: still center-weighted, but less aggressively than before
+        const maxRadius = galaxySize * 0.7;
+        const exclusionMin = galaxySize * coreExclusionRadius;
+        const radius = sampleRadiusOutsideExclusion(maxRadius, 1.8, exclusionMin);
+        const theta = Math.random() * Math.PI * 2;
+        const phi = Math.acos(2 * Math.random() - 1);
+        const flattenFactor = galaxyConfig.ellipticalFlatten || 0.6;
 
-      position = new THREE.Vector3(x, y, z);
+        candidate = new THREE.Vector3(
+          radius * Math.sin(phi) * Math.cos(theta),
+          radius * Math.sin(phi) * Math.sin(theta) * flattenFactor,
+          radius * Math.cos(phi)
+        );
+      }
 
-    } else if (galaxyType === 'ring') {
-      // RING: Empty center with outer ring (using configured bounds)
-      const minR = galaxySize * (galaxyConfig.ringInnerRadius || 0.4);
-      const maxR = galaxySize * (galaxyConfig.ringOuterRadius || 0.9);
-      const radius = minR + Math.random() * (maxR - minR);
-      const angle = Math.random() * Math.PI * 2;
+      position = candidate;
+      if (hasEnoughSpacing(candidate)) {
+        placed = true;
+        break;
+      }
+    }
 
-      position = new THREE.Vector3(
-        radius * Math.cos(angle),
-        (Math.random() - 0.5) * diskThickness * 0.5,
-        radius * Math.sin(angle)
-      );
-
-    } else if (galaxyType === 'irregular') {
-      // IRREGULAR: Chaotic multi-cluster distribution (using configured chaos level)
-      const clusterCount = 3;
-      const clusterIndex = Math.floor(Math.random() * clusterCount);
-      const clusterAngle = (clusterIndex / clusterCount) * Math.PI * 2 + (Math.random() - 0.5) * Math.PI;
-      const clusterDistance = Math.random() * galaxySize * 0.5;
-
-      // Use configured chaos level (slightly reduced for markers)
-      const chaosLevel = (galaxyConfig.irregularChaos || 0.4) * 0.75;
-      const scatter = (Math.random() - 0.5) * galaxySize * chaosLevel;
-      const radius = clusterDistance + scatter;
-
-      const angle = clusterAngle + (Math.random() - 0.5) * Math.PI;
-
-      const x = radius * Math.cos(angle);
-      const z = radius * Math.sin(angle);
-      const y = (Math.random() - 0.5) * diskThickness * 2;
-
-      position = new THREE.Vector3(x, y, z);
-
-    } else {
-      // ELLIPTICAL: Spherical distribution (using configured flatten factor)
-      const radius = Math.pow(Math.random(), 2.5) * galaxySize * 0.7;
-      const theta = Math.random() * Math.PI * 2;
-      const phi = Math.acos(2 * Math.random() - 1);
-
-      // Use configured flatten factor
-      const flattenFactor = galaxyConfig.ellipticalFlatten || 0.6;
-      position = new THREE.Vector3(
-        radius * Math.sin(phi) * Math.cos(theta),
-        radius * Math.sin(phi) * Math.sin(theta) * flattenFactor,
-        radius * Math.cos(phi)
-      );
+    if (!placed && positions.length > 0) {
+      // Keep a fallback candidate, but avoid exact overlap if retries were exhausted.
+      position = position.clone().add(new THREE.Vector3(
+        (Math.random() - 0.5) * 0.6,
+        (Math.random() - 0.5) * 0.3,
+        (Math.random() - 0.5) * 0.6,
+      ));
     }
 
     positions.push(position);

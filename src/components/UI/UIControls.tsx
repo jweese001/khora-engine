@@ -20,7 +20,7 @@ export function UIControls() {
   const focusSystem = useSystemStore((state) => state.focusSystem);
 
   const [galaxySeedInput, setGalaxySeedInput] = useState('');
-  const [systemCount, setSystemCount] = useState('12');
+  const [systemCount, setSystemCount] = useState('16');
 
   // Show "Back to Galaxy" button when viewing a system that's part of a galaxy
   const showBackButton = currentGalaxy !== null && viewMode === 'system';
@@ -44,7 +44,7 @@ export function UIControls() {
       seed = Math.floor(Math.random() * 1000000);
     }
 
-    const count = parseInt(systemCount, 10) || 12;
+    const count = parseInt(systemCount, 10) || 16;
 
     console.log(`[UIControls] Generating galaxy with seed: ${seed}, ${count} systems`);
     generateGalaxy(seed, count);
@@ -90,14 +90,16 @@ export function UIControls() {
           disabled={isGenerating}
         />
         <input
-          type="number"
+          type="text"
           value={systemCount}
-          onChange={(e) => setSystemCount(e.target.value)}
+          onChange={(e) => {
+            // Only allow numeric input
+            const value = e.target.value.replace(/[^0-9]/g, '');
+            setSystemCount(value);
+          }}
           placeholder="Systems"
           className="hud-input"
           style={styles.smallInput}
-          min="4"
-          max="100"
           disabled={isGenerating}
         />
         <button
@@ -128,7 +130,7 @@ export function UIControls() {
         <button
           onClick={toggleIDE}
           className={`hud-btn-secondary ${ideOpen ? 'active' : ''}`}
-          style={ideOpen ? { ...styles.ideButton, borderColor: 'var(--accent-cyan)', color: 'var(--accent-cyan)' } : styles.ideButton}
+          style={ideOpen ? { ...styles.ideButton, border: '1px solid var(--accent-cyan)', color: 'var(--accent-cyan)' } : styles.ideButton}
         >
           <span className={`mdi ${ideOpen ? 'mdi-code-braces' : 'mdi-code-braces-box'}`} style={styles.buttonIcon}></span>
           IDE
@@ -193,7 +195,7 @@ const styles = {
     fontSize: '12px'
   },
   smallInput: {
-    width: '60px',
+    width: '75px',
     fontSize: '12px'
   },
   buttonIcon: {
