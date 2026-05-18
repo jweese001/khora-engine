@@ -13,6 +13,8 @@ import { useSystemStore } from '../../store/system-store';
 export function UIControls() {
   const ideOpen = useSystemStore((state) => state.ideOpen);
   const toggleIDE = useSystemStore((state) => state.toggleIDE);
+  const controlDrawerOpen = useSystemStore((state) => state.controlDrawerOpen);
+  const toggleControlDrawer = useSystemStore((state) => state.toggleControlDrawer);
   const generateGalaxy = useSystemStore((state) => state.generateGalaxy);
   const isGenerating = useSystemStore((state) => state.isGenerating);
   const currentGalaxy = useSystemStore((state) => state.currentGalaxy);
@@ -58,6 +60,7 @@ export function UIControls() {
       handleGenerateGalaxy();
     }
   };
+
 
   return (
     <div style={styles.container}>
@@ -127,14 +130,25 @@ export function UIControls() {
             Back
           </button>
         )}
+
+        <button
+          onClick={toggleControlDrawer}
+          className={`hud-btn-secondary ${controlDrawerOpen ? 'active' : ''}`}
+          style={controlDrawerOpen ? { ...styles.drawerButton, border: '1px solid var(--accent-cyan)', color: 'var(--accent-cyan)' } : styles.drawerButton}
+        >
+          <span className={`mdi ${controlDrawerOpen ? 'mdi-dock-left' : 'mdi-dock-left'}`} style={styles.buttonIcon}></span>
+          Controls
+        </button>
+
         <button
           onClick={toggleIDE}
           className={`hud-btn-secondary ${ideOpen ? 'active' : ''}`}
-          style={ideOpen ? { ...styles.ideButton, border: '1px solid var(--accent-cyan)', color: 'var(--accent-cyan)' } : styles.ideButton}
+          style={ideOpen ? { ...styles.drawerButton, border: '1px solid var(--accent-cyan)', color: 'var(--accent-cyan)' } : styles.drawerButton}
         >
-          <span className={`mdi ${ideOpen ? 'mdi-code-braces' : 'mdi-code-braces-box'}`} style={styles.buttonIcon}></span>
-          IDE
+          <span className={`mdi ${ideOpen ? 'mdi-dock-right' : 'mdi-dock-right'}`} style={styles.buttonIcon}></span>
+          Inspector
         </button>
+
       </div>
     </div>
   );
@@ -164,7 +178,10 @@ const styles = {
     height: '52px',
     boxSizing: 'border-box' as const,
     backdropFilter: 'blur(10px)',
-    fontSize: '13px'
+    fontSize: '13px',
+    position: 'relative' as const,
+    zIndex: 40,
+    overflow: 'visible' as const,
   },
   leftSection: {
     display: 'flex',
@@ -213,7 +230,9 @@ const styles = {
     display: 'flex',
     justifyContent: 'flex-end',
     alignItems: 'center',
-    gap: '8px'
+    gap: '8px',
+    position: 'relative' as const,
+    overflow: 'visible' as const,
   },
   backButton: {
     display: 'flex',
@@ -221,10 +240,10 @@ const styles = {
     gap: '6px',
     fontSize: '12px'
   },
-  ideButton: {
+  drawerButton: {
     display: 'flex',
     alignItems: 'center',
     gap: '6px',
     fontSize: '12px'
-  }
+  } as React.CSSProperties
 };

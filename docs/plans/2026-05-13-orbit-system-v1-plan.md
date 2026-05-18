@@ -1,7 +1,7 @@
 # Orbit System V1 Implementation Plan
 
 **Date:** 2026-05-13  
-**Status:** Proposed  
+**Status:** In Progress  
 **Priority:** B1  
 **Related spec:** `docs/specs/2026-05-13-orbit-systems-design-spec.md`
 
@@ -68,6 +68,8 @@ This keeps the runtime simple and deterministic while preserving a clean path to
 - spacecraft physics implementation
 - full save/load behavior for simulation time state
 - advanced orbit trails/history rendering
+- moon spin / tilt runtime
+- broader multi-body motion authoring beyond current planet controls
 
 ---
 
@@ -512,6 +514,39 @@ This creates a stable foundation before any user-visible motion changes.
 
 ---
 
+## Deferred Follow-Up After Orbit V1
+
+After orbit features are complete, queue next celestial motion pass for:
+- moon spin / tilt runtime
+- richer inspector exposure for orbit and rotation state
+- broader per-body motion authoring beyond current planet controls
+
+This stays separate from orbit V1 so orbital behavior can be stabilized first.
+
+---
+
+## Current Implementation Status
+
+Implemented on `feature/orbit-system-v1` worktree so far:
+- explicit generated orbit data for planets and moons
+- pure orbit solver and global simulation time store/actions
+- live orbital motion in system view
+- orbit trail generation from orbital elements
+- orbit trail visibility toggle
+- wider simulation-speed controls via presets + logarithmic slider
+- drawer-based UI split with left-side controls and right-side inspector
+- single-scroll accordion behavior for left drawer after layout repair
+- deterministic planet spin + axial tilt runtime driven from absolute simulation time
+- planet motion controls in left drawer Controls stack
+- motion controls repositioned near Orbit controls for better workflow
+- rotation-period input simplified to whole hours with 1-9999 range
+
+Still queued before calling Orbit V1 wrapped:
+- expose orbit data/state more clearly in inspector surfaces
+- run a fresh manual browser pass focused on planet motion feel and control clarity
+
+---
+
 ## Outcome
 
 Completing this plan will give Khora a deterministic orbit foundation that is:
@@ -520,4 +555,4 @@ Completing this plan will give Khora a deterministic orbit foundation that is:
 - suitable for future customization
 - usable later as scaffolding for spacecraft-relative motion
 
-The next step after this plan is direct implementation, beginning with the data/time/solver foundation rather than immediate UI work.
+The next step after this plan is to finish the remaining verification/polish slice, then decide whether to continue with inspector orbit visibility or move into the deferred post-orbit celestial-motion pass.

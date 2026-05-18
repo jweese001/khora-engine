@@ -12,17 +12,34 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
-import type { StarSystem } from '../../types/celestial-bodies';
+import type { Moon, Planet, RotationalElements, StarSystem } from '../../types/celestial-bodies';
 import type { Galaxy, GalaxySystemPlacement } from '../../types/galaxy';
 import type { GalaxyConfig } from '../../rendering/GalaxyParticleSystem';
 import { createStarMesh, createStarLight, calculateSceneUnitsPerSolarRadius } from '../../rendering/StarRenderer';
-import { createTypedOrbitLine } from '../../rendering/OrbitRenderer';
+import { createOrbitLineFromElements, getOrbitLineStyle } from '../../rendering/OrbitRenderer';
 import { CelestialBodyLOD } from '../../rendering/CelestialBodyLOD';
 import { GalaxyRenderer } from '../../rendering/GalaxyRenderer';
 import { GalaxyParticleSystem } from '../../rendering/GalaxyParticleSystem';
 import { useGalaxyStore, type GalaxyLayer } from '../../store/galaxy-store';
 import { useSystemStore } from '../../store/system-store';
 import { MarkerSystemManager } from './MarkerSystemManager';
+import { sampleOrbitPosition } from '../../orbits/orbit-solver';
+
+interface MoonOrbitBinding {
+  moon: Moon;
+  object: THREE.Object3D;
+  minSceneRadius: number;
+  maxSceneRadius: number;
+}
+
+interface PlanetOrbitBinding {
+  planet: Planet;
+  group: THREE.Group;
+  tiltGroup: THREE.Group;
+  planetObject: THREE.Object3D;
+  orbitScale: number;
+  moons: MoonOrbitBinding[];
+}
 
 // ============================================================================
 // ThreeSceneManager Class
@@ -69,6 +86,10 @@ export class ThreeSceneManager {
   // Material tracking (Phase 3: Architect Mode)
   // Maps object ID -> THREE.Material for live uniform updates
   private materialRegistry: Map<string, THREE.Material> = new Map();
+  private objectRegistry: Map<string, THREE.Object3D> = new Map();
+  private orbitingPlanets: PlanetOrbitBinding[] = [];
+  private orbitTrailObjects: THREE.Object3D[] = [];
+  private lastOrbitTrailVisibility: boolean = true;
 
   // Debug mode (toggle with D key)
   private debugMode: number = 0; // 0=normal, 1-7=debug visualizations
@@ -278,6 +299,12 @@ export class ThreeSceneManager {
 
     // Optional: Set target to center of solar system
     controls.target.set(0, 0, 0);
+
+    controls.addEventListener('start', () => {
+      if (this.cameraAnimation?.active) {
+        this.cameraAnimation.active = false;
+      }
+    });
 
     return controls;
   }
@@ -625,6 +652,9 @@ export class ThreeSceneManager {
     // Phase 2.5: Old GalaxyRenderer NO LONGER USED
     // Multi-layer galaxy animation handled separately (see below)
 
+    const systemStore = useSystemStore.getState();
+    systemStore.advanceSimulationTime(deltaTime);
+
     // Update multi-layer galaxy particle systems (Phase 2.5)
     // Only update when in galaxy view mode to prevent rendering when viewing systems
     if (this.currentViewMode === 'galaxy') {
@@ -634,6 +664,9 @@ export class ThreeSceneManager {
         }
       });
     }
+
+    this.updateSystemOrbitalPositions(systemStore.simulationTimeDays);
+    this.updateOrbitTrailVisibility(systemStore.showOrbitTrails);
 
     // Update independent marker system
     this.markerManager.updateFrame(time, this.currentViewMode);
@@ -767,9 +800,136 @@ export class ThreeSceneManager {
     return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
   }
 
+  public focusObjectById(objectId: string): void {
+    const targetObject = this.objectRegistry.get(objectId);
+    if (!targetObject) {
+      console.warn(`[ThreeSceneManager] No focus target found for object: ${objectId}`);
+      return;
+    }
+
+    const worldPosition = new THREE.Vector3();
+    targetObject.getWorldPosition(worldPosition);
+
+    const bounds = new THREE.Box3().setFromObject(targetObject);
+    const size = new THREE.Vector3();
+    const sphere = new THREE.Sphere();
+    bounds.getSize(size);
+    bounds.getBoundingSphere(sphere);
+
+    const radius = Number.isFinite(sphere.radius) && sphere.radius > 0
+      ? sphere.radius
+      : Math.max(size.length() * 0.25, 1.5);
+
+    const direction = this.camera.position.clone().sub(this.controls.target);
+    if (direction.lengthSq() === 0) {
+      direction.set(1, 0.35, 1);
+    }
+    direction.normalize();
+
+    const focusDistance = THREE.MathUtils.clamp(radius * 5, 12, 220);
+    const targetPosition = worldPosition.clone().add(direction.multiplyScalar(focusDistance));
+
+    this.animateCamera(targetPosition, worldPosition, 0.85);
+  }
+
   // ==========================================================================
   // System Rendering
   // ==========================================================================
+
+  private mapMoonOrbitRadiusToScene(
+    moon: Moon,
+    minSceneRadius: number,
+    maxSceneRadius: number,
+    sampledRadius: number
+  ): number {
+    const orbit = moon.generatedOrbit;
+    const minOrbitRadius = orbit.semiMajorAxis * (1 - orbit.eccentricity);
+    const maxOrbitRadius = orbit.semiMajorAxis * (1 + orbit.eccentricity);
+
+    if (Math.abs(maxOrbitRadius - minOrbitRadius) < 1e-6) {
+      return (minSceneRadius + maxSceneRadius) * 0.5;
+    }
+
+    const normalized = (sampledRadius - minOrbitRadius) / (maxOrbitRadius - minOrbitRadius);
+    return minSceneRadius + THREE.MathUtils.clamp(normalized, 0, 1) * (maxSceneRadius - minSceneRadius);
+  }
+
+  private resolvePlanetRotation(planet: Planet): RotationalElements {
+    const override = useSystemStore.getState().planetMotionOverrides.get(planet.id);
+
+    return {
+      ...planet.generatedRotation,
+      ...override,
+      rotationPeriodHours: Math.max(0.1, override?.rotationPeriodHours ?? planet.generatedRotation.rotationPeriodHours),
+      axialTiltDegrees: THREE.MathUtils.clamp(
+        override?.axialTiltDegrees ?? planet.generatedRotation.axialTiltDegrees,
+        0,
+        180
+      ),
+      rotationDirection: override?.rotationDirection ?? planet.generatedRotation.rotationDirection,
+      spinPhaseDegrees: override?.spinPhaseDegrees ?? planet.generatedRotation.spinPhaseDegrees,
+    };
+  }
+
+  private applyPlanetRotation(binding: PlanetOrbitBinding, simulationTimeDays: number): void {
+    const rotation = this.resolvePlanetRotation(binding.planet);
+    const direction = rotation.rotationDirection === 'retrograde' ? -1 : 1;
+    const elapsedHours = simulationTimeDays * 24;
+    const revolutions = elapsedHours / rotation.rotationPeriodHours;
+    const spinDegrees = rotation.spinPhaseDegrees + (revolutions * 360 * direction);
+
+    binding.tiltGroup.rotation.z = THREE.MathUtils.degToRad(rotation.axialTiltDegrees);
+    binding.planetObject.rotation.y = THREE.MathUtils.degToRad(spinDegrees);
+  }
+
+  private updateSystemOrbitalPositions(simulationTimeDays: number): void {
+    this.orbitingPlanets.forEach((binding) => {
+      const { planet, group, orbitScale, moons } = binding;
+      const planetSample = sampleOrbitPosition(planet.generatedOrbit, simulationTimeDays);
+      group.position.set(
+        planetSample.localPosition.x * orbitScale,
+        planetSample.localPosition.y * orbitScale,
+        planetSample.localPosition.z * orbitScale
+      );
+
+      this.applyPlanetRotation(binding, simulationTimeDays);
+
+      moons.forEach(({ moon, object, minSceneRadius, maxSceneRadius }) => {
+        const moonSample = sampleOrbitPosition(moon.generatedOrbit, simulationTimeDays);
+        const direction = new THREE.Vector3(
+          moonSample.localPosition.x,
+          moonSample.localPosition.y,
+          moonSample.localPosition.z
+        );
+
+        if (direction.lengthSq() === 0) {
+          object.position.set((minSceneRadius + maxSceneRadius) * 0.5, 0, 0);
+          return;
+        }
+
+        const mappedRadius = this.mapMoonOrbitRadiusToScene(
+          moon,
+          minSceneRadius,
+          maxSceneRadius,
+          moonSample.radius
+        );
+
+        direction.normalize().multiplyScalar(mappedRadius);
+        object.position.copy(direction);
+      });
+    });
+  }
+
+  private updateOrbitTrailVisibility(showOrbitTrails: boolean): void {
+    if (this.lastOrbitTrailVisibility === showOrbitTrails) {
+      return;
+    }
+
+    this.lastOrbitTrailVisibility = showOrbitTrails;
+    this.orbitTrailObjects.forEach((trail) => {
+      trail.visible = showOrbitTrails;
+    });
+  }
 
   /**
    * Render a star system in the scene
@@ -873,6 +1033,7 @@ export class ThreeSceneManager {
       this.materialRegistry.set(system.star.id, starMesh.material as THREE.Material);
       console.log(`[ThreeSceneManager] Registered star material: ${system.star.id}`);
     }
+    this.objectRegistry.set(system.star.id, starMesh);
 
     // Add star lighting for planets
     const starLights = createStarLight(system.star, 3.0);
@@ -881,29 +1042,46 @@ export class ThreeSceneManager {
 
     console.log(`[ThreeSceneManager] Added star: ${system.star.name} (scaling: ${sceneUnitsPerSolarRadius.toFixed(2)} units/solar radius)`);
 
+    const orbitingPlanets: PlanetOrbitBinding[] = [];
+    const orbitTrailObjects: THREE.Object3D[] = [];
+    const { simulationTimeDays: initialSimulationTimeDays, showOrbitTrails } = useSystemStore.getState();
+    this.lastOrbitTrailVisibility = showOrbitTrails;
+
     // Create planets, their orbits, and moons (with LOD)
     system.star.planets.forEach((planet, planetIndex) => {
-      // Create orbit line
-      const orbitLine = createTypedOrbitLine(
-        planet.orbitDistance * ORBIT_SCALE,
-        planet.type
+      // Create orbit line from explicit orbital elements so trail matches live motion
+      const { color, opacity } = getOrbitLineStyle(planet.type);
+      const orbitLine = createOrbitLineFromElements(
+        planet.generatedOrbit,
+        ORBIT_SCALE,
+        color,
+        opacity
       );
       orbitLine.name = `orbit-planet-${planetIndex}`;
+      orbitLine.visible = showOrbitTrails;
       this.scene.add(orbitLine);
+      orbitTrailObjects.push(orbitLine);
 
       // Create container group for planet + moons
       // This allows moons to be in planet's local space
       const planetSystemGroup = new THREE.Group();
       planetSystemGroup.name = `planet-system-${planetIndex}`;
 
+      const initialPlanetSample = sampleOrbitPosition(planet.generatedOrbit, initialSimulationTimeDays);
+
       // Position the group at the planet's orbital location
-      planetSystemGroup.position.set(planet.orbitDistance * ORBIT_SCALE, 0, 0);
+      planetSystemGroup.position.set(
+        initialPlanetSample.localPosition.x * ORBIT_SCALE,
+        initialPlanetSample.localPosition.y * ORBIT_SCALE,
+        initialPlanetSample.localPosition.z * ORBIT_SCALE
+      );
 
       // Store planet data on group for raycasting
       planetSystemGroup.userData = {
         type: 'planet',
         data: planet
       };
+      this.objectRegistry.set(planet.id, planetSystemGroup);
 
       // Star position in world space (at origin)
       const starPositionWorld = new THREE.Vector3(0, 0, 0);
@@ -919,7 +1097,11 @@ export class ThreeSceneManager {
         starPositionWorld // Star position in world coordinate system
       );
       planetLOD.object.name = `planet-${planetIndex}`;
-      planetSystemGroup.add(planetLOD.object);
+
+      const tiltGroup = new THREE.Group();
+      tiltGroup.name = `planet-tilt-${planetIndex}`;
+      tiltGroup.add(planetLOD.object);
+      planetSystemGroup.add(tiltGroup);
 
       // Register planet LOD for Phase 3 live editing
       this.materialRegistry.set(planet.id, planetLOD as any); // Store LOD object, not material
@@ -927,6 +1109,7 @@ export class ThreeSceneManager {
 
       // Calculate planet visual radius using the helper function (ensures consistency)
       const planetVisualRadius = calcPlanetVisualRadius(planet);
+      const moonBindings: MoonOrbitBinding[] = [];
 
       // Create moons with LOD and add as children
       planet.moons.forEach((moon, moonIndex) => {
@@ -942,11 +1125,10 @@ export class ThreeSceneManager {
           : MIN_MOON_ORBIT + (moonIndex / (planet.moons.length - 1)) * (MAX_MOON_ORBIT - MIN_MOON_ORBIT);
 
         const moonOrbitSceneUnits = planetVisualRadius * orbitMultiplier;
-
-        // Distribute moons evenly around planet
-        const angle = (moonIndex / planet.moons.length) * Math.PI * 2;
-        const moonLocalX = Math.cos(angle) * moonOrbitSceneUnits;
-        const moonLocalZ = Math.sin(angle) * moonOrbitSceneUnits;
+        const nextOrbitMultiplier = planet.moons.length === 1
+          ? orbitMultiplier
+          : MIN_MOON_ORBIT + ((moonIndex + 1) / planet.moons.length) * (MAX_MOON_ORBIT - MIN_MOON_ORBIT);
+        const maxMoonOrbitSceneUnits = planetVisualRadius * Math.min(nextOrbitMultiplier, MAX_MOON_ORBIT);
 
         // Star position in world space (at origin) - same for all moons
         const starPositionWorld = new THREE.Vector3(0, 0, 0);
@@ -963,14 +1145,52 @@ export class ThreeSceneManager {
 
         moonLOD.object.name = `moon-${planetIndex}-${moonIndex}`;
 
-        moonLOD.object.position.set(moonLocalX, 0, moonLocalZ);
+        const initialMoonSample = sampleOrbitPosition(moon.generatedOrbit, initialSimulationTimeDays);
+        const initialMoonDirection = new THREE.Vector3(
+          initialMoonSample.localPosition.x,
+          initialMoonSample.localPosition.y,
+          initialMoonSample.localPosition.z
+        );
+        const initialMoonRadius = this.mapMoonOrbitRadiusToScene(
+          moon,
+          moonOrbitSceneUnits,
+          maxMoonOrbitSceneUnits,
+          initialMoonSample.radius
+        );
+
+        if (initialMoonDirection.lengthSq() === 0) {
+          moonLOD.object.position.set(initialMoonRadius, 0, 0);
+        } else {
+          initialMoonDirection.normalize().multiplyScalar(initialMoonRadius);
+          moonLOD.object.position.copy(initialMoonDirection);
+        }
 
         planetSystemGroup.add(moonLOD.object);
 
         // Register moon LOD for Phase 3 live editing
         this.materialRegistry.set(moon.id, moonLOD as any); // Store LOD object, not material
+        this.objectRegistry.set(moon.id, moonLOD.object);
         console.log(`[ThreeSceneManager] Registered moon LOD: ${moon.id}`);
+
+        moonBindings.push({
+          moon,
+          object: moonLOD.object,
+          minSceneRadius: moonOrbitSceneUnits,
+          maxSceneRadius: maxMoonOrbitSceneUnits,
+        });
       });
+
+      const binding: PlanetOrbitBinding = {
+        planet,
+        group: planetSystemGroup,
+        tiltGroup,
+        planetObject: planetLOD.object,
+        orbitScale: ORBIT_SCALE,
+        moons: moonBindings,
+      };
+      this.applyPlanetRotation(binding, initialSimulationTimeDays);
+
+      orbitingPlanets.push(binding);
 
       // Add the complete planet system to scene
       this.scene.add(planetSystemGroup);
@@ -980,6 +1200,9 @@ export class ThreeSceneManager {
         `${planet.name} with ${planet.moons.length} moons (LOD enabled)`
       );
     });
+
+    this.orbitingPlanets = orbitingPlanets;
+    this.orbitTrailObjects = orbitTrailObjects;
 
     // Adjust camera to view the whole system
     this.focusOnSystem(system, ORBIT_SCALE);
@@ -1428,8 +1651,11 @@ export class ThreeSceneManager {
       this.disposeObjectRecursive(object);
     });
 
-    // Clear material registry (Phase 3)
+    // Clear material and object registries (Phase 3)
     this.materialRegistry.clear();
+    this.objectRegistry.clear();
+    this.orbitingPlanets = [];
+    this.orbitTrailObjects = [];
 
     console.log('[ThreeSceneManager] System objects cleared');
   }
@@ -1494,6 +1720,13 @@ export class ThreeSceneManager {
    */
   public getViewMode(): 'system' | 'galaxy' {
     return this.currentViewMode;
+  }
+
+  /**
+   * Recompute renderer/camera sizes when layout changes without a window resize.
+   */
+  public resize(): void {
+    this.handleResize();
   }
 
   // ==========================================================================

@@ -10,10 +10,9 @@ import { useSystemStore } from '../../store/system-store';
 import { SceneTree } from './SceneTree';
 import { DataInspector } from './DataInspector';
 import { ShaderViewer } from './ShaderViewer';
-import { ShaderControls } from './ShaderControls';
-import { GalaxyControls } from './GalaxyControls';
+import { LODDebugPanel } from './LODDebugPanel';
 
-type TabType = 'scene' | 'data' | 'shaders' | 'controls';
+type TabType = 'scene' | 'data' | 'shaders';
 
 export function IDEPanel() {
   const ideOpen = useSystemStore((state) => state.ideOpen);
@@ -61,7 +60,7 @@ export function IDEPanel() {
 
           {/* Tab bar */}
           <div style={styles.tabBar}>
-            {(['scene', 'data', 'shaders', 'controls'] as TabType[]).map((tab) => (
+            {(['scene', 'data', 'shaders'] as TabType[]).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
@@ -89,10 +88,9 @@ export function IDEPanel() {
 
           {/* Tab content */}
           <div style={styles.content}>
-            {activeTab === 'scene' && <SceneTree />}
+            {activeTab === 'scene' && <SceneTabContent />}
             {activeTab === 'data' && <DataInspector />}
             {activeTab === 'shaders' && <ShaderViewer />}
-            {activeTab === 'controls' && <ShaderControlsWrapper />}
           </div>
         </>
       )}
@@ -104,69 +102,31 @@ export function IDEPanel() {
  * Wrapper component for Controls that connects to store
  * Shows GalaxyControls when in galaxy view, ShaderControls when object is selected
  */
-function ShaderControlsWrapper() {
-  const selectedObject = useSystemStore((state) => state.selectedObject);
-  const viewMode = useSystemStore((state) => state.viewMode);
-  const currentGalaxy = useSystemStore((state) => state.currentGalaxy);
-  const updateUniform = useSystemStore((state) => state.updateUniform);
-  const resetObjectUniforms = useSystemStore((state) => state.resetObjectUniforms);
-  const updateGalaxyConfig = useSystemStore((state) => state.updateGalaxyConfig);
-  const resetGalaxyConfig = useSystemStore((state) => state.resetGalaxyConfig);
-
-  // Show galaxy controls when in galaxy view with no selected object
-  if (viewMode === 'galaxy' && currentGalaxy && !selectedObject) {
-    return (
-      <GalaxyControls
-        galaxy={currentGalaxy}
-        onConfigChange={updateGalaxyConfig}
-        onReset={resetGalaxyConfig}
-      />
-    );
-  }
-
-  // Show message if no object is selected (in system view)
-  if (!selectedObject) {
-    return (
-      <div style={styles.emptyState}>
-        <span className="mdi mdi-cube-outline" style={styles.emptyIcon}></span>
-        <p style={styles.emptyText}>
-          {viewMode === 'galaxy'
-            ? 'Click on the galaxy or a system marker to edit parameters'
-            : 'Select a celestial body to edit its shader parameters'}
-        </p>
-        <p style={styles.emptySubtext}>
-          {viewMode === 'galaxy'
-            ? 'Use the galaxy controls to customize the particle system'
-            : 'Click on a star, planet, or moon in the 3D view'}
-        </p>
-      </div>
-    );
-  }
-
-  // Show shader controls for selected object
-  const objectId = selectedObject.data.id;
-
-  // Handle uniform change
-  const handleUniformChange = (uniformName: string, value: any) => {
-    console.log(`[IDEPanel] Updating uniform ${uniformName}:`, value);
-    updateUniform(objectId, uniformName, value);
-    // Scene will update automatically via CanvasContainer's uniformOverrides effect
-  };
-
-  // Handle reset
-  const handleReset = () => {
-    console.log(`[IDEPanel] Resetting uniforms for ${objectId}`);
-    resetObjectUniforms(objectId);
-    // Scene will update automatically via CanvasContainer's uniformOverrides effect
-  };
+function SceneTabContent() {
+  const autoFocusSelection = useSystemStore((state) => state.autoFocusSelection);
+  const toggleAutoFocusSelection = useSystemStore((state) => state.toggleAutoFocusSelection);
 
   return (
-    <ShaderControls
-      objectType={selectedObject.type}
-      objectData={selectedObject.data}
-      onUniformChange={handleUniformChange}
-      onReset={handleReset}
-    />
+    <div style={styles.sceneTabLayout}>
+      <div style={styles.sceneTreeRegion}>
+        <div style={styles.sceneInspectorControls}>
+          <label style={styles.toggleRow}>
+            <div style={styles.toggleCopy}>
+              <div style={styles.toggleTitle}>Auto Focus Selection</div>
+              <div style={styles.toggleHint}>Center selected object in view</div>
+            </div>
+            <input
+              type="checkbox"
+              checked={autoFocusSelection}
+              onChange={toggleAutoFocusSelection}
+              style={styles.toggleInput}
+            />
+          </label>
+        </div>
+        <SceneTree />
+      </div>
+      <LODDebugPanel />
+    </div>
   );
 }
 
@@ -250,6 +210,49 @@ const styles = {
     flex: 1,
     overflow: 'hidden',
     background: '#1e1e1e',
+  } as React.CSSProperties,
+  sceneTabLayout: {
+    height: '100%',
+    display: 'grid',
+    gridTemplateRows: 'minmax(0, 1fr) auto',
+  } as React.CSSProperties,
+  sceneTreeRegion: {
+    minHeight: 0,
+    overflow: 'auto',
+  } as React.CSSProperties,
+  sceneInspectorControls: {
+    padding: '14px 16px 10px',
+    borderBottom: '1px solid #2b2b2f',
+    background: '#202022',
+  } as React.CSSProperties,
+  toggleRow: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: '12px',
+    cursor: 'pointer',
+  } as React.CSSProperties,
+  toggleCopy: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '4px',
+  } as React.CSSProperties,
+  toggleTitle: {
+    color: '#f0f0f0',
+    fontSize: '13px',
+    fontWeight: 600,
+  } as React.CSSProperties,
+  toggleHint: {
+    color: '#8d8d92',
+    fontSize: '11px',
+    letterSpacing: '0.2px',
+  } as React.CSSProperties,
+  toggleInput: {
+    width: '16px',
+    height: '16px',
+    accentColor: '#007acc',
+    cursor: 'pointer',
+    flexShrink: 0,
   } as React.CSSProperties,
   emptyState: {
     display: 'flex',

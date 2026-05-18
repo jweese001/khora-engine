@@ -37,6 +37,8 @@ import type {
   PlanetType,
   Atmosphere,
   HabitableZone,
+  OrbitalElements,
+  RotationalElements,
   PlanetVisualProperties
 } from '../types/celestial-bodies';
 import { PlanetType as PlanetTypeEnum } from '../types/celestial-bodies';
@@ -119,6 +121,74 @@ function generateOrbitalDistances(
   }
 
   return distances.sort((a, b) => a - b); // Sort by distance
+}
+
+function generatePlanetOrbitElements(
+  star: Star,
+  orbitDistance: number,
+  orbitalPeriod: number,
+  rng: SeededRandom
+): OrbitalElements {
+  return {
+    parentId: star.id,
+    parentType: 'star',
+    semiMajorAxis: orbitDistance,
+    // Keep planets visually coherent in V1: low eccentricity, near-coplanar, prograde.
+    eccentricity: rng.randomFloat(0.0, 0.035),
+    inclination: rng.randomFloat(0.0, 1.25),
+    longitudeOfAscendingNode: 0,
+    argumentOfPeriapsis: rng.randomFloat(0.0, 360.0),
+    meanAnomalyAtEpoch: rng.randomFloat(0.0, Math.PI * 2),
+    orbitalPeriod,
+    epoch: 0,
+    rotationDirection: 'prograde',
+    distanceUnit: 'AU'
+  };
+}
+
+function generatePlanetRotationElements(
+  type: PlanetType,
+  orbitDistance: number,
+  orbitalPeriod: number,
+  rng: SeededRandom
+): RotationalElements {
+  const retrogradeChance = type === PlanetTypeEnum.Rocky || type === PlanetTypeEnum.Barren ? 0.08 : 0.03;
+  const rotationDirection = rng.random() < retrogradeChance ? 'retrograde' : 'prograde';
+
+  let rotationPeriodHours: number;
+  let axialTiltDegrees: number;
+
+  if (orbitDistance < 0.12) {
+    rotationPeriodHours = orbitalPeriod * 24;
+    axialTiltDegrees = rng.randomFloat(0, 5);
+  } else if (type === PlanetTypeEnum.GasGiant) {
+    rotationPeriodHours = rng.randomFloat(8, 16);
+    axialTiltDegrees = rng.randomFloat(1, 28);
+  } else if (type === PlanetTypeEnum.IceGiant) {
+    rotationPeriodHours = rng.randomFloat(12, 22);
+    axialTiltDegrees = rng.randomFloat(5, 35);
+  } else if (type === PlanetTypeEnum.Rocky) {
+    rotationPeriodHours = rng.random() < 0.18
+      ? rng.randomFloat(100, 320)
+      : rng.randomFloat(14, 60);
+    axialTiltDegrees = rng.random() < 0.12
+      ? rng.randomFloat(45, 90)
+      : rng.randomFloat(2, 35);
+  } else {
+    rotationPeriodHours = rng.random() < 0.22
+      ? rng.randomFloat(120, 500)
+      : rng.randomFloat(18, 90);
+    axialTiltDegrees = rng.random() < 0.18
+      ? rng.randomFloat(35, 85)
+      : rng.randomFloat(0, 28);
+  }
+
+  return {
+    rotationPeriodHours,
+    axialTiltDegrees,
+    rotationDirection,
+    spinPhaseDegrees: rng.randomFloat(0, 360),
+  };
 }
 
 // ============================================================================
@@ -457,19 +527,9 @@ export function generatePlanets(star: Star, rng: SeededRandom): Planet[] {
     // Calculate orbital period (Kepler's 3rd law)
     const orbitalPeriod = calculateOrbitalPeriod(orbitDistance, star.mass);
 
-    // Calculate rotation period
-    // Close planets often tidally locked, distant planets rotate faster
-    let rotationPeriod: number;
-    if (orbitDistance < 0.1) {
-      // Tidally locked
-      rotationPeriod = orbitalPeriod;
-    } else if (type === PlanetTypeEnum.GasGiant || type === PlanetTypeEnum.IceGiant) {
-      // Gas giants rotate fast (10-20 hours)
-      rotationPeriod = rng.randomFloat(0.4, 0.8); // In Earth days
-    } else {
-      // Rocky planets (0.5-5 Earth days)
-      rotationPeriod = rng.randomFloat(0.5, 5);
-    }
+    const generatedOrbit = generatePlanetOrbitElements(star, orbitDistance, orbitalPeriod, rng);
+    const generatedRotation = generatePlanetRotationElements(type, orbitDistance, orbitalPeriod, rng);
+    const rotationPeriod = generatedRotation.rotationPeriodHours / 24;
 
     // Calculate surface temperature
     const equilibriumTemp = calculateEquilibriumTemperature(
@@ -511,6 +571,8 @@ export function generatePlanets(star: Star, rng: SeededRandom): Planet[] {
       type,
       orbitDistance,
       orbitalPeriod,
+      generatedOrbit,
+      generatedRotation,
       rotationPeriod,
       radius,
       mass,

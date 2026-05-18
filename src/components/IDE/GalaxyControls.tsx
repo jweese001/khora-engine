@@ -643,9 +643,9 @@ function ColorControl({ label, defaultColor, activePicker, onTogglePicker, onCha
 // Styles
 const styles = {
   container: {
-    display: 'flex',
-    flexDirection: 'column',
-    height: '100%',
+    display: 'block',
+    height: 'auto',
+    minHeight: 0,
     background: '#1e1e1e',
   } as React.CSSProperties,
   header: {
@@ -687,8 +687,7 @@ const styles = {
     transition: 'background 0.2s',
   } as React.CSSProperties,
   content: {
-    flex: 1,
-    overflowY: 'auto',
+    overflowY: 'visible',
     padding: '16px',
   } as React.CSSProperties,
   section: {
