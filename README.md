@@ -8,6 +8,8 @@ Date: May 13, 2026
 
 Built with React + TypeScript + Three.js + Zustand + Vite
 
+**Live site:** `https://jweese001.github.io/khora-engine/`
+
 > **Current branch note (2026-05-13):** This branch is in Phase A stabilization. Historical Phase 1 completion details are preserved below as milestone context, but they do not mean the current branch is acceptance-test ready.
 
 ---
@@ -26,6 +28,8 @@ npm run build
 ```
 
 **Open browser:** `http://localhost:5173/`
+
+**GitHub Pages:** `https://jweese001.github.io/khora-engine/`
 
 ### Generate Your First System
 

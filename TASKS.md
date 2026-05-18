@@ -123,8 +123,10 @@ For non-trivial work, use a measured pipeline:
 +- [x] planet rotation / tilt controls added in left drawer Controls layout
 +- [x] motion controls moved to bottom of Controls stack near Orbit controls
 +- [x] rotation-period input simplified to whole hours with 1-9999 range
++- [x] scene-inspector auto-focus selection toggle added and user-validated
 +- [>] remaining Orbit V1 follow-up: expose orbit data/state in inspector surfaces
 +- [x] fresh live smoke pass completed on drawer-based system-view UX
++- [x] GitHub Pages deployment workflow added and live site confirmed
 +- [x] removed dead orbit-panel remnants (`showOrbitPanel`, `toggleOrbitPanel`, `OrbitCommandPod`)
 
 ---
@@ -2293,8 +2295,8 @@ this.galaxyLayers.forEach((galaxy, index) => {
 
 **Next Session Priorities:**
 1. **Inspector orbit exposure** - show generated orbital elements / current sampled orbit state in right-side data surfaces
-2. **Planet motion live pass** - visually validate spin speed, tilt readability, pause/reset behavior, and control feel in browser
-3. **Post-polish verification** - rerun `npm run build` and `npm run check:determinism` after any follow-up slice
+2. **Orbit V1 wrap verification** - rerun `npm run build` and `npm run check:determinism` after next follow-up slice
+3. **Pages follow-up** - decide whether to keep project URL or later switch to custom domain setup
 4. **Deferred motion planning** - decide whether next pass is moon spin/tilt or broader system customization controls
 5. **Optional UX copy pass** - rename motion labels only if live use still feels ambiguous
 
@@ -2302,6 +2304,6 @@ this.galaxyLayers.forEach((galaxy, index) => {
 
 ---
 
-**Last Updated:** May 17, 2026 - Orbit smoke pass complete and legacy panel cleanup done
+**Last Updated:** May 18, 2026 - Orbit V1 merged, Pages live, autofocus shipped
 **Next Session:** Inspector orbit visibility, wrap validation, and next-pass planning
 

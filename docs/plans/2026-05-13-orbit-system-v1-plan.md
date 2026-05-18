@@ -540,10 +540,11 @@ Implemented on `feature/orbit-system-v1` worktree so far:
 - planet motion controls in left drawer Controls stack
 - motion controls repositioned near Orbit controls for better workflow
 - rotation-period input simplified to whole hours with 1-9999 range
+- scene-inspector auto-focus selection toggle added and user-validated
 
 Still queued before calling Orbit V1 wrapped:
 - expose orbit data/state more clearly in inspector surfaces
-- run a fresh manual browser pass focused on planet motion feel and control clarity
+- decide whether to stop at project Pages URL or later switch to custom domain deployment
 
 ---
 
