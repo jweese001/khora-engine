@@ -10,7 +10,7 @@
 import { CanvasContainer } from './Canvas/CanvasContainer';
 import { UIControls } from './UI/UIControls';
 import { IDEPanel } from './IDE/IDEPanel';
-import { LODDebug } from './UI/LODDebug';
+import { ControlDrawer } from './UI/ControlDrawer';
 import { LandingPage } from './Landing/LandingPage';
 import { DiceRollerFlow } from './DiceRoller/DiceRollerFlow';
 import { useSystemStore } from '../store/system-store';
@@ -18,6 +18,7 @@ import { useSystemStore } from '../store/system-store';
 export function App() {
   const appMode = useSystemStore((state) => state.appMode);
   const ideOpen = useSystemStore((state) => state.ideOpen);
+  const controlDrawerOpen = useSystemStore((state) => state.controlDrawerOpen);
 
   // Landing page: Mode selection
   if (appMode === 'landing') {
@@ -63,16 +64,18 @@ export function App() {
       {/* Main canvas area */}
       <div style={{
         ...styles.canvasWrapper,
-        ...(ideOpen ? styles.canvasWrapperWithIDE : {})
+        ...(ideOpen ? styles.canvasWrapperWithIDE : {}),
+        ...(controlDrawerOpen ? styles.canvasWrapperWithControls : {}),
       }}>
         <CanvasContainer />
       </div>
 
+      {/* Left control drawer */}
+      <ControlDrawer />
+
       {/* IDE panel (slides in from right) */}
       <IDEPanel />
 
-      {/* LOD Debug overlay (press L to toggle) */}
-      <LODDebug />
     </div>
   );
 }
@@ -96,6 +99,9 @@ const styles = {
   } as React.CSSProperties,
   canvasWrapperWithIDE: {
     marginRight: 'max(40%, 400px)' // Match IDE panel width/minWidth
+  } as React.CSSProperties,
+  canvasWrapperWithControls: {
+    marginLeft: 'min(360px, 32vw)'
   } as React.CSSProperties,
   placeholderContainer: {
     width: '100vw',

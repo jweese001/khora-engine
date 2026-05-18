@@ -8,14 +8,10 @@
 
 import { create } from 'zustand';
 import type * as THREE from 'three';
-import type { StarSystem } from '../types/celestial-bodies';
+import type { RotationalElements, StarSystem } from '../types/celestial-bodies';
 import type { Galaxy } from '../types/galaxy';
 import type { GalaxyConfig } from '../rendering/GalaxyParticleSystem';
-import { SeededRandom } from '../utils/random';
-import { generateStar } from '../generation/star-generator';
-import { generatePlanets } from '../generation/planet-generator';
-import { generateMoons } from '../generation/moon-generator';
-import { distributePlanetResources, distributeMoonResources } from '../generation/resource-distributor';
+import { generateSystem as buildSystem } from '../generation/system-generator';
 import { generateGalaxy } from '../generation/galaxy-generator';
 import { useGalaxyStore } from './galaxy-store';
 
@@ -48,6 +44,8 @@ export type AppMode = 'landing' | 'diceRoll' | 'architect' | 'explorer';
 export interface UniformOverrides {
   [uniformName: string]: any;
 }
+
+export type PlanetMotionOverrides = Partial<RotationalElements>;
 
 /**
  * Main application state
@@ -86,6 +84,29 @@ interface SystemStore {
   /** Custom galaxy particle system configuration (overrides procedural defaults) */
   galaxyConfig: Partial<GalaxyConfig> | null;
 
+  // ===== Simulation Time State =====
+
+  /** Global simulation time in Earth days */
+  simulationTimeDays: number;
+
+  /** Global time scale multiplier used by moving systems */
+  timeScale: number;
+
+  /** Whether global simulation time is paused */
+  isTimePaused: boolean;
+
+  /** Reset target for simulation time */
+  initialSimulationTimeDays: number;
+
+  /** Whether orbit trails are visible in system view */
+  showOrbitTrails: boolean;
+
+  /** Whether selected objects should auto-focus in scene view */
+  autoFocusSelection: boolean;
+
+  /** Whether left control drawer is open */
+  controlDrawerOpen: boolean;
+
   // ===== IDE State =====
 
   /** Whether IDE panel is open */
@@ -98,6 +119,9 @@ interface SystemStore {
 
   /** Uniform overrides for celestial bodies (object ID -> uniform overrides map) */
   uniformOverrides: Map<string, UniformOverrides>;
+
+  /** Motion overrides for planets (object ID -> rotation override map) */
+  planetMotionOverrides: Map<string, PlanetMotionOverrides>;
 
   // ===== Scene State =====
 
@@ -161,6 +185,33 @@ interface SystemStore {
    * @param system - StarSystem to set as current (or null to clear)
    */
   setCurrentSystem: (system: StarSystem | null) => void;
+
+  /** Advance global simulation time using real delta seconds */
+  advanceSimulationTime: (deltaSeconds: number) => void;
+
+  /** Set the current global time scale */
+  setTimeScale: (scale: number) => void;
+
+  /** Pause global simulation time */
+  pauseTime: () => void;
+
+  /** Resume global simulation time */
+  resumeTime: () => void;
+
+  /** Toggle paused state for global simulation time */
+  toggleTimePaused: () => void;
+
+  /** Reset global simulation time to baseline */
+  resetSimulationTime: () => void;
+
+  /** Toggle orbit trail visibility in system view */
+  toggleOrbitTrails: () => void;
+
+  /** Toggle scene auto-focus on selection */
+  toggleAutoFocusSelection: () => void;
+
+  /** Toggle left control drawer */
+  toggleControlDrawer: () => void;
 
   /**
    * Update galaxy particle system configuration
@@ -228,6 +279,15 @@ interface SystemStore {
    * @returns Uniform overrides or undefined if no overrides exist
    */
   getObjectUniforms: (objectId: string) => UniformOverrides | undefined;
+
+  /** Merge motion override values for a planet */
+  updatePlanetMotionOverride: (objectId: string, overrides: PlanetMotionOverrides) => void;
+
+  /** Reset motion overrides for a planet */
+  resetPlanetMotionOverrides: (objectId: string) => void;
+
+  /** Get motion overrides for a planet */
+  getPlanetMotionOverride: (objectId: string) => PlanetMotionOverrides | undefined;
 }
 
 // ============================================================================
@@ -245,9 +305,17 @@ export const useSystemStore = create<SystemStore>((set, get) => ({
   viewMode: 'system',
   focusedSystemIndex: null,
   galaxyConfig: null,
+  simulationTimeDays: 0,
+  timeScale: 1,
+  isTimePaused: true,
+  initialSimulationTimeDays: 0,
+  showOrbitTrails: true,
+  autoFocusSelection: false,
+  controlDrawerOpen: false,
   ideOpen: false,
   selectedObject: null,
   uniformOverrides: new Map(),
+  planetMotionOverrides: new Map(),
   scene: null,
   camera: null,
 
@@ -269,52 +337,23 @@ export const useSystemStore = create<SystemStore>((set, get) => ({
       isGenerating: true,
       generationError: null,
       uniformOverrides: new Map(),
+      planetMotionOverrides: new Map(),
       selectedObject: null
     });
 
     try {
       console.log(`[Store] Generating system with seed: ${seed}`);
 
-      // Create RNG for this system
-      const rng = new SeededRandom(seed);
-
-      // Generate star
-      const star = generateStar(seed);
-      console.log(`[Store] Generated star: ${star.name} (${star.spectralType}-type)`);
-
-      // Generate planets
-      star.planets = generatePlanets(star, rng);
-      console.log(`[Store] Generated ${star.planets.length} planets`);
-
-      // Generate moons and resources for each planet
-      star.planets.forEach((planet, i) => {
-        // Generate moons
-        planet.moons = generateMoons(planet, star.mass, rng);
-        console.log(`[Store] Planet ${i} (${planet.name}): ${planet.moons.length} moons`);
-
-        // Distribute planet resources
-        planet.resources = distributePlanetResources(planet, rng);
-
-        // Distribute moon resources
-        planet.moons.forEach(moon => {
-          moon.resources = distributeMoonResources(moon, planet, rng);
-        });
-      });
-
-      // Create complete star system
-      const system: StarSystem = {
-        id: `system-${seed}`,
-        name: star.name,
-        seed,
-        star,
-        generatedAt: new Date()
-      };
+      const system = buildSystem(seed);
 
       // Update state
       set({
         currentSystem: system,
         isGenerating: false,
-        generationError: null
+        generationError: null,
+        simulationTimeDays: 0,
+        initialSimulationTimeDays: 0,
+        isTimePaused: true
       });
 
       console.log('[Store] System generation complete:', system);
@@ -333,7 +372,8 @@ export const useSystemStore = create<SystemStore>((set, get) => ({
       currentSystem: null,
       selectedObject: null,
       generationError: null,
-      uniformOverrides: new Map() // Clear overrides when clearing system
+      uniformOverrides: new Map(), // Clear overrides when clearing system
+      planetMotionOverrides: new Map()
     });
   },
 
@@ -361,9 +401,10 @@ export const useSystemStore = create<SystemStore>((set, get) => ({
     }
     set({ selectedObject: selection });
 
-    // Automatically open IDE when selecting an object
-    if (selection && !get().ideOpen) {
-      get().openIDE();
+    // Auto-open left control drawer for contextual editing.
+    // Do not auto-open inspector anymore.
+    if (selection && !get().controlDrawerOpen) {
+      get().toggleControlDrawer();
     }
   },
 
@@ -385,6 +426,7 @@ export const useSystemStore = create<SystemStore>((set, get) => ({
       isGenerating: true,
       generationError: null,
       uniformOverrides: new Map(),
+      planetMotionOverrides: new Map(),
       selectedObject: null
     });
 
@@ -429,7 +471,8 @@ export const useSystemStore = create<SystemStore>((set, get) => ({
       focusedSystemIndex: null,
       selectedObject: null,
       generationError: null,
-      uniformOverrides: new Map() // Clear overrides when clearing galaxy
+      uniformOverrides: new Map(), // Clear overrides when clearing galaxy
+      planetMotionOverrides: new Map()
     });
 
     // Deactivate visual galaxy particle system layers (Phase 2.5)
@@ -463,6 +506,7 @@ export const useSystemStore = create<SystemStore>((set, get) => ({
         currentSystem: system,
         viewMode: 'system',
         uniformOverrides: new Map(), // Clear overrides when switching systems
+        planetMotionOverrides: new Map(),
         selectedObject: null // Deselect object when switching systems
       });
     } else {
@@ -472,6 +516,7 @@ export const useSystemStore = create<SystemStore>((set, get) => ({
         currentSystem: null,
         viewMode: 'galaxy',
         uniformOverrides: new Map(), // Clear overrides when returning to galaxy
+        planetMotionOverrides: new Map(),
         selectedObject: null
       });
     }
@@ -484,6 +529,50 @@ export const useSystemStore = create<SystemStore>((set, get) => ({
       console.log('[Store] Clearing current system');
     }
     set({ currentSystem: system });
+  },
+
+  advanceSimulationTime: (deltaSeconds: number) => {
+    const { isTimePaused, timeScale, simulationTimeDays } = get();
+    if (isTimePaused || deltaSeconds <= 0) {
+      return;
+    }
+
+    set({ simulationTimeDays: simulationTimeDays + deltaSeconds * timeScale });
+  },
+
+  setTimeScale: (scale: number) => {
+    set({ timeScale: Math.max(0, scale) });
+  },
+
+  pauseTime: () => {
+    set({ isTimePaused: true });
+  },
+
+  resumeTime: () => {
+    set({ isTimePaused: false });
+  },
+
+  toggleTimePaused: () => {
+    set((state) => ({ isTimePaused: !state.isTimePaused }));
+  },
+
+  resetSimulationTime: () => {
+    set((state) => ({
+      simulationTimeDays: state.initialSimulationTimeDays,
+      isTimePaused: true
+    }));
+  },
+
+  toggleOrbitTrails: () => {
+    set((state) => ({ showOrbitTrails: !state.showOrbitTrails }));
+  },
+
+  toggleAutoFocusSelection: () => {
+    set((state) => ({ autoFocusSelection: !state.autoFocusSelection }));
+  },
+
+  toggleControlDrawer: () => {
+    set((state) => ({ controlDrawerOpen: !state.controlDrawerOpen }));
   },
 
   updateGalaxyConfig: (config: Partial<GalaxyConfig>) => {
@@ -536,6 +625,26 @@ export const useSystemStore = create<SystemStore>((set, get) => ({
   getObjectUniforms: (objectId: string) => {
     const { uniformOverrides } = get();
     return uniformOverrides.get(objectId);
+  },
+
+  updatePlanetMotionOverride: (objectId: string, overrides: PlanetMotionOverrides) => {
+    const { planetMotionOverrides } = get();
+    const next = { ...(planetMotionOverrides.get(objectId) || {}), ...overrides };
+    const newOverrides = new Map(planetMotionOverrides);
+    newOverrides.set(objectId, next);
+    set({ planetMotionOverrides: newOverrides });
+  },
+
+  resetPlanetMotionOverrides: (objectId: string) => {
+    const { planetMotionOverrides } = get();
+    const newOverrides = new Map(planetMotionOverrides);
+    newOverrides.delete(objectId);
+    set({ planetMotionOverrides: newOverrides });
+  },
+
+  getPlanetMotionOverride: (objectId: string) => {
+    const { planetMotionOverrides } = get();
+    return planetMotionOverrides.get(objectId);
   }
 }));
 
@@ -574,6 +683,20 @@ export const useCurrentGalaxy = () => useSystemStore((state) => state.currentGal
 export const useViewMode = () => useSystemStore((state) => state.viewMode);
 
 /**
+ * Hook to get simulation time state
+ */
+export const useSimulationTime = () => useSystemStore((state) => ({
+  simulationTimeDays: state.simulationTimeDays,
+  timeScale: state.timeScale,
+  isTimePaused: state.isTimePaused,
+  initialSimulationTimeDays: state.initialSimulationTimeDays,
+  showOrbitTrails: state.showOrbitTrails,
+  autoFocusSelection: state.autoFocusSelection,
+  controlDrawerOpen: state.controlDrawerOpen,
+  planetMotionOverrides: state.planetMotionOverrides,
+}));
+
+/**
  * Hook to get focused system index
  */
 export const useFocusedSystemIndex = () => useSystemStore((state) => state.focusedSystemIndex);
@@ -588,8 +711,20 @@ export const useSystemActions = () => useSystemStore((state) => ({
   clearGalaxy: state.clearGalaxy,
   setViewMode: state.setViewMode,
   focusSystem: state.focusSystem,
+  setCurrentSystem: state.setCurrentSystem,
+  advanceSimulationTime: state.advanceSimulationTime,
+  setTimeScale: state.setTimeScale,
+  pauseTime: state.pauseTime,
+  resumeTime: state.resumeTime,
+  toggleTimePaused: state.toggleTimePaused,
+  resetSimulationTime: state.resetSimulationTime,
+  toggleOrbitTrails: state.toggleOrbitTrails,
+  toggleAutoFocusSelection: state.toggleAutoFocusSelection,
+  toggleControlDrawer: state.toggleControlDrawer,
   toggleIDE: state.toggleIDE,
   openIDE: state.openIDE,
+  updatePlanetMotionOverride: state.updatePlanetMotionOverride,
+  resetPlanetMotionOverrides: state.resetPlanetMotionOverrides,
   closeIDE: state.closeIDE,
   selectObject: state.selectObject,
   setScene: state.setScene,

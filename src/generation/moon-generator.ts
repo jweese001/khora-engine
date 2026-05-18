@@ -16,7 +16,7 @@ import {
 import { calculateHillSphere } from '../utils/physics';
 import { generateMoonName, generateId } from './name-generator';
 import { generateMoonColor } from '../utils/color-palette';
-import type { Planet, Moon, MoonVisualProperties } from '../types/celestial-bodies';
+import type { Planet, Moon, MoonVisualProperties, OrbitalElements } from '../types/celestial-bodies';
 
 // ============================================================================
 // Moon Count Determination
@@ -191,6 +191,28 @@ function calculateMoonOrbitalPeriod(
 // Moon Generation
 // ============================================================================
 
+function generateMoonOrbitElements(
+  planet: Planet,
+  orbitDistance: number,
+  orbitalPeriod: number,
+  rng: SeededRandom
+): OrbitalElements {
+  return {
+    parentId: planet.id,
+    parentType: 'planet',
+    semiMajorAxis: orbitDistance,
+    eccentricity: rng.randomFloat(0.0, 0.03),
+    inclination: rng.randomFloat(0.0, 6.0),
+    longitudeOfAscendingNode: rng.randomFloat(0.0, 25.0),
+    argumentOfPeriapsis: rng.randomFloat(0.0, 360.0),
+    meanAnomalyAtEpoch: rng.randomFloat(0.0, Math.PI * 2),
+    orbitalPeriod,
+    epoch: 0,
+    rotationDirection: 'prograde',
+    distanceUnit: 'km'
+  };
+}
+
 /**
  * Generate moons for a planet
  *
@@ -267,6 +289,8 @@ export function generateMoons(
     // Calculate orbital period
     const orbitalPeriod = calculateMoonOrbitalPeriod(orbitDistance, planet.mass);
 
+    const generatedOrbit = generateMoonOrbitElements(planet, orbitDistance, orbitalPeriod, rng);
+
     // Rotation period (most moons are tidally locked)
     const tidallyLocked = rng.boolean(0.8); // 80% chance
     const rotationPeriod = tidallyLocked
@@ -304,6 +328,7 @@ export function generateMoons(
       name,
       orbitDistance,
       orbitalPeriod,
+      generatedOrbit,
       rotationPeriod,
       radius,
       mass,

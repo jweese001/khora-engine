@@ -23,6 +23,10 @@ export function CanvasContainer() {
   const viewMode = useSystemStore((state) => state.viewMode);
   const uniformOverrides = useSystemStore((state) => state.uniformOverrides);
   const galaxyConfig = useSystemStore((state) => state.galaxyConfig);
+  const ideOpen = useSystemStore((state) => state.ideOpen);
+  const controlDrawerOpen = useSystemStore((state) => state.controlDrawerOpen);
+  const selectedObject = useSystemStore((state) => state.selectedObject);
+  const autoFocusSelection = useSystemStore((state) => state.autoFocusSelection);
 
   // Initialize ThreeSceneManager on mount
   useEffect(() => {
@@ -66,9 +70,15 @@ export function CanvasContainer() {
     const { setSceneManagerRef } = useGalaxyStore.getState();
     setSceneManagerRef(sceneManagerRef.current);
 
+    const resizeObserver = new ResizeObserver(() => {
+      sceneManagerRef.current?.resize();
+    });
+    resizeObserver.observe(containerRef.current);
+
     // Cleanup on unmount
     return () => {
       console.log('[CanvasContainer] Disposing ThreeSceneManager');
+      resizeObserver.disconnect();
       if (sceneManagerRef.current) {
         sceneManagerRef.current.dispose();
         sceneManagerRef.current = null;
@@ -81,6 +91,10 @@ export function CanvasContainer() {
       setSceneManagerRef(null);
     };
   }, []); // Only run once on mount
+
+  useEffect(() => {
+    sceneManagerRef.current?.resize();
+  }, [ideOpen, controlDrawerOpen]);
 
   // Update scene when currentSystem changes
   useEffect(() => {
@@ -136,6 +150,15 @@ export function CanvasContainer() {
     console.log('[CanvasContainer] Applying galaxy config changes:', galaxyConfig);
     sceneManagerRef.current.updateGalaxyConfig(galaxyConfig);
   }, [galaxyConfig, viewMode]);
+
+  useEffect(() => {
+    if (!sceneManagerRef.current) return;
+    if (!autoFocusSelection) return;
+    if (viewMode !== 'system') return;
+    if (!selectedObject?.data?.id) return;
+
+    sceneManagerRef.current.focusObjectById(selectedObject.data.id);
+  }, [selectedObject, autoFocusSelection, viewMode]);
 
   return (
     <div

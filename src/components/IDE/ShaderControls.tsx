@@ -10,6 +10,7 @@ import { useState } from 'react';
 import { HexColorPicker } from 'react-colorful';
 import type { Star, Planet, Moon } from '../../types/celestial-bodies';
 import { PlanetType } from '../../types/celestial-bodies';
+import { useSystemStore } from '../../store/system-store';
 
 // ============================================================================
 // Types
@@ -20,6 +21,11 @@ interface ShaderControlsProps {
   objectData: Star | Planet | Moon;
   onUniformChange: (uniformName: string, value: any) => void;
   onReset: () => void;
+  embedded?: boolean;
+}
+
+interface PlanetMotionControlsProps {
+  planet: Planet;
 }
 
 // ============================================================================
@@ -30,7 +36,8 @@ export function ShaderControls({
   objectType,
   objectData,
   onUniformChange,
-  onReset
+  onReset,
+  embedded = false,
 }: ShaderControlsProps) {
 
   // Star shader uniforms (temperature-based - default G-type values)
@@ -707,21 +714,34 @@ export function ShaderControls({
   // ============================================================================
 
   return (
-    <div style={styles.container}>
-      <div style={styles.header}>
-        <h3 style={styles.title}>
-          {objectType === 'star' && '⭐ Star Shader'}
-          {objectType === 'planet' && '🌍 Planet Shader'}
-          {objectType === 'moon' && '🌙 Moon Shader'}
-        </h3>
-        <p style={styles.subtitle}>Live Parameter Editing</p>
-      </div>
+    <div style={embedded ? styles.embeddedContainer : styles.container}>
+      {!embedded && (
+        <div style={styles.header}>
+          <h3 style={styles.title}>
+            {objectType === 'star' && '⭐ Star Shader'}
+            {objectType === 'planet' && '🌍 Planet Shader'}
+            {objectType === 'moon' && '🌙 Moon Shader'}
+          </h3>
+          <p style={styles.subtitle}>Live Parameter Editing</p>
+        </div>
+      )}
 
-      <div style={styles.scrollContainer}>
+      {embedded && (
+        <div style={styles.embeddedHeader}>
+          <div style={styles.embeddedTitle}>
+            {objectType === 'star' && 'Star Controls'}
+            {objectType === 'planet' && 'Planet Controls'}
+            {objectType === 'moon' && 'Moon Controls'}
+          </div>
+          <div style={styles.embeddedSubtitle}>Live Parameter Editing</div>
+        </div>
+      )}
+
+      <div style={embedded ? styles.embeddedContent : styles.scrollContainer}>
         {renderControls()}
       </div>
 
-      <div style={styles.actions}>
+      <div style={embedded ? styles.embeddedActions : styles.actions}>
         <button
           onClick={onReset}
           style={styles.resetButton}
@@ -731,6 +751,84 @@ export function ShaderControls({
           Reset to Procedural
         </button>
       </div>
+    </div>
+  );
+}
+
+export function PlanetMotionControls({ planet }: PlanetMotionControlsProps) {
+  const planetMotionOverride = useSystemStore((state) => state.planetMotionOverrides.get(planet.id));
+  const updatePlanetMotionOverride = useSystemStore((state) => state.updatePlanetMotionOverride);
+  const resetPlanetMotionOverrides = useSystemStore((state) => state.resetPlanetMotionOverrides);
+
+  const rotation = {
+    ...planet.generatedRotation,
+    ...planetMotionOverride,
+  };
+
+  const handleMotionChange = (
+    field: 'rotationPeriodHours' | 'axialTiltDegrees' | 'rotationDirection',
+    value: number | 'prograde' | 'retrograde'
+  ) => {
+    updatePlanetMotionOverride(planet.id, { [field]: value });
+  };
+
+  return (
+    <div style={styles.section}>
+      <h4 style={styles.sectionHeader}>Motion</h4>
+
+      <div style={styles.controlGroup}>
+        <label style={styles.label}>
+          Rotation Period
+          <span style={styles.value}>{Math.round(rotation.rotationPeriodHours)} h</span>
+        </label>
+        <input
+          type="number"
+          min="1"
+          max="9999"
+          step="1"
+          value={Math.round(rotation.rotationPeriodHours)}
+          onChange={(e) => handleMotionChange('rotationPeriodHours', Math.max(1, Math.min(9999, parseInt(e.target.value, 10) || 1)))}
+          style={styles.numberInput}
+        />
+      </div>
+
+      <div style={styles.controlGroup}>
+        <label style={styles.label}>
+          Axial Tilt
+          <span style={styles.value}>{rotation.axialTiltDegrees.toFixed(1)}°</span>
+        </label>
+        <input
+          type="range"
+          min="0"
+          max="180"
+          step="0.5"
+          value={rotation.axialTiltDegrees}
+          onChange={(e) => handleMotionChange('axialTiltDegrees', parseFloat(e.target.value))}
+          style={styles.slider}
+        />
+      </div>
+
+      <div style={styles.controlGroup}>
+        <label style={styles.label}>Rotation Direction</label>
+        <select
+          value={rotation.rotationDirection}
+          onChange={(e) => handleMotionChange('rotationDirection', e.target.value as 'prograde' | 'retrograde')}
+          style={styles.select}
+        >
+          <option value="prograde">Prograde</option>
+          <option value="retrograde">Retrograde</option>
+        </select>
+      </div>
+
+      <button
+        type="button"
+        className="hud-btn-secondary"
+        onClick={() => resetPlanetMotionOverrides(planet.id)}
+        style={styles.inlineResetButton}
+      >
+        <span className="mdi mdi-restore" style={styles.buttonIcon}></span>
+        Reset Motion
+      </button>
     </div>
   );
 }
@@ -788,10 +886,17 @@ function ColorControl({ label, value, onChange }: ColorControlProps) {
 
 const styles = {
   container: {
-    display: 'flex',
-    flexDirection: 'column',
-    height: '100%',
+    display: 'block',
+    height: 'auto',
+    minHeight: 0,
     backgroundColor: 'var(--bg-panel)',
+  } as React.CSSProperties,
+  embeddedContainer: {
+    display: 'block',
+    height: 'auto',
+    minHeight: 0,
+    background: 'transparent',
+    border: 'none',
   } as React.CSSProperties,
   header: {
     padding: '16px 20px',
@@ -808,10 +913,28 @@ const styles = {
     fontSize: '12px',
     color: 'var(--text-secondary)',
   } as React.CSSProperties,
+  embeddedHeader: {
+    padding: '0 20px 8px',
+  } as React.CSSProperties,
+  embeddedTitle: {
+    color: 'var(--text-primary)',
+    fontSize: '14px',
+    fontWeight: 600,
+    marginBottom: '4px',
+  } as React.CSSProperties,
+  embeddedSubtitle: {
+    fontSize: '11px',
+    color: 'var(--text-secondary)',
+    textTransform: 'uppercase',
+    letterSpacing: '1px',
+  } as React.CSSProperties,
   scrollContainer: {
-    flex: 1,
-    overflowY: 'auto',
+    overflowY: 'visible',
     padding: '16px 20px',
+  } as React.CSSProperties,
+  embeddedContent: {
+    overflowY: 'visible',
+    padding: '8px 20px 0',
   } as React.CSSProperties,
   section: {
     marginBottom: '24px',
@@ -856,6 +979,15 @@ const styles = {
     color: 'var(--text-primary)',
     fontSize: '11px',
     cursor: 'pointer',
+  } as React.CSSProperties,
+  numberInput: {
+    width: '100%',
+    padding: '6px 8px',
+    background: 'var(--bg-dark)',
+    border: '1px solid var(--border-light)',
+    borderRadius: '4px',
+    color: 'var(--text-primary)',
+    fontSize: '11px',
   } as React.CSSProperties,
   colorInputWrapper: {
     display: 'flex',
@@ -916,7 +1048,17 @@ const styles = {
     padding: '16px 20px',
     borderTop: '1px solid var(--border-light)',
   } as React.CSSProperties,
+  embeddedActions: {
+    padding: '8px 20px 0',
+  } as React.CSSProperties,
   resetButton: {
+    width: '100%',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '8px',
+  } as React.CSSProperties,
+  inlineResetButton: {
     width: '100%',
     display: 'flex',
     alignItems: 'center',

@@ -6,7 +6,7 @@
 **Current Reality:** Active post-Phase-1 integration and stabilization work
 **Current Priority Order:** A) Stabilization → B) Star System Customization + Orbit Systems → C) Galaxy Sandbox
 **Status:** ⚠️ **NOT currently production-ready on this branch**
-**Last Updated:** May 13, 2026 - Phase A stabilization planning added
+**Last Updated:** May 17, 2026 - Orbit drawer pass and Orbit V1 UI polish
 
 **Working Copy:** This file is synchronized from Obsidian vault
 **Source of Truth:** This file (code repo) - sync back to Obsidian weekly
@@ -61,6 +61,7 @@
 2. **B — Star System Depth**
    - star system customization
    - planetary orbit systems
+   - post-orbit celestial motion follow-up: axial spin + axial tilt/obliquity + IDE controls for per-body spin/tilt params
    - shader assignment/presentation policy
 3. **C — Galaxy Sandbox**
    - keep compatible and documented
@@ -102,9 +103,29 @@ For non-trivial work, use a measured pipeline:
 +
 +### Current Verified Reality
 +- `npm run build` passes
-+- `npm run verify` passes
-+- manual smoke test covered galaxy render, marker generation, marker visibility toggle, marker click into system, and return-to-galaxy flow
-+- current caveat: galaxy sandbox remains experimental even though the primary marker and inspector flows are now manually smoke-validated on this branch
++- `npm run verify` passes on stabilized mainline milestone
++- orbit worktree has repeatedly passed `npm run build` and `npm run check:determinism` during Orbit V1 implementation slices
++- manual smoke test on stabilized mainline covered galaxy render, marker generation, marker visibility toggle, marker click into system, and return-to-galaxy flow
++- current caveat: galaxy sandbox remains experimental even though the primary marker and inspector flows are now manually smoke-validated on the stabilized branch
++
++### Orbit V1 Progress Snapshot
++- [x] deterministic generated orbit data for planets and moons
++- [x] pure orbit solver and global simulation time foundation
++- [x] live orbital motion in system view
++- [x] orbit trail rendering from orbital elements
++- [x] orbit trail visibility toggle
++- [x] wider temporal control range with presets + logarithmic slider
++- [x] left-controls / right-inspector drawer split established
++- [x] drawer scrolling and accordion behavior repaired for single-scroll ownership
++- [x] orbit panel trimmed by removing low-value paused status pill
++- [x] selected-object control card simplified to name + type only
++- [x] deterministic planet spin + axial tilt runtime added
++- [x] planet rotation / tilt controls added in left drawer Controls layout
++- [x] motion controls moved to bottom of Controls stack near Orbit controls
++- [x] rotation-period input simplified to whole hours with 1-9999 range
++- [>] remaining Orbit V1 follow-up: expose orbit data/state in inspector surfaces
++- [x] fresh live smoke pass completed on drawer-based system-view UX
++- [x] removed dead orbit-panel remnants (`showOrbitPanel`, `toggleOrbitPanel`, `OrbitCommandPod`)
 
 ---
 
@@ -2271,15 +2292,16 @@ this.galaxyLayers.forEach((galaxy, index) => {
 - Files: 1 changed, 17 insertions, 15 deletions
 
 **Next Session Priorities:**
-1. **Multi-layer customization** - Per-layer marker controls (if needed)
-2. **Marker presets** - Save/load marker configurations
-3. **Additional UI polish** - Improve control panel layout, spacing, grouping
-4. **Performance testing** - Verify 60fps with 500+ markers
+1. **Inspector orbit exposure** - show generated orbital elements / current sampled orbit state in right-side data surfaces
+2. **Planet motion live pass** - visually validate spin speed, tilt readability, pause/reset behavior, and control feel in browser
+3. **Post-polish verification** - rerun `npm run build` and `npm run check:determinism` after any follow-up slice
+4. **Deferred motion planning** - decide whether next pass is moon spin/tilt or broader system customization controls
+5. **Optional UX copy pass** - rename motion labels only if live use still feels ambiguous
 
-**Goal:** Continue UI refinement and polish before additional feature work.
+**Goal:** Wrap Orbit V1 into a clean, verifiable handoff state before next feature expansion.
 
 ---
 
-**Last Updated:** November 17, 2025 - Session 7 Complete
-**Next Session:** Continued UI polish or feature work
+**Last Updated:** May 17, 2026 - Orbit smoke pass complete and legacy panel cleanup done
+**Next Session:** Inspector orbit visibility, wrap validation, and next-pass planning
 

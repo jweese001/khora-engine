@@ -6,6 +6,8 @@
  */
 
 import * as THREE from 'three';
+import type { OrbitalElements } from '../types/celestial-bodies';
+import { sampleOrbitPosition } from '../orbits/orbit-solver';
 
 // ============================================================================
 // Orbit Line Creation
@@ -65,13 +67,9 @@ export function createOrbitLine(
  * @param planetType - Type of planet ('Rocky', 'GasGiant', etc.)
  * @returns THREE.Line for the orbit
  */
-export function createTypedOrbitLine(
-  radius: number,
-  planetType: string
-): THREE.Line {
-  // Choose color based on planet type
+export function getOrbitLineStyle(planetType: string): { color: number; opacity: number } {
   let color: number;
-  let opacity: number = 0.3;
+  const opacity = 0.3;
 
   switch (planetType) {
     case 'Rocky':
@@ -90,7 +88,47 @@ export function createTypedOrbitLine(
       color = 0x444444; // Gray
   }
 
+  return { color, opacity };
+}
+
+export function createTypedOrbitLine(
+  radius: number,
+  planetType: string
+): THREE.Line {
+  const { color, opacity } = getOrbitLineStyle(planetType);
   return createOrbitLine(radius, 128, color, opacity);
+}
+
+export function createOrbitLineFromElements(
+  orbit: OrbitalElements,
+  orbitScale: number,
+  color: THREE.Color | number = 0x444444,
+  opacity: number = 0.3,
+  segments: number = 192
+): THREE.Line {
+  const points: THREE.Vector3[] = [];
+
+  for (let i = 0; i <= segments; i++) {
+    const orbitFraction = i / segments;
+    const sampleTimeDays = orbit.epoch + orbit.orbitalPeriod * orbitFraction;
+    const sample = sampleOrbitPosition(orbit, sampleTimeDays);
+
+    points.push(new THREE.Vector3(
+      sample.localPosition.x * orbitScale,
+      sample.localPosition.y * orbitScale,
+      sample.localPosition.z * orbitScale
+    ));
+  }
+
+  const geometry = new THREE.BufferGeometry().setFromPoints(points);
+  const material = new THREE.LineBasicMaterial({
+    color,
+    transparent: true,
+    opacity,
+    depthWrite: false,
+  });
+
+  return new THREE.Line(geometry, material);
 }
 
 /**

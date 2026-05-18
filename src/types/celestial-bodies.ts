@@ -63,6 +63,43 @@ export interface HabitableZone {
   outer: number; // AU - too cold beyond this
 }
 
+export type OrbitParentType = 'star' | 'planet';
+export type OrbitDirection = 'prograde' | 'retrograde';
+export type OrbitDistanceUnit = 'AU' | 'km';
+
+export interface OrbitalElements {
+  parentId: string;
+  parentType: OrbitParentType;
+  semiMajorAxis: number;
+  eccentricity: number;
+  inclination: number;
+  longitudeOfAscendingNode: number;
+  argumentOfPeriapsis: number;
+  meanAnomalyAtEpoch: number;
+  orbitalPeriod: number; // Earth days
+  epoch: number; // simulation days
+  rotationDirection: OrbitDirection;
+  distanceUnit: OrbitDistanceUnit;
+}
+
+export interface OrbitStateSample {
+  localPosition: {
+    x: number;
+    y: number;
+    z: number;
+  };
+  radius: number;
+  meanAnomaly: number;
+  trueAnomaly: number;
+}
+
+export interface RotationalElements {
+  rotationPeriodHours: number;
+  axialTiltDegrees: number;
+  rotationDirection: OrbitDirection;
+  spinPhaseDegrees: number;
+}
+
 /**
  * Planetary atmosphere composition and properties
  */
@@ -150,6 +187,8 @@ export interface Planet {
   // Orbital properties
   orbitDistance: number; // AU from star
   orbitalPeriod: number; // Earth days
+  generatedOrbit: OrbitalElements;
+  generatedRotation: RotationalElements;
   rotationPeriod: number; // Earth days
 
   // Physical properties
@@ -190,8 +229,9 @@ export interface Moon {
   name: string;
 
   // Orbital properties (relative to parent planet)
-  orbitDistance: number; // Kilometers from planet surface
+  orbitDistance: number; // Kilometers from planet center
   orbitalPeriod: number; // Earth days
+  generatedOrbit: OrbitalElements;
   rotationPeriod: number; // Earth days (often tidally locked)
 
   // Physical properties
