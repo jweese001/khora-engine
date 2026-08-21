@@ -7,6 +7,7 @@
  * - Shows all previous rolls for comparison
  */
 
+import { debugLog } from '../../utils/debug';
 import { useState } from 'react';
 import { DiceRollerScene } from './DiceRollerScene';
 import { useSystemStore } from '../../store/system-store';
@@ -37,7 +38,7 @@ export function DiceRollerFlow() {
   const canReroll = currentTry < maxTries;
 
   const handleStartRoll = () => {
-    console.log('[DiceRollerFlow] Starting roll, try:', currentTry);
+    debugLog('[DiceRollerFlow] Starting roll, try:', currentTry);
     setShowStartScreen(false);
     setIsRolling(true);
     setShowResult(false);
@@ -45,14 +46,14 @@ export function DiceRollerFlow() {
   };
 
   const handleRollComplete = (result: DiceRollResult) => {
-    console.log('[DiceRollerFlow] Roll complete, showing result screen', result);
+    debugLog('[DiceRollerFlow] Roll complete, showing result screen', result);
     setCurrentRoll(result);
     setShowResult(true);
     setIsRolling(false);
   };
 
   const handleAccept = (result: DiceRollResult) => {
-    console.log('[DiceRollerFlow] Accepted roll:', result);
+    debugLog('[DiceRollerFlow] Accepted roll:', result);
     setResourceBudget(result.finalBudget);
     setAppMode('architect');
   };
@@ -68,13 +69,13 @@ export function DiceRollerFlow() {
   };
 
   const handleAcceptPrevious = (result: DiceRollResult) => {
-    console.log('[DiceRollerFlow] Accepted previous roll:', result);
+    debugLog('[DiceRollerFlow] Accepted previous roll:', result);
     setResourceBudget(result.finalBudget);
     setAppMode('architect');
   };
 
   const handleBypass = () => {
-    console.log('[DiceRollerFlow] Bypassing dice roll with default budget');
+    debugLog('[DiceRollerFlow] Bypassing dice roll with default budget');
     setResourceBudget(20000); // Default budget for testing
     setAppMode('architect');
   };

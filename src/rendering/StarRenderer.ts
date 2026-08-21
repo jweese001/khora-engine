@@ -5,6 +5,7 @@
  * Uses custom star shader with emissive surface activity and bloom.
  */
 
+import { debugLog } from '../utils/debug';
 import * as THREE from 'three';
 import type { Star } from '../types/celestial-bodies';
 import starVertShader from '../shaders/star/star.vert';
@@ -130,7 +131,7 @@ export function createStarMesh(
   // Get temperature-based shader uniforms from spectral type mapping
   const uniforms = deriveStarUniforms(star);
 
-  console.log(`[StarRenderer] Temperature-based star ${star.name} (${star.spectralType}-type): highTemp=${uniforms.u_highTemp.value}K, lowTemp=${uniforms.u_lowTemp.value}K, sunspots=${uniforms.u_sunspotIntensity.value.toFixed(2)}`);
+  debugLog(`[StarRenderer] Temperature-based star ${star.name} (${star.spectralType}-type): highTemp=${uniforms.u_highTemp.value}K, lowTemp=${uniforms.u_lowTemp.value}K, sunspots=${uniforms.u_sunspotIntensity.value.toFixed(2)}`);
 
   // Create ShaderMaterial with enhanced star shader
   const material = new THREE.ShaderMaterial({

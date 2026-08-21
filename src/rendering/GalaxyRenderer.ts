@@ -5,6 +5,7 @@
  * Maps procedurally generated star systems to visual markers
  */
 
+import { debugLog } from '../utils/debug';
 import * as THREE from 'three';
 import type { Galaxy, GalaxySystemPlacement } from '../types/galaxy';
 import { isSpiralGalaxy, isEllipticalGalaxy, isIrregularGalaxy } from '../types/galaxy';
@@ -139,7 +140,7 @@ export class GalaxyRenderer {
     // Map star systems to visual markers
     this.renderSystemMarkers(galaxy.systems);
 
-    console.log(`[GalaxyRenderer] Rendered ${galaxy.systems.length} star systems with particle system`);
+    debugLog(`[GalaxyRenderer] Rendered ${galaxy.systems.length} star systems with particle system`);
   }
 
   /**
@@ -206,7 +207,7 @@ export class GalaxyRenderer {
       this.galaxyGroup.add(raycastObject);
     });
 
-    console.log(`[GalaxyRenderer] Created ${markers.length} system markers with raycasting`);
+    debugLog(`[GalaxyRenderer] Created ${markers.length} system markers with raycasting`);
   }
 
   /**
@@ -230,7 +231,7 @@ export class GalaxyRenderer {
    */
   public updateConfig(config: Partial<GalaxyConfig>): void {
     if (this.particleSystem) {
-      console.log('[GalaxyRenderer] Updating galaxy config:', config);
+      debugLog('[GalaxyRenderer] Updating galaxy config:', config);
       this.particleSystem.updateConfig(config);
     }
   }
@@ -253,7 +254,7 @@ export class GalaxyRenderer {
     });
     this.systemObjects = [];
 
-    console.log('[GalaxyRenderer] Cleared galaxy rendering');
+    debugLog('[GalaxyRenderer] Cleared galaxy rendering');
   }
 
   /**

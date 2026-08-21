@@ -5,6 +5,7 @@
  * Now using Khora Design System v1.0 with loading indicator
  */
 
+import { debugLog } from '../../utils/debug';
 import { useState } from 'react';
 import { useSystemStore } from '../../store/system-store';
 
@@ -28,7 +29,7 @@ export function GenerateButton() {
       seed = Math.floor(Math.random() * 1000000);
     }
 
-    console.log(`[GenerateButton] Generating system with seed: ${seed}`);
+    debugLog(`[GenerateButton] Generating system with seed: ${seed}`);
     generateSystem(seed);
 
     // Update input to show actual seed used

@@ -1,7 +1,7 @@
 # Khora Engine Project Cleanup Plan
 
-**Date:** 2026-08-06  
-**Status:** In Progress  
+**Date:** 2026-08-16
+**Status:** Complete
 **Priority:** Stabilization before additional feature work
 
 ## Goal
@@ -20,7 +20,7 @@ The cleanup must preserve deterministic generation, Orbit V1 behavior, galaxy ma
 
 ## Current Baseline
 
-Evidence gathered on 2026-08-06:
+Evidence gathered on 2026-08-16:
 
 - `npm run build` passes.
 - `npm run check:determinism` passes for seeds `1, 42, 777, 12345, 99999`.
@@ -111,7 +111,7 @@ Evidence gathered on 2026-08-06:
 
 ### 1.2 Add a minimal unit-test runner
 
-**Modify:** `package.json`, `package-lock.json`  
+**Modify:** `package.json`, `package-lock.json`
 **Create:** focused tests under `src/**/__tests__/` or `tests/`
 
 **Recommended runner:** Vitest, because the project already uses Vite and TypeScript.
@@ -218,7 +218,7 @@ Do not begin this phase until the verification path is credible and lint is gree
 
 ### 3.1 Extract shared disposal utilities
 
-**Create:** `src/rendering/dispose.ts`  
+**Create:** `src/rendering/dispose.ts`
 **Modify:** scene and rendering classes with duplicate disposal logic.
 
 **Responsibilities:**
@@ -231,7 +231,7 @@ Do not begin this phase until the verification path is credible and lint is gree
 
 ### 3.2 Extract camera transitions and focus behavior
 
-**Create:** `src/components/Canvas/CameraController.ts`  
+**Create:** `src/components/Canvas/CameraController.ts`
 **Modify:** `ThreeSceneManager.tsx`
 
 **Move:**
@@ -244,7 +244,7 @@ Do not begin this phase until the verification path is credible and lint is gree
 
 ### 3.3 Extract orbital runtime bindings
 
-**Create:** `src/components/Canvas/OrbitRuntimeManager.ts`  
+**Create:** `src/components/Canvas/OrbitRuntimeManager.ts`
 **Modify:** `ThreeSceneManager.tsx`
 
 **Move:**
@@ -257,7 +257,7 @@ Do not begin this phase until the verification path is credible and lint is gree
 
 ### 3.4 Separate selection/raycast interpretation
 
-**Create:** `src/components/Canvas/SelectionController.ts`  
+**Create:** `src/components/Canvas/SelectionController.ts`
 **Modify:** `ThreeSceneManager.tsx`, `CanvasContainer.tsx`
 
 **Move:**
@@ -371,10 +371,10 @@ Actions:
 
 ### 6.3 Organize historical documents without losing history
 
-**Create:** `docs/archive/README.md`  
-**Move later, in a dedicated docs-only commit:** historical `SESSION-*`, milestone reports, debug HTML/JS, and superseded plans.
+**Created:** `docs/archive/README.md`
+**Moved:** historical `SESSION-*`, milestone reports, debug HTML/JS, and superseded plans into classified archive directories.
 
-First create an index classifying documents as:
+The index classifies documents as:
 - current reference
 - active plan/spec
 - historical milestone
@@ -407,10 +407,10 @@ Update architecture/file maps to include:
 8. **CLEAN-08 (complete):** Extract camera controller
 9. **CLEAN-09 (complete):** Extract orbit runtime manager
 10. **CLEAN-10 (complete):** Extract selection controller
-11. **CLEAN-11:** Logging/debug cleanup
-12. **CLEAN-12:** Lazy-load modes and Monaco inspector tabs
-13. **CLEAN-13:** README/TASKS/current-doc refresh
-14. **CLEAN-14:** Repository hygiene and historical-doc index/move
+11. **CLEAN-11 (complete):** Logging/debug cleanup
+12. **CLEAN-12 (complete):** Lazy-load modes and Monaco inspector tabs
+13. **CLEAN-13 (complete):** README/TASKS/current-doc refresh
+14. **CLEAN-14 (complete):** Repository hygiene and historical-doc index/move
 
 Tickets 1–6 are the critical trust-restoration path. Tickets 7–10 reduce future regression risk. Tickets 11–14 improve operational quality and navigation.
 
@@ -458,6 +458,8 @@ Cleanup is complete enough to resume feature work when:
 - README, TASKS, and verification docs describe the current branch accurately.
 - `git status` is predictable because local artifacts and shared project tooling have an explicit policy.
 
-## Recommended Next Action
+## Completion Note
 
-Begin with **CLEAN-01** only. It repairs the false confidence in the current verification baseline and is the prerequisite for safely executing every later cleanup ticket.
+CLEAN-01 through CLEAN-14 are complete. The repository now has a trustworthy automated gate, focused controller boundaries, opt-in diagnostics, real code splitting, current documentation, and an explicit local-artifact/archive policy.
+
+The next product-facing task is the remaining Orbit V1 follow-up: expose effective orbit state more clearly in inspector surfaces. A real hardware WebGL smoke pass remains required before making visual-performance claims.

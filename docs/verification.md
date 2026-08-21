@@ -1,6 +1,6 @@
 # Verification Harness
 
-This is the minimal repeatable verification surface for Phase A stabilization work.
+This is the repeatable verification surface for current stabilization and feature work.
 
 ## Default baseline
 
@@ -80,28 +80,29 @@ Expected:
 - normalized `generateSystem(seed)` output matches for the same seed
 - top-level `generatedAt` is excluded from equality
 
-## Minimal manual smoke checklist
+## Manual WebGL smoke checklist
 
-Only use this when a ticket changes UI, rendering, or scene interaction behavior.
+Use this when a change affects UI, rendering, scene lifecycle, loading boundaries, or interaction behavior.
 
-1. Start the app:
-   ```bash
-   npm run dev
-   ```
-2. Open the local app in a browser.
-3. Generate a system.
-4. Confirm a system renders without an obvious blank scene failure.
-5. Confirm there are no immediate console errors during generation.
+1. Start the app with `npm run dev` and open `/khora-engine/` in a WebGL-capable browser.
+2. Confirm the landing page appears before Architect code is requested.
+3. Enter Create mode and complete or bypass the dice flow.
+4. Generate a system and verify star, planets, moons, orbit paths, controls, and inspector shell render.
+5. Select a planet and moon; verify selection, optional auto-focus, data tab, and shader tab.
+6. Resume, pause, change speed, reset time, and toggle orbit trails.
+7. Generate a galaxy; verify layers and markers appear and marker controls respond.
+8. Select a marker to enter its system, then return to the galaxy.
+9. Regenerate once in each view and check for blank scenes, stale objects, or immediate console errors.
+10. Confirm Data/Shaders tabs load on first use rather than at landing-page startup.
 
-This is intentionally small. Do not expand it into a broader QA matrix from this file.
+A headless environment without a WebGL context cannot certify this checklist.
 
 ## What this harness does not cover
 
 - full acceptance testing
-- CI/CD setup
-- new test frameworks
+- deployment-provider correctness beyond a successful production build
 - broad browser automation
 - performance certification
 - feature-specific visual validation beyond the minimal smoke checklist above
 
-For historical/manual acceptance flows, see `PHASE-1-ACCEPTANCE-TESTS.md`.
+For the historical Phase 1 acceptance record, see [`archive/milestones/PHASE-1-ACCEPTANCE-TESTS.md`](archive/milestones/PHASE-1-ACCEPTANCE-TESTS.md).

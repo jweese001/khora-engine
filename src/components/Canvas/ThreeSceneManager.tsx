@@ -7,6 +7,7 @@
  * Phase 1: Basic scene with starfield, orbit controls, and system rendering.
  */
 
+import { debugLog } from '../../utils/debug';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
@@ -176,7 +177,7 @@ export class ThreeSceneManager {
     // Start animation loop
     this.animate();
 
-    console.log('[ThreeSceneManager] Initialized successfully');
+    debugLog('[ThreeSceneManager] Initialized successfully');
   }
 
   // ==========================================================================
@@ -270,7 +271,7 @@ export class ThreeSceneManager {
     );
     composer.addPass(bloomPass);
 
-    console.log('[ThreeSceneManager] Post-processing composer initialized with bloom');
+    debugLog('[ThreeSceneManager] Post-processing composer initialized with bloom');
 
     return composer;
   }
@@ -340,7 +341,7 @@ export class ThreeSceneManager {
     stars.name = 'starfield';
     this.scene.add(stars);
 
-    console.log('[ThreeSceneManager] Starfield added (5000 stars, range: 3000-8000 units)');
+    debugLog('[ThreeSceneManager] Starfield added (5000 stars, range: 3000-8000 units)');
   }
 
   // ==========================================================================
@@ -382,7 +383,7 @@ export class ThreeSceneManager {
    * Zooms camera to the selected star system and renders it
    */
   private transitionToSystem(system: StarSystem): void {
-    console.log('[ThreeSceneManager] Transitioning to system:', system.star?.name || 'Unknown');
+    debugLog('[ThreeSceneManager] Transitioning to system:', system.star?.name || 'Unknown');
 
     // Find the index of this system in the current galaxy
     const store = useSystemStore.getState();
@@ -400,12 +401,12 @@ export class ThreeSceneManager {
 
     if (systemIndex !== -1) {
       // System found in galaxy - use store's focusSystem method
-      console.log(`[ThreeSceneManager] Found system at index ${systemIndex}, using store focus...`);
+      debugLog(`[ThreeSceneManager] Found system at index ${systemIndex}, using store focus...`);
       store.focusSystem(systemIndex);
       // The store will trigger renderSystem() via the subscription
     } else {
       // System NOT in galaxy (custom marker) - render directly
-      console.log('[ThreeSceneManager] System not in galaxy (custom marker), rendering directly...');
+      debugLog('[ThreeSceneManager] System not in galaxy (custom marker), rendering directly...');
 
       // Switch to system view mode first (this will hide galaxy layers)
       this.switchToSystemView();
@@ -446,7 +447,7 @@ export class ThreeSceneManager {
         'World Positions'
       ];
 
-      console.log(`[DEBUG] Mode ${this.debugMode}: ${debugModeNames[this.debugMode]}`);
+      debugLog(`[DEBUG] Mode ${this.debugMode}: ${debugModeNames[this.debugMode]}`);
 
       // Update all planet materials with new debug mode
       this.scene.traverse((object) => {
@@ -589,7 +590,7 @@ export class ThreeSceneManager {
    * @param system - StarSystem to render
    */
   public renderSystem(system: StarSystem): void {
-    console.log('[ThreeSceneManager] Rendering system:', system.name);
+    debugLog('[ThreeSceneManager] Rendering system:', system.name);
 
     // Clear existing system objects (also clears material registry)
     this.clearSystemObjects();
@@ -664,14 +665,14 @@ export class ThreeSceneManager {
         const moonInfo = planet1.moons.length > 0 || planet2.moons.length > 0
           ? ` (accounting for ${planet1.moons.length + planet2.moons.length} moons)`
           : '';
-        console.log(`[ThreeSceneManager] Planet spacing constraint: ${planet1.name} & ${planet2.name} require scale ${pairMinScale.toFixed(1)}${moonInfo}`);
+        debugLog(`[ThreeSceneManager] Planet spacing constraint: ${planet1.name} & ${planet2.name} require scale ${pairMinScale.toFixed(1)}${moonInfo}`);
       }
     }
 
     // Use larger of minimum required or default comfortable scale
     const ORBIT_SCALE = Math.max(minOrbitScale, 50.0);
 
-    console.log(`[ThreeSceneManager] Orbit scaling: ${ORBIT_SCALE.toFixed(1)} units/AU (star clearance: ${(innermostPlanet.orbitDistance * ORBIT_SCALE - innermostPlanetVisualRadius - STAR_VISUAL_RADIUS).toFixed(1)} units)`);
+    debugLog(`[ThreeSceneManager] Orbit scaling: ${ORBIT_SCALE.toFixed(1)} units/AU (star clearance: ${(innermostPlanet.orbitDistance * ORBIT_SCALE - innermostPlanetVisualRadius - STAR_VISUAL_RADIUS).toFixed(1)} units)`);
 
     // Moon orbits now calculated from planet visual size (no scale constant needed)
 
@@ -683,7 +684,7 @@ export class ThreeSceneManager {
     // Register star material for Phase 3 live editing
     if (starMesh.material) {
       this.materialRegistry.set(system.star.id, starMesh.material as THREE.Material);
-      console.log(`[ThreeSceneManager] Registered star material: ${system.star.id}`);
+      debugLog(`[ThreeSceneManager] Registered star material: ${system.star.id}`);
     }
     this.objectRegistry.set(system.star.id, starMesh);
 
@@ -692,7 +693,7 @@ export class ThreeSceneManager {
     starLights.name = 'star-lights';
     this.scene.add(starLights);
 
-    console.log(`[ThreeSceneManager] Added star: ${system.star.name} (scaling: ${sceneUnitsPerSolarRadius.toFixed(2)} units/solar radius)`);
+    debugLog(`[ThreeSceneManager] Added star: ${system.star.name} (scaling: ${sceneUnitsPerSolarRadius.toFixed(2)} units/solar radius)`);
 
     const orbitingPlanets: PlanetOrbitBinding[] = [];
     const orbitTrailObjects: THREE.Object3D[] = [];
@@ -756,7 +757,7 @@ export class ThreeSceneManager {
 
       // Register planet LOD for Phase 3 live editing
       this.materialRegistry.set(planet.id, planetLOD);
-      console.log(`[ThreeSceneManager] Registered planet LOD: ${planet.id}`);
+      debugLog(`[ThreeSceneManager] Registered planet LOD: ${planet.id}`);
 
       // Calculate planet visual radius using the helper function (ensures consistency)
       const planetVisualRadius = calcPlanetVisualRadius(planet);
@@ -821,7 +822,7 @@ export class ThreeSceneManager {
         // Register moon LOD for Phase 3 live editing
         this.materialRegistry.set(moon.id, moonLOD);
         this.objectRegistry.set(moon.id, moonLOD.object);
-        console.log(`[ThreeSceneManager] Registered moon LOD: ${moon.id}`);
+        debugLog(`[ThreeSceneManager] Registered moon LOD: ${moon.id}`);
 
         moonBindings.push({
           moon,
@@ -845,7 +846,7 @@ export class ThreeSceneManager {
       // Add the complete planet system to scene
       this.scene.add(planetSystemGroup);
 
-      console.log(
+      debugLog(
         `[ThreeSceneManager] Added planet ${planetIndex + 1}/${system.star.planets.length}: ` +
         `${planet.name} with ${planet.moons.length} moons (LOD enabled)`
       );
@@ -864,7 +865,7 @@ export class ThreeSceneManager {
     // Adjust camera to view the whole system
     this.focusOnSystem(system, ORBIT_SCALE);
 
-    console.log('[ThreeSceneManager] System rendered successfully');
+    debugLog('[ThreeSceneManager] System rendered successfully');
   }
 
   /**
@@ -887,7 +888,7 @@ export class ThreeSceneManager {
    * @param galaxy - Galaxy to render
    */
   public renderGalaxy(galaxy: Galaxy): void {
-    console.log('[ThreeSceneManager] Rendering galaxy:', galaxy.name, `(${galaxy.systemCount} systems)`);
+    debugLog('[ThreeSceneManager] Rendering galaxy:', galaxy.name, `(${galaxy.systemCount} systems)`);
 
     // Capture previous view mode before switching (for camera positioning logic)
     const wasInSystemView = this.currentViewMode === 'system';
@@ -895,7 +896,7 @@ export class ThreeSceneManager {
     // Reset custom markers flag if this is a new galaxy generation (not returning from system)
     if (!wasInSystemView) {
       this.customMarkersSet = false;
-      console.log('[ThreeSceneManager] New galaxy - reset customMarkersSet flag');
+      debugLog('[ThreeSceneManager] New galaxy - reset customMarkersSet flag');
     }
 
     // Clear existing system objects (keep starfield)
@@ -914,7 +915,7 @@ export class ThreeSceneManager {
     if (!this.galaxyLayersInitialized) {
       this.initializeGalaxyLayers();
       this.galaxyLayersInitialized = true;
-      console.log('[ThreeSceneManager] Galaxy layers initialized on first generation');
+      debugLog('[ThreeSceneManager] Galaxy layers initialized on first generation');
     }
 
     // Visual layers are automatically updated via store subscription
@@ -962,15 +963,15 @@ export class ThreeSceneManager {
         }));
 
         this.galaxyLayers[0].addSystemMarkers(markers);
-        console.log(`[ThreeSceneManager] Added ${markers.length} auto-generated star system markers to Layer 0`);
-        console.log(`[ThreeSceneManager] Scale factors: XZ=${scaleXZ.toFixed(3)} (${proceduralRadius.toFixed(1)} LY → ${visualSize} units), Y=${scaleY.toFixed(3)} (${proceduralThickness.toFixed(1)} LY → ${visualThickness} units)`);
-        console.log(`[ThreeSceneManager] Sample marker positions (scaled):`, markers.slice(0, 3).map(m => ({
+        debugLog(`[ThreeSceneManager] Added ${markers.length} auto-generated star system markers to Layer 0`);
+        debugLog(`[ThreeSceneManager] Scale factors: XZ=${scaleXZ.toFixed(3)} (${proceduralRadius.toFixed(1)} LY → ${visualSize} units), Y=${scaleY.toFixed(3)} (${proceduralThickness.toFixed(1)} LY → ${visualThickness} units)`);
+        debugLog(`[ThreeSceneManager] Sample marker positions (scaled):`, markers.slice(0, 3).map(m => ({
           x: m.position.x.toFixed(2),
           y: m.position.y.toFixed(2),
           z: m.position.z.toFixed(2)
         })));
       } else {
-        console.log(`[ThreeSceneManager] Skipping auto-generated markers (custom markers are set)`);
+        debugLog(`[ThreeSceneManager] Skipping auto-generated markers (custom markers are set)`);
       }
     }
 
@@ -984,14 +985,14 @@ export class ThreeSceneManager {
       if (galaxy) {
         const layerGroup = galaxy.getGroup();
         layerGroup.visible = layers[index].visible;
-        console.log(`[ThreeSceneManager] Restored Layer ${index} visibility:`, layers[index].visible);
+        debugLog(`[ThreeSceneManager] Restored Layer ${index} visibility:`, layers[index].visible);
       }
     });
 
     // Position camera to view entire galaxy
     this.focusOnGalaxy(galaxy, wasInSystemView);
 
-    console.log('[ThreeSceneManager] Galaxy view activated (multi-layer rendering)');
+    debugLog('[ThreeSceneManager] Galaxy view activated (multi-layer rendering)');
   }
 
   // ==========================================================================
@@ -1037,7 +1038,7 @@ export class ThreeSceneManager {
       }
     );
 
-    console.log('[ThreeSceneManager] Multi-layer galaxy system initialized (3 layers)');
+    debugLog('[ThreeSceneManager] Multi-layer galaxy system initialized (3 layers)');
   }
 
   /**
@@ -1054,7 +1055,7 @@ export class ThreeSceneManager {
       // Update visibility
       if (galaxyGroup.visible !== layer.visible) {
         galaxyGroup.visible = layer.visible;
-        console.log(`[ThreeSceneManager] Layer ${index} visibility:`, layer.visible);
+        debugLog(`[ThreeSceneManager] Layer ${index} visibility:`, layer.visible);
       }
 
       // Update configuration (galaxy will regenerate particles)
@@ -1075,7 +1076,7 @@ export class ThreeSceneManager {
     }
 
     galaxy.updateConfig(config);
-    console.log(`[ThreeSceneManager] Updated galaxy layer ${layerId}:`, config);
+    debugLog(`[ThreeSceneManager] Updated galaxy layer ${layerId}:`, config);
   }
 
   /**
@@ -1092,7 +1093,7 @@ export class ThreeSceneManager {
 
     const galaxyGroup = galaxy.getGroup();
     galaxyGroup.visible = visible;
-    console.log(`[ThreeSceneManager] Galaxy layer ${layerId} visibility:`, visible);
+    debugLog(`[ThreeSceneManager] Galaxy layer ${layerId} visibility:`, visible);
   }
 
   /**
@@ -1118,7 +1119,7 @@ export class ThreeSceneManager {
       }
     });
 
-    console.log('[ThreeSceneManager] Multi-layer galaxy system disposed');
+    debugLog('[ThreeSceneManager] Multi-layer galaxy system disposed');
   }
 
   // ============================================================================
@@ -1160,7 +1161,7 @@ export class ThreeSceneManager {
    * Switch back from galaxy view to system view
    */
   public switchToSystemView(): void {
-    console.log('[ThreeSceneManager] Switching to system view');
+    debugLog('[ThreeSceneManager] Switching to system view');
 
     // Clear old galaxy rendering (Phase 2 legacy)
     const galaxyGroup = this.scene.getObjectByName('GalaxyGroup');
@@ -1174,7 +1175,7 @@ export class ThreeSceneManager {
       if (layer) {
         const layerGroup = layer.getGroup();
         layerGroup.visible = false;
-        console.log(`[ThreeSceneManager] Hid galaxy layer ${index}`);
+        debugLog(`[ThreeSceneManager] Hid galaxy layer ${index}`);
       }
     });
 
@@ -1184,7 +1185,7 @@ export class ThreeSceneManager {
     // Switch view mode
     this.currentViewMode = 'system';
 
-    console.log('[ThreeSceneManager] Switched to system view');
+    debugLog('[ThreeSceneManager] Switched to system view');
   }
 
   /**
@@ -1215,7 +1216,7 @@ export class ThreeSceneManager {
     this.objectRegistry.clear();
     this.orbitRuntimeManager.reset();
 
-    console.log('[ThreeSceneManager] System objects cleared');
+    debugLog('[ThreeSceneManager] System objects cleared');
   }
 
   // ==========================================================================
@@ -1280,7 +1281,7 @@ export class ThreeSceneManager {
     if (entry instanceof CelestialBodyLOD) {
       // LOD object - update all LOD level materials
       entry.updateUniform(uniformName, value);
-      console.log(`[ThreeSceneManager] Updated LOD uniform ${uniformName} for ${objectId}`);
+      debugLog(`[ThreeSceneManager] Updated LOD uniform ${uniformName} for ${objectId}`);
     } else if (entry instanceof THREE.Material) {
       // Direct material (star) - update single material
       if (entry instanceof THREE.ShaderMaterial) {
@@ -1298,7 +1299,7 @@ export class ThreeSceneManager {
           entry.uniforms[uniformName].value = value;
         }
         entry.uniformsNeedUpdate = true;
-        console.log(`[ThreeSceneManager] Updated material uniform ${uniformName} for ${objectId}`);
+        debugLog(`[ThreeSceneManager] Updated material uniform ${uniformName} for ${objectId}`);
       }
     }
   }
@@ -1307,7 +1308,7 @@ export class ThreeSceneManager {
    * Dispose of scene manager - clean up resources
    */
   public dispose(): void {
-    console.log('[ThreeSceneManager] Disposing...');
+    debugLog('[ThreeSceneManager] Disposing...');
 
     // Stop animation loop
     if (this.animationFrameId !== null) {
@@ -1348,6 +1349,6 @@ export class ThreeSceneManager {
     // Remove canvas from DOM
     this.container.removeChild(this.renderer.domElement);
 
-    console.log('[ThreeSceneManager] Disposed successfully');
+    debugLog('[ThreeSceneManager] Disposed successfully');
   }
 }

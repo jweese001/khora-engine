@@ -13,6 +13,7 @@
  * Future: Include atmosphere/clouds in LOD system
  */
 
+import { debugLog } from '../utils/debug';
 import * as THREE from 'three';
 import type { Planet, Moon } from '../types/celestial-bodies';
 import type { UniformOverrideValue } from '../types/scene';
@@ -170,7 +171,7 @@ export class CelestialBodyLOD {
       this.object.addLevel(mesh, level.distance);
 
       // Debug logging
-      console.log(
+      debugLog(
         `[CelestialBodyLOD] Added ${level.name} detail level ` +
         `(subdivision=${level.subdivision}, distance≥${level.distance}) ` +
         `for ${bodyType}: ${bodyData.name}`
@@ -339,7 +340,7 @@ export class CelestialBodyLOD {
       }
     });
 
-    console.log(`[CelestialBodyLOD] Updated uniform ${uniformName} for ${this.bodyData.name}`);
+    debugLog(`[CelestialBodyLOD] Updated uniform ${uniformName} for ${this.bodyData.name}`);
   }
 }
 
@@ -356,7 +357,7 @@ export class CelestialBodyLOD {
  * @param camera - Camera for determining current levels
  */
 export function logLODStats(scene: THREE.Scene, camera: THREE.Camera): void {
-  console.log('[LOD Stats] Analyzing scene...');
+  debugLog('[LOD Stats] Analyzing scene...');
 
   let totalBodies = 0;
   let totalTrianglesHigh = 0;
@@ -398,7 +399,7 @@ export function logLODStats(scene: THREE.Scene, camera: THREE.Camera): void {
       totalTrianglesCurrent += currentTris;
       totalTrianglesHigh += highTris;
 
-      console.log(
+      debugLog(
         `  ${bodyType}: ${bodyData.name} - ` +
         `Level ${currentLevelIndex} (${LOD_LEVELS[currentLevelIndex].name}), ` +
         `${Math.floor(currentTris)} triangles, ` +
@@ -409,11 +410,11 @@ export function logLODStats(scene: THREE.Scene, camera: THREE.Camera): void {
 
   const reduction = ((1 - totalTrianglesCurrent / totalTrianglesHigh) * 100).toFixed(1);
 
-  console.log('[LOD Stats] Summary:');
-  console.log(`  Bodies with LOD: ${totalBodies}`);
-  console.log(`  Current triangles: ${Math.floor(totalTrianglesCurrent)}`);
-  console.log(`  High detail triangles: ${Math.floor(totalTrianglesHigh)}`);
-  console.log(`  Triangle reduction: ${reduction}%`);
+  debugLog('[LOD Stats] Summary:');
+  debugLog(`  Bodies with LOD: ${totalBodies}`);
+  debugLog(`  Current triangles: ${Math.floor(totalTrianglesCurrent)}`);
+  debugLog(`  High detail triangles: ${Math.floor(totalTrianglesHigh)}`);
+  debugLog(`  Triangle reduction: ${reduction}%`);
 }
 
 /**

@@ -1,3 +1,4 @@
+import { debugLog } from '../../utils/debug';
 import * as THREE from 'three';
 import { generateSystem } from '../../generation/system-generator';
 import { GalaxyParticleSystem } from '../../rendering/GalaxyParticleSystem';
@@ -60,15 +61,15 @@ export class MarkerSystemManager {
   }
 
   public generateMarkersForActiveLayer(): void {
-    console.log('═══════════════════════════════════════');
-    console.log('[MarkerSystemManager] generateMarkersForActiveLayer() called');
+    debugLog('═══════════════════════════════════════');
+    debugLog('[MarkerSystemManager] generateMarkersForActiveLayer() called');
 
     try {
       const galaxyStore = useGalaxyStore.getState();
       const { activeLayerId, markers, layers } = galaxyStore;
 
-      console.log('[MarkerSystemManager] Active layer ID:', activeLayerId, 'Marker count requested:', markers.count);
-      console.log('[MarkerSystemManager] Galaxy layers:', this.getGalaxyLayers());
+      debugLog('[MarkerSystemManager] Active layer ID:', activeLayerId, 'Marker count requested:', markers.count);
+      debugLog('[MarkerSystemManager] Galaxy layers:', this.getGalaxyLayers());
 
       const activeGalaxy = this.getActiveGalaxyLayer();
       if (!activeGalaxy) {
@@ -77,7 +78,7 @@ export class MarkerSystemManager {
         return;
       }
 
-      console.log('[MarkerSystemManager] ✓ Active galaxy found:', activeGalaxy);
+      debugLog('[MarkerSystemManager] ✓ Active galaxy found:', activeGalaxy);
 
       const systemStore = useSystemStore.getState();
       const proceduralGalaxy = systemStore.currentGalaxy;
@@ -87,18 +88,18 @@ export class MarkerSystemManager {
         return;
       }
 
-      console.log('[MarkerSystemManager] Using procedural galaxy:', proceduralGalaxy.name);
-      console.log('[MarkerSystemManager] Procedural galaxy type:', proceduralGalaxy.type);
+      debugLog('[MarkerSystemManager] Using procedural galaxy:', proceduralGalaxy.name);
+      debugLog('[MarkerSystemManager] Procedural galaxy type:', proceduralGalaxy.type);
 
       const activeLayer = layers[activeLayerId];
       const visualConfig = activeLayer.config;
 
-      console.log('[MarkerSystemManager] Active visual layer type:', visualConfig.type);
-      console.log('[MarkerSystemManager] Generating', markers.count, 'markers using active visual layer config');
+      debugLog('[MarkerSystemManager] Active visual layer type:', visualConfig.type);
+      debugLog('[MarkerSystemManager] Generating', markers.count, 'markers using active visual layer config');
 
       const seed = Math.floor(Math.random() * 1000000);
       const rng = new SeededRandom(seed);
-      console.log('[MarkerSystemManager] Using seed:', seed);
+      debugLog('[MarkerSystemManager] Using seed:', seed);
 
       const positions = generateMarkerPositions(markers.count, visualConfig);
       const systemPlacements: GalaxySystemPlacement[] = [];
@@ -118,14 +119,14 @@ export class MarkerSystemManager {
         });
       });
 
-      console.log('[MarkerSystemManager] Generated', systemPlacements.length, 'systems with visual-matched positions');
+      debugLog('[MarkerSystemManager] Generated', systemPlacements.length, 'systems with visual-matched positions');
 
       if (systemPlacements.length === 0) {
         console.warn('[MarkerSystemManager] ⚠️ No systems generated');
         return;
       }
 
-      console.log('[MarkerSystemManager] Creating markers from visual positions (no scaling needed)');
+      debugLog('[MarkerSystemManager] Creating markers from visual positions (no scaling needed)');
 
       const markerColor = new THREE.Color(markers.color || '#fff3b3');
       const systemMarkers = systemPlacements.map((placement) => ({
@@ -139,7 +140,7 @@ export class MarkerSystemManager {
         data: placement.system
       }));
 
-      console.log('[MarkerSystemManager] Adding markers to galaxy layer...');
+      debugLog('[MarkerSystemManager] Adding markers to galaxy layer...');
       activeGalaxy.addSystemMarkers(systemMarkers, markers.pulseFrequency || 1.0);
 
       if (proceduralGalaxy) {
@@ -150,28 +151,28 @@ export class MarkerSystemManager {
         proceduralGalaxy.systems.push(...systemPlacements);
         proceduralGalaxy.systemCount = proceduralGalaxy.systems.length;
 
-        console.log(`[MarkerSystemManager] Added ${systemPlacements.length} systems to galaxy (original: ${proceduralGalaxy.originalSystemCount}, total: ${proceduralGalaxy.systemCount})`);
+        debugLog(`[MarkerSystemManager] Added ${systemPlacements.length} systems to galaxy (original: ${proceduralGalaxy.originalSystemCount}, total: ${proceduralGalaxy.systemCount})`);
       }
 
       this.setCustomMarkersSet(true);
 
-      console.log(`[MarkerSystemManager] ✅ Generated ${systemMarkers.length} star systems with markers for galaxy layer`);
-      console.log('═══════════════════════════════════════');
+      debugLog(`[MarkerSystemManager] ✅ Generated ${systemMarkers.length} star systems with markers for galaxy layer`);
+      debugLog('═══════════════════════════════════════');
     } catch (error) {
       console.error('[MarkerSystemManager] ❌ Error generating markers:', error);
       console.error('[MarkerSystemManager] Stack trace:', (error as Error).stack);
-      console.log('═══════════════════════════════════════');
+      debugLog('═══════════════════════════════════════');
     }
   }
 
   public clearMarkers(): void {
-    console.log('[MarkerSystemManager] clearMarkers() called');
+    debugLog('[MarkerSystemManager] clearMarkers() called');
 
     const primaryGalaxyLayer = this.getGalaxyLayers()[0];
     if (primaryGalaxyLayer) {
       primaryGalaxyLayer.addSystemMarkers([]);
       this.setCustomMarkersSet(false);
-      console.log('[MarkerSystemManager] Galaxy layer markers cleared');
+      debugLog('[MarkerSystemManager] Galaxy layer markers cleared');
     } else {
       console.warn('[MarkerSystemManager] No galaxy layer to clear markers from');
     }
@@ -184,12 +185,12 @@ export class MarkerSystemManager {
       currentGalaxy.systems = currentGalaxy.systems.slice(0, currentGalaxy.originalSystemCount);
       currentGalaxy.systemCount = currentGalaxy.systems.length;
 
-      console.log(`[MarkerSystemManager] Removed ${removedCount} custom systems, back to ${currentGalaxy.systemCount} original systems`);
+      debugLog(`[MarkerSystemManager] Removed ${removedCount} custom systems, back to ${currentGalaxy.systemCount} original systems`);
     }
   }
 
   public toggleMarkersVisibility(): void {
-    console.log('[MarkerSystemManager] toggleMarkersVisibility() called');
+    debugLog('[MarkerSystemManager] toggleMarkersVisibility() called');
 
     const primaryGalaxyLayer = this.getGalaxyLayers()[0];
     if (primaryGalaxyLayer) {
@@ -198,7 +199,7 @@ export class MarkerSystemManager {
 
       if (markerPoints) {
         markerPoints.visible = !markerPoints.visible;
-        console.log('[MarkerSystemManager] Galaxy layer markers visibility toggled to:', markerPoints.visible);
+        debugLog('[MarkerSystemManager] Galaxy layer markers visibility toggled to:', markerPoints.visible);
       } else {
         console.warn('[MarkerSystemManager] No galaxy layer markers found to toggle');
       }
@@ -216,7 +217,7 @@ export class MarkerSystemManager {
     this.clearIndependentMarkers();
     this.scene.remove(this.markerGroup);
 
-    console.log('[MarkerSystemManager] Independent marker system disposed');
+    debugLog('[MarkerSystemManager] Independent marker system disposed');
   }
 
   private subscribeToMarkerStore(): void {
@@ -332,7 +333,7 @@ export class MarkerSystemManager {
     this.markerPoints.rotation.x = -Math.PI / 5;
     this.markerGroup.add(this.markerPoints);
 
-    console.log(`[MarkerSystemManager] Created ${positions.length} marker points`);
+    debugLog(`[MarkerSystemManager] Created ${positions.length} marker points`);
 
     return this.markerPoints;
   }

@@ -1,3 +1,4 @@
+import { debugLog } from '../../utils/debug';
 import * as THREE from 'three';
 import type { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import type { StarSystem } from '../../types/celestial-bodies';
@@ -148,15 +149,15 @@ export class CameraController {
   }
 
   public printDebugPosition(): void {
-    console.log('═══════════════════════════════════════');
-    console.log('CAMERA POSITION:');
-    console.log(
+    debugLog('═══════════════════════════════════════');
+    debugLog('CAMERA POSITION:');
+    debugLog(
       `  position: new THREE.Vector3(${this.camera.position.x.toFixed(2)}, ${this.camera.position.y.toFixed(2)}, ${this.camera.position.z.toFixed(2)})`,
     );
-    console.log(
+    debugLog(
       `  lookAt: new THREE.Vector3(${this.controls.target.x.toFixed(2)}, ${this.controls.target.y.toFixed(2)}, ${this.controls.target.z.toFixed(2)})`,
     );
-    console.log('═══════════════════════════════════════');
+    debugLog('═══════════════════════════════════════');
   }
 
   public dispose(): void {

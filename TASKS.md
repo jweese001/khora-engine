@@ -4,7 +4,7 @@
 **Project:** Khora Engine
 **Historical Milestone:** Phase 1 Genesis Engine completed
 **Current Reality:** Active post-Phase-1 integration and stabilization work
-**Current Priority Order:** A) Stabilization → B) Star System Customization + Orbit Systems → C) Galaxy Sandbox
+**Current Priority Order:** A) Operational cleanup → B) Star System Customization + Orbit Systems → C) Galaxy Sandbox
 **Status:** ⚠️ **NOT currently production-ready on this branch**
 **Last Updated:** August 6, 2026 - Cleanup program started; physics verification repaired
 
@@ -42,12 +42,12 @@
 
 ---
 
-## Current Program: Phase A Stabilization
+## Current Program: Post-Stabilization Cleanup
 
-**Intent:** Restore repo trust and make Khora safe for measured, verifiable feature delivery with `pi-dev-team`.
+**Intent:** Finish operational cleanup after restoring build, test, type, and scene-boundary trust; then resume measured star-system feature delivery.
 
 **Primary reference docs:**
-- `docs/plans/2026-08-06-project-cleanup-plan.md`
+- `docs/plans/2026-08-16-project-cleanup-plan.md`
 - `docs/specs/2026-05-13-phase-a-stabilization-plan.md`
 - `docs/specs/2026-05-13-phase-a-execution-tickets.md`
 - `docs/specs/2026-05-13-orbit-systems-design-spec.md`
@@ -88,15 +88,22 @@
   - reduced the baseline from 37 errors / 2 warnings to a clean `npm run lint`
   - repaired DiceRoller callback/ref lifecycle warnings without rebuilding the scene on callback changes
 - [x] **CLEAN-06 (P1):** Promote lint and tests into the default verification gate
-  - `npm run verify` now runs lint, 20 focused tests, build, physics validation, and determinism
+  - `npm run verify` now runs lint, 33 focused tests, build, physics validation, and determinism
 - [x] **CLEAN-07–10 (P2):** Incremental scene containment
   - [x] CLEAN-07: shared disposal utilities with duplicate-resource protection and focused tests
   - [x] CLEAN-08: camera controller extraction with transition, focus, framing, interruption, and lifecycle tests
   - [x] CLEAN-09: orbit runtime manager extraction with absolute-time position, spin/tilt override, trail visibility, and reset tests
   - [x] CLEAN-10: selection controller extraction with celestial selection, galaxy marker, disabled-marker, fallback, and listener lifecycle coverage
-- [ ] **CLEAN-11–14 (P2):** Logging, bundle splitting, docs alignment, and repository hygiene
+- [x] **CLEAN-11–14 (P2):** Operational cleanup
+  - [x] CLEAN-11: routine diagnostics are opt-in and production store exposure is disabled
+  - [x] CLEAN-12: mode and Monaco inspector code is lazy-loaded; initial JS reduced from ~950 KB to ~401 KB
+  - [x] CLEAN-13: README, PLANNING, TASKS, and verification guidance aligned with current runtime
+  - [x] CLEAN-14: local artifacts have explicit ignore policy; concept assets moved out of public build; historical documents indexed under `docs/archive/`
 
 ### Historical Phase A Ticket Queue
+
+> Historical session, milestone, design, and diagnostic files referenced below now live under [`docs/archive/`](docs/archive/README.md). Original filenames are preserved in the historical record.
+
 - [x] **A-01 (P0):** Build Repair — Scene/Store Contract Mismatches
 - [x] **A-02 (P0):** Build Repair — Galaxy Type Contract
 - [x] **A-03 (P0):** Build Repair — Galaxy Rendering Typing and Disposal

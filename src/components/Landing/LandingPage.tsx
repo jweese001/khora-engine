@@ -5,6 +5,7 @@
  * First screen user sees when launching the application
  */
 
+import { debugLog } from '../../utils/debug';
 import { ModeCard } from './ModeCard';
 import { useSystemStore } from '../../store/system-store';
 
@@ -12,12 +13,12 @@ export function LandingPage() {
   const setAppMode = useSystemStore((state) => state.setAppMode);
 
   const handleCreateMode = () => {
-    console.log('[LandingPage] User selected Create (Architect) mode - starting dice roll');
+    debugLog('[LandingPage] User selected Create (Architect) mode - starting dice roll');
     setAppMode('diceRoll');
   };
 
   const handleExploreMode = () => {
-    console.log('[LandingPage] User selected Explore (Astronaut) mode');
+    debugLog('[LandingPage] User selected Explore (Astronaut) mode');
     setAppMode('explorer');
   };
 

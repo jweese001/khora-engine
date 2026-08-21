@@ -4,6 +4,7 @@
  * JSON viewer for inspecting celestial body data using Monaco Editor.
  */
 
+import { debugLog } from '../../utils/debug';
 import Editor from '@monaco-editor/react';
 import { useSystemStore } from '../../store/system-store';
 
@@ -55,7 +56,7 @@ export function DataInspector() {
   const handleCopy = () => {
     navigator.clipboard.writeText(jsonData).then(
       () => {
-        console.log('[DataInspector] Data copied to clipboard');
+        debugLog('[DataInspector] Data copied to clipboard');
         // Optional: Show toast notification
       },
       (err) => {

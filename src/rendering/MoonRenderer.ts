@@ -5,6 +5,7 @@
  * Moons use the rocky planet shader with no water/atmosphere.
  */
 
+import { debugLog } from '../utils/debug';
 import * as THREE from 'three';
 import type { Moon, Planet } from '../types/celestial-bodies';
 import { deriveMoonUniforms } from './shaderUniforms';
@@ -78,7 +79,7 @@ export function createMoonMesh(
 
   const visualRadius = planetVisualRadius * moonScale;
 
-  console.log(`[MoonRenderer] ${moon.name} around ${parentPlanet.name}: moonRadius=${moon.radius.toFixed(0)}km, planetVisual=${planetVisualRadius.toFixed(2)}, moonVisual=${visualRadius.toFixed(2)} (${(moonScale*100).toFixed(0)}% of planet)`);
+  debugLog(`[MoonRenderer] ${moon.name} around ${parentPlanet.name}: moonRadius=${moon.radius.toFixed(0)}km, planetVisual=${planetVisualRadius.toFixed(2)}, moonVisual=${visualRadius.toFixed(2)} (${(moonScale*100).toFixed(0)}% of planet)`);
 
   // Create geometry
   const geometry = new THREE.IcosahedronGeometry(visualRadius, subdivision);
@@ -86,7 +87,7 @@ export function createMoonMesh(
   // Get shader uniforms for moon (uses rocky planet shader with no water/atmosphere)
   const uniforms = deriveMoonUniforms(moon, parentPlanet, camera);
 
-  console.log(`[MoonRenderer] Shader-based moon ${moon.name} around ${parentPlanet.name}: temp=${moon.surfaceTemperature.toFixed(0)}K, baseColor=(${uniforms.u_baseColor.value.x.toFixed(2)}, ${uniforms.u_baseColor.value.y.toFixed(2)}, ${uniforms.u_baseColor.value.z.toFixed(2)})`);
+  debugLog(`[MoonRenderer] Shader-based moon ${moon.name} around ${parentPlanet.name}: temp=${moon.surfaceTemperature.toFixed(0)}K, baseColor=(${uniforms.u_baseColor.value.x.toFixed(2)}, ${uniforms.u_baseColor.value.y.toFixed(2)}, ${uniforms.u_baseColor.value.z.toFixed(2)})`);
 
   // Create shader material using rocky planet shader
   const material = new THREE.ShaderMaterial({

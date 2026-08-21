@@ -12,6 +12,7 @@
  * - User gets 4 tries: 3 optional, 4th mandatory
  */
 
+import { debugLog } from '../../utils/debug';
 import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
@@ -86,7 +87,7 @@ export function DiceRollerScene({ onRollComplete }: DiceRollerSceneProps) {
   useEffect(() => {
     if (!containerRef.current) return;
 
-    console.log('[DiceRollerScene] Initializing...');
+    debugLog('[DiceRollerScene] Initializing...');
 
     // CRITICAL: Clear container completely to prevent double-canvas from React StrictMode
     const container = containerRef.current;
@@ -117,7 +118,7 @@ export function DiceRollerScene({ onRollComplete }: DiceRollerSceneProps) {
     camera.updateProjectionMatrix();
     cameraRef.current = camera;
 
-    console.log('[DiceRollerScene] Camera positioned at:', camera.position);
+    debugLog('[DiceRollerScene] Camera positioned at:', camera.position);
 
     // Setup renderer
     const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -253,7 +254,7 @@ export function DiceRollerScene({ onRollComplete }: DiceRollerSceneProps) {
         finalBudget
       };
 
-      console.log('[DiceRollerScene] Final budget calculated:', finalBudget);
+      debugLog('[DiceRollerScene] Final budget calculated:', finalBudget);
 
       // Report result after short delay for dramatic effect
       setTimeout(() => {
@@ -331,7 +332,7 @@ export function DiceRollerScene({ onRollComplete }: DiceRollerSceneProps) {
               if (!landedCubesRef.current.has(shape.userData.index)) {
                 const cubeValue = shape.userData.index + 1;
                 landedCubesRef.current.add(shape.userData.index);
-                console.log('[DiceRollerScene] Cube landed:', cubeValue, 'Total:', landedCubesRef.current.size);
+                debugLog('[DiceRollerScene] Cube landed:', cubeValue, 'Total:', landedCubesRef.current.size);
 
                 // Update state for UI
                 setLandedCubes(new Set(landedCubesRef.current));
@@ -360,7 +361,7 @@ export function DiceRollerScene({ onRollComplete }: DiceRollerSceneProps) {
 
       // Check if roll complete (use ref for immediate access, not stale state)
       if (allSolidCubesLanded && !rollCompleteRef.current && landedCubesRef.current.size === 16) {
-        console.log('[DiceRollerScene] Roll complete! All 16 cubes landed.');
+        debugLog('[DiceRollerScene] Roll complete! All 16 cubes landed.');
         rollCompleteRef.current = true;
         calculateAndReportResult();
       }
@@ -401,12 +402,12 @@ export function DiceRollerScene({ onRollComplete }: DiceRollerSceneProps) {
     window.addEventListener('resize', handleResize);
 
     // Start animation
-    console.log('[DiceRollerScene] Starting animation loop...');
+    debugLog('[DiceRollerScene] Starting animation loop...');
     animate();
 
     // Cleanup
     return () => {
-      console.log('[DiceRollerScene] Cleaning up...');
+      debugLog('[DiceRollerScene] Cleaning up...');
       window.removeEventListener('resize', handleResize);
       if (animationIdRef.current) {
         cancelAnimationFrame(animationIdRef.current);

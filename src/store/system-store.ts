@@ -6,6 +6,7 @@
  * Phase 2: Galaxy generation with multiple star systems.
  */
 
+import { debugLog } from '../utils/debug';
 import { create } from 'zustand';
 import type * as THREE from 'three';
 import type { RotationalElements, StarSystem } from '../types/celestial-bodies';
@@ -298,12 +299,12 @@ export const useSystemStore = create<SystemStore>((set, get) => ({
   // Actions
 
   setAppMode: (mode: AppMode) => {
-    console.log(`[Store] Switching app mode to: ${mode}`);
+    debugLog(`[Store] Switching app mode to: ${mode}`);
     set({ appMode: mode });
   },
 
   setResourceBudget: (budget: number) => {
-    console.log(`[Store] Setting resource budget: ${budget} points`);
+    debugLog(`[Store] Setting resource budget: ${budget} points`);
     set({ resourceBudget: budget });
   },
 
@@ -318,7 +319,7 @@ export const useSystemStore = create<SystemStore>((set, get) => ({
     });
 
     try {
-      console.log(`[Store] Generating system with seed: ${seed}`);
+      debugLog(`[Store] Generating system with seed: ${seed}`);
 
       const system = buildSystem(seed);
 
@@ -327,12 +328,14 @@ export const useSystemStore = create<SystemStore>((set, get) => ({
         currentSystem: system,
         isGenerating: false,
         generationError: null,
+        viewMode: 'system',
+        focusedSystemIndex: null,
         simulationTimeDays: 0,
         initialSimulationTimeDays: 0,
         isTimePaused: true
       });
 
-      console.log('[Store] System generation complete:', system);
+      debugLog('[Store] System generation complete:', system);
     } catch (error) {
       console.error('[Store] System generation failed:', error);
       set({
@@ -343,7 +346,7 @@ export const useSystemStore = create<SystemStore>((set, get) => ({
   },
 
   clearSystem: () => {
-    console.log('[Store] Clearing current system');
+    debugLog('[Store] Clearing current system');
     set({
       currentSystem: null,
       selectedObject: null,
@@ -355,25 +358,25 @@ export const useSystemStore = create<SystemStore>((set, get) => ({
 
   toggleIDE: () => {
     const { ideOpen } = get();
-    console.log(`[Store] Toggling IDE: ${ideOpen} -> ${!ideOpen}`);
+    debugLog(`[Store] Toggling IDE: ${ideOpen} -> ${!ideOpen}`);
     set({ ideOpen: !ideOpen });
   },
 
   openIDE: () => {
-    console.log('[Store] Opening IDE');
+    debugLog('[Store] Opening IDE');
     set({ ideOpen: true });
   },
 
   closeIDE: () => {
-    console.log('[Store] Closing IDE');
+    debugLog('[Store] Closing IDE');
     set({ ideOpen: false });
   },
 
   selectObject: (selection: SelectedObject | null) => {
     if (selection) {
-      console.log(`[Store] Selected ${selection.type}:`, selection.data);
+      debugLog(`[Store] Selected ${selection.type}:`, selection.data);
     } else {
-      console.log('[Store] Deselected object');
+      debugLog('[Store] Deselected object');
     }
     set({ selectedObject: selection });
 
@@ -385,12 +388,12 @@ export const useSystemStore = create<SystemStore>((set, get) => ({
   },
 
   setScene: (scene: THREE.Scene | null) => {
-    console.log('[Store] Scene reference updated');
+    debugLog('[Store] Scene reference updated');
     set({ scene });
   },
 
   setCamera: (camera: THREE.Camera | null) => {
-    console.log('[Store] Camera reference updated');
+    debugLog('[Store] Camera reference updated');
     set({ camera });
   },
 
@@ -407,13 +410,13 @@ export const useSystemStore = create<SystemStore>((set, get) => ({
     });
 
     try {
-      console.log(`[Store] Generating galaxy with seed: ${seed}, ${systemCount} systems`);
+      debugLog(`[Store] Generating galaxy with seed: ${seed}, ${systemCount} systems`);
 
       // Generate the galaxy
       const galaxy = generateGalaxy({ seed, systemCount });
 
-      console.log(`[Store] Generated galaxy: ${galaxy.name} (${galaxy.type})`);
-      console.log(`[Store] ${galaxy.systems.length} star systems generated`);
+      debugLog(`[Store] Generated galaxy: ${galaxy.name} (${galaxy.type})`);
+      debugLog(`[Store] ${galaxy.systems.length} star systems generated`);
 
       // Update state
       set({
@@ -429,7 +432,7 @@ export const useSystemStore = create<SystemStore>((set, get) => ({
       // All 3 layers become visible as variations of the generated galaxy
       useGalaxyStore.getState().initializeFromProceduralGalaxy(galaxy);
 
-      console.log('[Store] Galaxy generation complete:', galaxy);
+      debugLog('[Store] Galaxy generation complete:', galaxy);
     } catch (error) {
       console.error('[Store] Galaxy generation failed:', error);
       set({
@@ -440,7 +443,7 @@ export const useSystemStore = create<SystemStore>((set, get) => ({
   },
 
   clearGalaxy: () => {
-    console.log('[Store] Clearing current galaxy');
+    debugLog('[Store] Clearing current galaxy');
     set({
       currentGalaxy: null,
       viewMode: 'system',
@@ -456,7 +459,7 @@ export const useSystemStore = create<SystemStore>((set, get) => ({
   },
 
   setViewMode: (mode: ViewMode) => {
-    console.log(`[Store] Switching view mode to: ${mode}`);
+    debugLog(`[Store] Switching view mode to: ${mode}`);
     set({ viewMode: mode });
 
     // If switching to system view and no current system, unfocus any galaxy system
@@ -475,7 +478,7 @@ export const useSystemStore = create<SystemStore>((set, get) => ({
       }
 
       const system = currentGalaxy.systems[index].system;
-      console.log(`[Store] Focusing on system ${index}: ${system.name}`);
+      debugLog(`[Store] Focusing on system ${index}: ${system.name}`);
 
       set({
         focusedSystemIndex: index,
@@ -486,7 +489,7 @@ export const useSystemStore = create<SystemStore>((set, get) => ({
         selectedObject: null // Deselect object when switching systems
       });
     } else {
-      console.log('[Store] Unfocusing system, returning to galaxy view');
+      debugLog('[Store] Unfocusing system, returning to galaxy view');
       set({
         focusedSystemIndex: null,
         currentSystem: null,
@@ -500,9 +503,9 @@ export const useSystemStore = create<SystemStore>((set, get) => ({
 
   setCurrentSystem: (system: StarSystem | null) => {
     if (system) {
-      console.log(`[Store] Setting current system: ${system.name}`);
+      debugLog(`[Store] Setting current system: ${system.name}`);
     } else {
-      console.log('[Store] Clearing current system');
+      debugLog('[Store] Clearing current system');
     }
     set({ currentSystem: system });
   },
@@ -566,7 +569,7 @@ export const useSystemStore = create<SystemStore>((set, get) => ({
     const newOverrides = new Map(uniformOverrides);
     newOverrides.set(objectId, objectOverrides);
 
-    console.log(`[Store] Updated uniform ${uniformName} for ${objectId}:`, value);
+    debugLog(`[Store] Updated uniform ${uniformName} for ${objectId}:`, value);
 
     set({ uniformOverrides: newOverrides });
   },
@@ -578,7 +581,7 @@ export const useSystemStore = create<SystemStore>((set, get) => ({
     const newOverrides = new Map(uniformOverrides);
     newOverrides.delete(objectId);
 
-    console.log(`[Store] Reset uniforms for ${objectId}`);
+    debugLog(`[Store] Reset uniforms for ${objectId}`);
 
     set({ uniformOverrides: newOverrides });
   },

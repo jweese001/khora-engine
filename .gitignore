@@ -25,3 +25,14 @@ dist-ssr
 
 # Claude Code settings
 .claude/
+
+# Local workspace and agent runtime state
+.obsidian/
+.pi-subagents/
+tmp/
+context.md
+progress.md
+.cmux.yaml
+
+# Unreferenced local concept exports (preserved outside the public build)
+local-assets/

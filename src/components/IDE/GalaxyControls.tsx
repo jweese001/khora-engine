@@ -8,6 +8,7 @@
  * Controls now operate on the active layer from galaxy-store.
  */
 
+import { debugLog } from '../../utils/debug';
 import { HexColorPicker } from 'react-colorful';
 import { useState, useEffect, useRef } from 'react';
 import type { Galaxy } from '../../types/galaxy';
@@ -440,8 +441,8 @@ export function GalaxyControls({ galaxy }: GalaxyControlsProps) {
           <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
             <button
               onClick={() => {
-                console.log('[GalaxyControls] Add Markers button clicked');
-                console.log('[GalaxyControls] sceneManagerRef:', sceneManagerRef);
+                debugLog('[GalaxyControls] Add Markers button clicked');
+                debugLog('[GalaxyControls] sceneManagerRef:', sceneManagerRef);
                 if (sceneManagerRef) {
                   sceneManagerRef.generateMarkersForActiveLayer();
                 } else {

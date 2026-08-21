@@ -5,6 +5,7 @@
  * Manages lifecycle: mount, update, unmount.
  */
 
+import { debugLog } from '../../utils/debug';
 import { useEffect, useRef } from 'react';
 import { ThreeSceneManager } from './ThreeSceneManager';
 import { useSystemStore } from '../../store/system-store';
@@ -31,7 +32,7 @@ export function CanvasContainer() {
   useEffect(() => {
     if (!containerRef.current) return;
 
-    console.log('[CanvasContainer] Initializing ThreeSceneManager');
+    debugLog('[CanvasContainer] Initializing ThreeSceneManager');
 
     // Get store actions inside effect to avoid re-render issues
     const { setScene, setCamera, selectObject, focusSystem } = useSystemStore.getState();
@@ -44,7 +45,7 @@ export function CanvasContainer() {
         if (userData) {
           // Handle galaxy system selection
           if (userData.type === 'galaxy-system') {
-            console.log('[CanvasContainer] Galaxy system selected, focusing on system:', userData.systemIndex);
+            debugLog('[CanvasContainer] Galaxy system selected, focusing on system:', userData.systemIndex);
             focusSystem(userData.systemIndex);
             return;
           }
@@ -72,7 +73,7 @@ export function CanvasContainer() {
 
     // Cleanup on unmount
     return () => {
-      console.log('[CanvasContainer] Disposing ThreeSceneManager');
+      debugLog('[CanvasContainer] Disposing ThreeSceneManager');
       resizeObserver.disconnect();
       if (sceneManagerRef.current) {
         sceneManagerRef.current.dispose();
@@ -97,13 +98,13 @@ export function CanvasContainer() {
     if (viewMode !== 'system') return; // Only render in system view mode
 
     if (currentSystem) {
-      console.log('[CanvasContainer] Rendering system:', currentSystem.name);
+      debugLog('[CanvasContainer] Rendering system:', currentSystem.name);
       // Switch to system view (removes galaxy objects)
       sceneManagerRef.current.switchToSystemView();
       // Then render the system
       sceneManagerRef.current.renderSystem(currentSystem);
     } else {
-      console.log('[CanvasContainer] No system to render');
+      debugLog('[CanvasContainer] No system to render');
     }
   }, [currentSystem, viewMode]);
 
@@ -113,10 +114,10 @@ export function CanvasContainer() {
     if (viewMode !== 'galaxy') return; // Only render in galaxy view mode
 
     if (currentGalaxy) {
-      console.log('[CanvasContainer] Rendering galaxy:', currentGalaxy.name);
+      debugLog('[CanvasContainer] Rendering galaxy:', currentGalaxy.name);
       sceneManagerRef.current.renderGalaxy(currentGalaxy);
     } else {
-      console.log('[CanvasContainer] No galaxy to render');
+      debugLog('[CanvasContainer] No galaxy to render');
     }
   }, [currentGalaxy, viewMode]);
 
@@ -125,7 +126,7 @@ export function CanvasContainer() {
     if (!sceneManagerRef.current) return;
     if (uniformOverrides.size === 0) return;
 
-    console.log('[CanvasContainer] Applying uniform overrides:', uniformOverrides.size, 'objects');
+    debugLog('[CanvasContainer] Applying uniform overrides:', uniformOverrides.size, 'objects');
 
     // Iterate through all objects with overrides
     uniformOverrides.forEach((overrides, objectId) => {

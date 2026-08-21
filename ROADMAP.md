@@ -364,4 +364,4 @@ A procedurally generated universe where users can:
 
 *For detailed technical planning, see PLANNING.md*
 *For task tracking, see TASKS.md*
-*For session notes, see SESSION-*.md files*
+*For historical session notes, see [`docs/archive/sessions/`](docs/archive/sessions/).*

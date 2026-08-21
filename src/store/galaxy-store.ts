@@ -11,6 +11,7 @@
  * - Independent marker system for explorable star systems
  */
 
+import { debugLog } from '../utils/debug';
 import { create } from 'zustand';
 import * as THREE from 'three';
 import type { GalaxyConfig } from '../rendering/GalaxyParticleSystem';
@@ -521,7 +522,7 @@ export const useGalaxyStore = create<GalaxyStoreState>((set, get) => ({
       return { layers: updatedLayers };
     });
 
-    console.log(`[GalaxyStore] Visual galaxy layers initialized from ${galaxyType} galaxy (Layer 1 visible, Layers 2-3 available)`);
+    debugLog(`[GalaxyStore] Visual galaxy layers initialized from ${galaxyType} galaxy (Layer 1 visible, Layers 2-3 available)`);
   },
 
   deactivateGalaxyLayers: () => {
@@ -531,7 +532,7 @@ export const useGalaxyStore = create<GalaxyStoreState>((set, get) => ({
         ({ ...layer, visible: false })
       ) as [GalaxyLayer, GalaxyLayer, GalaxyLayer],
     }));
-    console.log('[GalaxyStore] Visual galaxy layers deactivated (all hidden)');
+    debugLog('[GalaxyStore] Visual galaxy layers deactivated (all hidden)');
   },
 
   // ============================================================================

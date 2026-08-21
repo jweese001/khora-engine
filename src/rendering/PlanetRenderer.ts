@@ -6,6 +6,7 @@
  * Future phases: Procedural shaders, terrain, clouds.
  */
 
+import { debugLog } from '../utils/debug';
 import * as THREE from 'three';
 import type { Planet } from '../types/celestial-bodies';
 import { PlanetType } from '../types/celestial-bodies';
@@ -124,7 +125,7 @@ export function createPlanetMesh(
     side: THREE.FrontSide,
   });
 
-  console.log(`[PlanetRenderer] Created ${planet.type} planet ${planet.name} (mode=${uniforms.u_planetMode.value}): water=${uniforms.u_waterCoverage.value.toFixed(2)}, clouds=${uniforms.u_cloudCoverage.value.toFixed(2)}, biomes=${uniforms.u_biomeVariation.value.toFixed(2)}`);
+  debugLog(`[PlanetRenderer] Created ${planet.type} planet ${planet.name} (mode=${uniforms.u_planetMode.value}): water=${uniforms.u_waterCoverage.value.toFixed(2)}, clouds=${uniforms.u_cloudCoverage.value.toFixed(2)}, biomes=${uniforms.u_biomeVariation.value.toFixed(2)}`);
 
   // Create mesh
   const mesh = new THREE.Mesh(geometry, material);

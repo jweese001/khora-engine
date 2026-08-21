@@ -6,6 +6,7 @@
  * Phase 2: Added galaxy generation
  */
 
+import { debugLog } from '../../utils/debug';
 import { useState } from 'react';
 import { GenerateButton } from './GenerateButton';
 import { useSystemStore } from '../../store/system-store';
@@ -28,7 +29,7 @@ export function UIControls() {
   const showBackButton = currentGalaxy !== null && viewMode === 'system';
 
   const handleBackToGalaxy = () => {
-    console.log('[UIControls] Returning to galaxy view');
+    debugLog('[UIControls] Returning to galaxy view');
     focusSystem(null); // Unfocus system, return to galaxy view
   };
 
@@ -48,7 +49,7 @@ export function UIControls() {
 
     const count = parseInt(systemCount, 10) || 16;
 
-    console.log(`[UIControls] Generating galaxy with seed: ${seed}, ${count} systems`);
+    debugLog(`[UIControls] Generating galaxy with seed: ${seed}, ${count} systems`);
     generateGalaxy(seed, count);
 
     // Update input to show actual seed used

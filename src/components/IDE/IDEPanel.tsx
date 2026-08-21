@@ -5,12 +5,13 @@
  * Contains tabs for Scene Tree, Data Inspector, and Shader Viewer.
  */
 
-import { useState } from 'react';
+import { lazy, Suspense, useState } from 'react';
 import { useSystemStore } from '../../store/system-store';
 import { SceneTree } from './SceneTree';
-import { DataInspector } from './DataInspector';
-import { ShaderViewer } from './ShaderViewer';
 import { LODDebugPanel } from './LODDebugPanel';
+
+const DataInspector = lazy(() => import('./DataInspector').then((module) => ({ default: module.DataInspector })));
+const ShaderViewer = lazy(() => import('./ShaderViewer').then((module) => ({ default: module.ShaderViewer })));
 
 type TabType = 'scene' | 'data' | 'shaders';
 
@@ -89,8 +90,11 @@ export function IDEPanel() {
           {/* Tab content */}
           <div style={styles.content}>
             {activeTab === 'scene' && <SceneTabContent />}
-            {activeTab === 'data' && <DataInspector />}
-            {activeTab === 'shaders' && <ShaderViewer />}
+            {activeTab !== 'scene' && (
+              <Suspense fallback={<InspectorLoading />}>
+                {activeTab === 'data' ? <DataInspector /> : <ShaderViewer />}
+              </Suspense>
+            )}
           </div>
         </>
       )}
@@ -102,6 +106,15 @@ export function IDEPanel() {
  * Wrapper component for Controls that connects to store
  * Shows GalaxyControls when in galaxy view, ShaderControls when object is selected
  */
+function InspectorLoading() {
+  return (
+    <div style={styles.inspectorLoading} role="status" aria-live="polite">
+      <span className="mdi mdi-loading mdi-spin"></span>
+      <span>Loading inspector</span>
+    </div>
+  );
+}
+
 function SceneTabContent() {
   const autoFocusSelection = useSystemStore((state) => state.autoFocusSelection);
   const toggleAutoFocusSelection = useSystemStore((state) => state.toggleAutoFocusSelection);
@@ -132,6 +145,17 @@ function SceneTabContent() {
 
 // Inline styles
 const styles = {
+  inspectorLoading: {
+    height: '100%',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '12px',
+    color: 'rgba(255, 255, 255, 0.55)',
+    fontSize: '12px',
+    letterSpacing: '0.08em',
+    textTransform: 'uppercase',
+  } as React.CSSProperties,
   container: {
     position: 'fixed',
     top: 0,

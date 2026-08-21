@@ -1,262 +1,188 @@
-# Khora Engine - Development Planning Guide
-*Claude Code Session Reference - Generated from PRD v2.0*
+# Khora Engine Technical Planning Reference
 
-**Working Copy:** This file is synchronized from Obsidian vault
-**Source of Truth:** `/Projects/Khora Engine/PLANNING.md` in Obsidian
-**Last Synced:** October 29, 2025
+**Updated:** August 2026
+**Current program:** post-Orbit-V1 stabilization and cleanup
 
----
+This file is the compact technical reference for the active repository. Detailed historical notes are indexed in [`docs/archive/README.md`](docs/archive/README.md); active plans and specifications live under `docs/plans/` and `docs/specs/`.
 
-## Project Overview
+## Product direction
 
-**Goal:** Build Phase 1 Genesis Engine - a procedurally generated star system visualization with an integrated development environment.
+Khora is an interactive procedural universe sandbox. Current development priorities are:
 
-**Timeline:** 12 weeks
-**Current Phase:** Phase 1 - Single Star System MVP
-**Tech Stack:** React + TypeScript + Three.js + Zustand + Vite
+1. Keep the deterministic star-system core trustworthy.
+2. Deepen star-system authoring, motion, and inspection.
+3. Maintain the galaxy sandbox as an experimental secondary surface.
+4. Defer Explorer gameplay until the creation and inspection foundations are stable.
 
----
+## Stack
 
-## Quick Reference
+- React 19 and TypeScript 5.9
+- Three.js 0.180
+- Zustand 5
+- Vite 7
+- Vitest 4
+- Monaco Editor
+- Material Design Icons
 
-### Core Data Types Location
-`src/types/celestial-bodies.ts`
+## Application modes
 
-Key types: `SpectralType`, `EvolutionaryStage`, `PlanetType` (const objects, not enums)
-Key interfaces: `Star`, `Planet`, `Moon`, `StarSystem`, `Atmosphere`, `ResourceMap`
+`src/components/App.tsx` selects a surface from `system-store.appMode`:
 
-**Note:** Using const objects with `as const` instead of enums for TypeScript `erasableSyntaxOnly` compatibility.
+- `landing` — mode selection
+- `diceRoll` — resource-budget flow
+- `architect` — Three.js canvas, controls, and inspector
+- `explorer` — future-mode placeholder
 
-### State Management
-**Store:** `src/store/system-store.ts` (Zustand)
+Dice and Architect surfaces are lazy-loaded. Monaco-backed inspector tabs are loaded only when selected.
 
-Primary state:
-- `currentSystem: StarSystem | null`
-- `selectedObject: { type, data, material } | null`
-- `ideOpen: boolean`
-- `scene: THREE.Scene | null`
+## Canonical data flow
 
-### Scene Management
-**Manager:** `src/components/Canvas/ThreeSceneManager.tsx`
-
-Key responsibilities:
-- Scene initialization (camera, renderer, controls)
-- Post-processing (bloom for stars)
-- System rendering coordination
-- Object selection via raycasting
-
----
-
-## File Structure
-
-```
-src/
-├── components/
-│   ├── App.tsx                      # Root component
-│   ├── UI/
-│   │   ├── GenerateButton.tsx       # System generation trigger
-│   │   ├── DataPanel.tsx            # Selected object properties
-│   │   └── UIControls.tsx           # Top-level UI controls
-│   ├── Canvas/
-│   │   ├── CanvasContainer.tsx      # Three.js mount point
-│   │   └── ThreeSceneManager.tsx    # Scene orchestration
-│   └── IDE/
-│       ├── IDEPanel.tsx             # Main IDE container
-│       ├── SceneTree.tsx            # Three.js hierarchy viewer
-│       ├── DataInspector.tsx        # JSON data display (Monaco)
-│       ├── ShaderViewer.tsx         # GLSL shader display
-│       └── MonacoConfig.ts          # Editor configuration
-│
-├── generation/
-│   ├── star-generator.ts            # Star creation logic
-│   ├── planet-generator.ts          # Planet creation logic
-│   ├── moon-generator.ts            # Moon creation logic
-│   ├── resource-distributor.ts      # Resource assignment
-│   └── name-generator.ts            # Procedural naming
-│
-├── rendering/
-│   ├── CelestialBodyLOD.ts          # LOD system (3 levels)
-│   ├── StarRenderer.ts              # Star mesh + glow sprite
-│   ├── PlanetRenderer.ts            # Planet material factory
-│   └── OrbitRenderer.ts             # Orbit line generation
-│
-├── shaders/
-│   ├── star/
-│   │   ├── star.vert
-│   │   └── star.frag
-│   ├── rocky-planet/
-│   │   ├── rocky-planet.vert
-│   │   └── rocky-planet.frag        # Simplex noise terrain
-│   └── gas-giant/
-│       ├── gas-giant.vert
-│       └── gas-giant.frag           # Horizontal band patterns
-│
-├── store/
-│   └── system-store.ts              # Zustand state
-│
-├── types/
-│   └── celestial-bodies.ts          # All TypeScript interfaces
-│
-└── utils/
-    ├── random.ts                    # Seeded RNG (critical for determinism)
-    ├── physics.ts                   # Orbital mechanics calculations
-    └── constants.ts                 # Physical constants
+```text
+seed
+  → generateSystem(seed)
+  → star
+  → planets
+  → moons + resources
+  → generated orbit/rotation elements
+  → Zustand system state
+  → ThreeSceneManager scene lifecycle
+  → renderers/controllers update Three.js objects
 ```
 
----
+Canonical generation must use `SeededRandom`, never `Math.random()`.
 
-## Phase 3 Vision: Architect Mode
+## State ownership
 
-**Key Insight from M5 (Procedural Shaders):**
+### `src/store/system-store.ts`
 
-During shader development, we discovered that developing shaders directly in the engine is difficult and slow. The optimal workflow is:
+Owns:
 
-1. **Develop in isolation** - Create standalone HTML demos with live controls
-2. **Iterate visually** - Use sliders and color pickers for rapid feedback
-3. **Port when perfect** - Only integrate into engine when shader is complete
+- application and view modes
+- current system and procedural galaxy
+- focused galaxy system
+- global simulation time and speed
+- orbit-trail and auto-focus preferences
+- selected celestial object
+- shader and planet-motion overrides
+- scene and camera references exposed to React tools
 
-**Architect Mode Goal:**
-Transform the read-only IDE into an interactive shader editor that allows runtime parameter tuning and system customization.
+### `src/store/galaxy-store.ts`
 
-### Workflow Vision
+Owns presentation/editor state for:
 
+- exactly three visual galaxy layers
+- active layer and layer configuration
+- marker configuration and positions
+- marker visibility
+- local presets
+- a narrow marker-control handle to the scene manager
+
+Do not add duplicate galaxy presentation state back to `system-store`.
+
+## Scene architecture
+
+`src/components/Canvas/ThreeSceneManager.tsx` remains the lifecycle coordinator. Extracted boundaries own focused responsibilities:
+
+- `CameraController.ts` — camera interpolation, interruption, object focus, system/galaxy framing
+- `OrbitRuntimeManager.ts` — absolute-time orbital transforms, planet spin/tilt, orbit-trail visibility
+- `SelectionController.ts` — system and galaxy raycast interpretation
+- `MarkerSystemManager.ts` — custom marker creation, visibility, and animation
+- `src/rendering/dispose.ts` — shared geometry/material disposal
+
+Controllers should not become alternate stores. They receive state snapshots and update ephemeral Three.js objects.
+
+## Orbit system
+
+Canonical orbit data is stored as `generatedOrbit` on planets and moons.
+
+- Global simulation unit: Earth days
+- Planet distance unit: AU
+- Moon distance unit: km
+- Runtime sampling: pure `sampleOrbitPosition(elements, simulationTimeDays)`
+- Position updates derive from absolute time, not accumulated frame integration
+- Planet rotation derives from absolute simulation time and generated/overridden rotational elements
+
+Keep compatibility fields `orbitDistance` and `orbitalPeriod` aligned with `generatedOrbit`; physics verification enforces that contract.
+
+## Rendering
+
+- Stars use procedural emissive shaders and post-processing bloom.
+- Planets and moons use `CelestialBodyLOD` with shader materials at each level.
+- Orbit paths are sampled from explicit orbital elements.
+- Galaxy visuals use independent `GalaxyParticleSystem` layers.
+- Marker systems are separate from decorative galaxy particles.
+
+Resource-owning rendering code must use shared disposal helpers or equivalent proven cleanup.
+
+## Inspector and controls
+
+- Left drawer: contextual galaxy/shader/motion controls and global orbit controls
+- Right inspector: scene tree, JSON data, shaders, and LOD diagnostics
+- Selection payloads are discriminated unions from `src/types/scene.ts`
+- Shader override values use the explicit `UniformOverrideValue` boundary
+
+The inspector remains primarily read-only; authoring is limited to exposed controls.
+
+## Determinism contract
+
+Canonical deterministic scope:
+
+- normalized `generateSystem(seed)` output
+- physical and visual generated body properties
+- resources
+- orbit and rotation elements
+
+Excluded:
+
+- top-level `generatedAt`
+- transient Zustand/UI state
+- Three.js scene state
+- camera and selection state
+- presentation-only particle behavior
+
+`npm run check:determinism` is the executable contract.
+
+## Verification
+
+Default gate:
+
+```bash
+npm run verify
 ```
-Generate System (procedural, deterministic)
-    ↓
-Select Planet (click in 3D view)
-    ↓
-Edit Parameters (live shader controls in IDE)
-    ↓
-Save Customizations (override procedural defaults)
-    ↓
-Export/Share (JSON export with custom values)
-```
 
-### Key Features
+It runs lint, focused tests, build, 100-system physics validation, and determinism checks.
 
-**Interactive Shader Controls:**
-- Color pickers for all color uniforms (baseColor, rustColor, bandColors, etc.)
-- Range sliders for numeric parameters (scale, intensity, turbulence, etc.)
-- Real-time preview as parameters change
-- Reset to procedural defaults
-- Apply changes to all planets of same type
+Feature work that changes rendering or interaction also requires the manual WebGL checklist in [`docs/verification.md`](docs/verification.md).
 
-**Shader Development Mode:**
-- Integrate standalone shader demos into IDE
-- "Shader Lab" tab for experimentation
-- Export/import shader presets
-- Document parameter ranges and visual quality guidelines
+## Performance rules
 
-**Data Persistence:**
-- Export systems with custom parameters as JSON
-- Import customized systems
-- Save snapshots for comparison
-- Share via URL hash/query params
+- Preserve LOD for planets and moons.
+- Do not rebuild meshes in animation loops.
+- Update transforms and uniforms only.
+- Keep mode and Monaco surfaces lazy-loaded.
+- Measure bundle output rather than suppressing Vite warnings.
+- Verify on hardware for frame-rate claims.
 
-### Implementation Timeline (8 weeks)
+## Current cleanup sequence
 
-**Weeks 1-2:** IDE enhancement with parameter inspection and controls
-**Weeks 3-4:** Live editing system with real-time uniform updates
-**Weeks 5-6:** Shader development workflow integration
-**Weeks 7-8:** Data persistence and sharing features
+The trust-restoration and scene-containment work is complete through CLEAN-10. Remaining operational work is tracked in:
 
-### Critical Design Principles (Learned from M5)
+- [`TASKS.md`](TASKS.md)
+- [`docs/plans/2026-08-16-project-cleanup-plan.md`](docs/plans/2026-08-16-project-cleanup-plan.md)
 
-**Seed Handling:**
-- ❌ DON'T: Add seed offsets to noise positions (`normPos + vec3(u_seed * 0.1)`)
-- ✅ DO: Use seed for rotation/transformation (`rotation * normPos`)
-- WHY: Offsets can land in uniform regions of noise space, destroying detail
+## Design constraints
 
-**Shader Development:**
-1. Develop in standalone HTML demos first
-2. Iterate with live visual feedback
-3. Document good parameter ranges
-4. Test edge cases and performance
-5. Port to engine only when visually perfect
+- Follow the designated Khora style guide for color and typography.
+- Use Material Design Icons for UI symbols.
+- Preserve horizontal breathing room, clear vertical hierarchy, and flexible Phase-1/2 layouts.
+- Do not mix cleanup work with broad visual redesign.
 
-**Visual Quality Checklist:**
-- No visible banding or posterization
-- Detail visible at all zoom levels
-- Each planet looks unique with same shader
-- Performance acceptable (60fps)
-- Aesthetically pleasing color palette
+## Deferred scope
 
----
-
-**Status:** Planning phase - Not scheduled for Phase 1
-**Dependencies:** M6 (Phase 1 Complete), Phase 2 (Multi-system Galaxy)
-**Estimated Effort:** 8 weeks
-**Priority:** High - Critical for creative workflow
-
----
-
-## UI/UX Design References
-
-**Location:** `/Users/kraken/Documents/khora/`
-
-### Style Guide (Khora-Style-Guide-V01.md)
-Complete design system documentation for all future UI development:
-
-**Design System:**
-- Color Palette: #000510 (space), #1a1a1a (panels), #00ffff (cyan), #ffd700 (gold), #ff1493 (magenta)
-- Typography: Inter (UI), Courier New (code), size scale (11px-18px)
-- Spacing: 8px grid system (8px, 16px, 24px multiples)
-- WCAG 2.1 Level AA compliance (all contrast ratios tested)
-
-**Component Library:**
-- Buttons (primary, secondary, ghost)
-- Sliders (range controls with handles)
-- Panels (semi-transparent overlays)
-- Tabs (navigation, content switching)
-- Accordions (collapsible sections)
-- Tree views (hierarchical data)
-- Dropdowns, color pickers, input fields
-
-**Layout Patterns:**
-- Panel widths: Data Panel (400px), IDE Panel (640px), Nav Panel (200px)
-- Glow effects: `box-shadow: 0 0 20px rgba(0, 255, 255, 0.4)`
-- Animations: `cubic-bezier(0.4, 0.0, 0.2, 1)` for panels
-
-### HTML Mockup (Khora-Mock-V01.html)
-Interactive reference implementation of all UI screens:
-
-**Screens Included:**
-- 1.1: Main HUD
-- 1.2: Data Panel (quick inspector)
-- 1.3-1.6: IDE Panel (Scene Tree, Data Inspector, Shader Viewer)
-- 3.1-3.3: Architect Mode Workbench (Star Editor, Planet Editor)
-- 4.1: System Map (strategic view)
-- 4.2: Marketplace (economic interface)
-
-**Features:**
-- Material Design Icons: https://pictogrammers.com/library/mdi/
-- CSS Custom Properties (full design system)
-- Interactive JavaScript (accordions, tabs, tree navigation)
-- Responsive layout patterns
-- Ready for React component conversion
-
-**Usage:**
-- Reference for UI component implementation
-- Visual testing of design system
-- Pattern library for future development
-- Demonstrates complete user experience flow
-
-**When to Use:**
-- Phase 2+: Multi-system UI development
-- Phase 3: Architect Mode implementation
-- Phase 4: System Map and Marketplace features
-- Any UI/UX implementation work
-
----
-
-*[Rest of PLANNING.md content - see Obsidian for full technical details]*
-
-**For complete implementation details, algorithms, and code patterns, refer to:**
-- Obsidian: `Projects/Khora Engine/PLANNING.md` (full version)
-- This file contains essential quick reference information
-
----
-
-*Last Updated: October 31, 2025*
-*Based on: PRD - Khora Engine v2.md*
-*Phase 1 Target: 12 weeks to MVP*
+- Explorer navigation/gameplay
+- mining, colonization, missions, and defense
+- multiplayer
+- full save/load architecture
+- n-body physics
+- spacecraft dynamics
+- unrestricted live shader editing

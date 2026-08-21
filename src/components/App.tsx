@@ -7,13 +7,15 @@
  * - Explorer: Astronaut gameplay (Phase 4)
  */
 
-import { CanvasContainer } from './Canvas/CanvasContainer';
-import { UIControls } from './UI/UIControls';
-import { IDEPanel } from './IDE/IDEPanel';
-import { ControlDrawer } from './UI/ControlDrawer';
+import { lazy, Suspense } from 'react';
 import { LandingPage } from './Landing/LandingPage';
-import { DiceRollerFlow } from './DiceRoller/DiceRollerFlow';
 import { useSystemStore } from '../store/system-store';
+
+const CanvasContainer = lazy(() => import('./Canvas/CanvasContainer').then((module) => ({ default: module.CanvasContainer })));
+const UIControls = lazy(() => import('./UI/UIControls').then((module) => ({ default: module.UIControls })));
+const IDEPanel = lazy(() => import('./IDE/IDEPanel').then((module) => ({ default: module.IDEPanel })));
+const ControlDrawer = lazy(() => import('./UI/ControlDrawer').then((module) => ({ default: module.ControlDrawer })));
+const DiceRollerFlow = lazy(() => import('./DiceRoller/DiceRollerFlow').then((module) => ({ default: module.DiceRollerFlow })));
 
 export function App() {
   const appMode = useSystemStore((state) => state.appMode);
@@ -27,7 +29,11 @@ export function App() {
 
   // Dice roll: Resource budget rolling
   if (appMode === 'diceRoll') {
-    return <DiceRollerFlow />;
+    return (
+      <Suspense fallback={<LoadingSurface label="Preparing cosmic dice" />}>
+        <DiceRollerFlow />
+      </Suspense>
+    );
   }
 
   // Explorer mode: Phase 4 placeholder
@@ -57,31 +63,55 @@ export function App() {
 
   // Architect mode: Galaxy construction interface
   return (
-    <div style={styles.container}>
-      {/* Top navigation bar */}
-      <UIControls />
+    <Suspense fallback={<LoadingSurface label="Initializing architect mode" />}>
+      <div style={styles.container}>
+        <UIControls />
 
-      {/* Main canvas area */}
-      <div style={{
-        ...styles.canvasWrapper,
-        ...(ideOpen ? styles.canvasWrapperWithIDE : {}),
-        ...(controlDrawerOpen ? styles.canvasWrapperWithControls : {}),
-      }}>
-        <CanvasContainer />
+        <div style={{
+          ...styles.canvasWrapper,
+          ...(ideOpen ? styles.canvasWrapperWithIDE : {}),
+          ...(controlDrawerOpen ? styles.canvasWrapperWithControls : {}),
+        }}>
+          <CanvasContainer />
+        </div>
+
+        <ControlDrawer />
+        <IDEPanel />
       </div>
+    </Suspense>
+  );
+}
 
-      {/* Left control drawer */}
-      <ControlDrawer />
-
-      {/* IDE panel (slides in from right) */}
-      <IDEPanel />
-
+function LoadingSurface({ label }: { label: string }) {
+  return (
+    <div style={styles.loadingSurface} role="status" aria-live="polite">
+      <span className="mdi mdi-loading mdi-spin" style={styles.loadingIcon}></span>
+      <span className="label-text" style={styles.loadingLabel}>{label}</span>
     </div>
   );
 }
 
 // Inline styles (will be replaced with proper CSS in TASK-021)
 const styles = {
+  loadingSurface: {
+    width: '100vw',
+    height: '100vh',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '16px',
+    backgroundColor: '#000510',
+  } as React.CSSProperties,
+  loadingIcon: {
+    fontSize: '32px',
+    color: 'var(--accent-cyan, #00ffff)',
+  } as React.CSSProperties,
+  loadingLabel: {
+    color: 'rgba(255, 255, 255, 0.7)',
+    letterSpacing: '0.12em',
+    textTransform: 'uppercase',
+  } as React.CSSProperties,
   container: {
     width: '100vw',
     height: '100vh',
