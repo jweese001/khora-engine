@@ -3,6 +3,7 @@ import { useSystemStore } from '../../store/system-store';
 import { OrbitControlsSection } from './OrbitControlsSection';
 import { PlanetMotionControls, ShaderControls } from '../IDE/ShaderControls';
 import { GalaxyControls } from '../IDE/GalaxyControls';
+import type { SelectedObject, UniformOverrideValue } from '../../types/scene';
 
 export function ControlDrawer() {
   const controlDrawerOpen = useSystemStore((state) => state.controlDrawerOpen);
@@ -122,15 +123,13 @@ function ContextualControlsContent({
   viewMode,
   currentSystemName,
 }: {
-  selectedObject: { type: 'star' | 'planet' | 'moon'; data: any } | null;
+  selectedObject: SelectedObject | null;
   viewMode: 'system' | 'galaxy';
   currentSystemName: string | null;
 }) {
   const currentGalaxy = useSystemStore((state) => state.currentGalaxy);
   const updateUniform = useSystemStore((state) => state.updateUniform);
   const resetObjectUniforms = useSystemStore((state) => state.resetObjectUniforms);
-  const updateGalaxyConfig = useSystemStore((state) => state.updateGalaxyConfig);
-  const resetGalaxyConfig = useSystemStore((state) => state.resetGalaxyConfig);
 
   if (viewMode === 'galaxy' && currentGalaxy && !selectedObject) {
     return (
@@ -139,11 +138,7 @@ function ContextualControlsContent({
           <div className="label-text" style={styles.contextLabel}>Galaxy Context</div>
           <div style={styles.contextTitle}>{currentGalaxy.name}</div>
         </div>
-        <GalaxyControls
-          galaxy={currentGalaxy}
-          onConfigChange={updateGalaxyConfig}
-          onReset={resetGalaxyConfig}
-        />
+        <GalaxyControls galaxy={currentGalaxy} />
       </div>
     );
   }
@@ -151,7 +146,7 @@ function ContextualControlsContent({
   if (selectedObject) {
     const objectId = selectedObject.data.id;
 
-    const handleUniformChange = (uniformName: string, value: any) => {
+    const handleUniformChange = (uniformName: string, value: UniformOverrideValue) => {
       updateUniform(objectId, uniformName, value);
     };
 
@@ -166,7 +161,9 @@ function ContextualControlsContent({
           <div style={styles.contextTitle}>{selectedObject.data.name}</div>
           <div style={styles.contextMetaRow}>
             <span style={styles.contextChip}>{selectedObject.type.toUpperCase()}</span>
-            {selectedObject.data.type && <span style={styles.contextChip}>{String(selectedObject.data.type).toUpperCase()}</span>}
+            {selectedObject.type === 'planet' && (
+              <span style={styles.contextChip}>{selectedObject.data.type.toUpperCase()}</span>
+            )}
           </div>
         </div>
 

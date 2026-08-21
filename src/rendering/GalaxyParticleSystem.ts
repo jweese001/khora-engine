@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { SeededRandom } from '../utils/random';
+import { disposeObjectResources } from './dispose';
 
 /**
  * Galaxy types supported by the particle system
@@ -59,7 +60,7 @@ export interface SystemMarker {
   position: THREE.Vector3;
   color?: THREE.Color;
   size?: number;
-  data?: any;
+  data?: unknown;
 }
 
 /**
@@ -189,13 +190,7 @@ export class GalaxyParticleSystem {
     // Create points
     if (this.particlePoints) {
       this.group.remove(this.particlePoints);
-      this.particlePoints.geometry.dispose();
-      // FIX: Type guard for Material | Material[]
-      if (Array.isArray(this.particlePoints.material)) {
-        this.particlePoints.material.forEach(m => m.dispose());
-      } else {
-        this.particlePoints.material.dispose();
-      }
+      disposeObjectResources(this.particlePoints);
     }
 
     this.particlePoints = new THREE.Points(geometry, material);
@@ -527,13 +522,7 @@ export class GalaxyParticleSystem {
     // Remove old markers
     if (this.markerPoints) {
       this.group.remove(this.markerPoints);
-      this.markerPoints.geometry.dispose();
-      // FIX: Type guard for Material | Material[]
-      if (Array.isArray(this.markerPoints.material)) {
-        this.markerPoints.material.forEach(m => m.dispose());
-      } else {
-        this.markerPoints.material.dispose();
-      }
+      disposeObjectResources(this.markerPoints);
     }
 
     const positions: number[] = [];
@@ -652,23 +641,13 @@ export class GalaxyParticleSystem {
    */
   public dispose(): void {
     if (this.particlePoints) {
-      this.particlePoints.geometry.dispose();
-      // FIX: Type guard for Material | Material[]
-      if (Array.isArray(this.particlePoints.material)) {
-        this.particlePoints.material.forEach(m => m.dispose());
-      } else {
-        this.particlePoints.material.dispose();
-      }
+      disposeObjectResources(this.particlePoints);
+      this.particlePoints = null;
     }
 
     if (this.markerPoints) {
-      this.markerPoints.geometry.dispose();
-      // FIX: Type guard for Material | Material[]
-      if (Array.isArray(this.markerPoints.material)) {
-        this.markerPoints.material.forEach(m => m.dispose());
-      } else {
-        this.markerPoints.material.dispose();
-      }
+      disposeObjectResources(this.markerPoints);
+      this.markerPoints = null;
     }
   }
 }

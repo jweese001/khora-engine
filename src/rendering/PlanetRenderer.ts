@@ -120,7 +120,7 @@ export function createPlanetMesh(
   const material = new THREE.ShaderMaterial({
     vertexShader: planetVertexShader,
     fragmentShader: planetFragmentShader,
-    uniforms: uniforms as any, // THREE.js uniforms type compatibility
+    uniforms: uniforms as unknown as Record<string, THREE.IUniform>,
     side: THREE.FrontSide,
   });
 

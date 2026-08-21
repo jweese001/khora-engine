@@ -122,8 +122,8 @@ export function ShaderViewer() {
 }
 
 // Helper function to format uniforms for display
-function formatUniforms(uniforms: { [uniform: string]: THREE.IUniform }): any {
-  const formatted: any = {};
+function formatUniforms(uniforms: { [uniform: string]: THREE.IUniform }): Record<string, unknown> {
+  const formatted: Record<string, unknown> = {};
 
   for (const key in uniforms) {
     const uniform = uniforms[key];

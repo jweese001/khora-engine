@@ -92,7 +92,7 @@ export function createMoonMesh(
   const material = new THREE.ShaderMaterial({
     vertexShader: rockyVertShader,
     fragmentShader: rockyFragShader,
-    uniforms: uniforms as any,
+    uniforms: uniforms as unknown as Record<string, THREE.IUniform>,
     side: THREE.FrontSide,
   });
 

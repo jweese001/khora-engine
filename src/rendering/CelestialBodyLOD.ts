@@ -15,6 +15,7 @@
 
 import * as THREE from 'three';
 import type { Planet, Moon } from '../types/celestial-bodies';
+import type { UniformOverrideValue } from '../types/scene';
 import { createPlanetMesh } from './PlanetRenderer';
 import { createMoonMesh } from './MoonRenderer';
 
@@ -316,7 +317,7 @@ export class CelestialBodyLOD {
    * @param uniformName - Name of the uniform to update
    * @param value - New value (will be converted to THREE.js type if needed)
    */
-  public updateUniform(uniformName: string, value: any): void {
+  public updateUniform(uniformName: string, value: UniformOverrideValue): void {
     this.materials.forEach(material => {
       if (material instanceof THREE.ShaderMaterial) {
         // Check if uniform exists

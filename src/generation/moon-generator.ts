@@ -152,8 +152,6 @@ function generateMoonPhysics(
   const moonMass = 0.073 * volumeRatio; // Earth's Moon is 0.073 × 10^24 kg
   const moonMassIn1022kg = moonMass * 100; // Convert to 10^22 kg units
 
-  console.log(`[MoonGen] Planet ${planet.name} (${planetRadiusKm.toFixed(0)}km): radiusPercent=${(radiusPercent*100).toFixed(1)}%, moonRadius=${moonRadius.toFixed(0)}km (${((moonRadius/planetRadiusKm)*100).toFixed(1)}% of planet)`);
-
   return {
     mass: moonMassIn1022kg,
     radius: moonRadius

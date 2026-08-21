@@ -7,9 +7,12 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "preview": "vite preview",
-    "verify": "npm run build && npm run validate-physics && npm run check:determinism",
+    "verify": "npm run lint && npm test && npm run build && npm run validate-physics && npm run check:determinism",
     "validate-physics": "tsx scripts/validate-physics.js",
+    "validate-physics:self-test": "tsx scripts/validate-physics.js --self-test",
     "check:determinism": "tsx scripts/check-determinism.js"
   },
   "dependencies": {
@@ -37,6 +40,7 @@
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.45.0",
     "vite": "^7.1.7",
-    "vite-plugin-glsl": "^1.5.4"
+    "vite-plugin-glsl": "^1.5.4",
+    "vitest": "^4.1.10"
   }
 }

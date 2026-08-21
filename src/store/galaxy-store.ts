@@ -14,6 +14,7 @@
 import { create } from 'zustand';
 import * as THREE from 'three';
 import type { GalaxyConfig } from '../rendering/GalaxyParticleSystem';
+import type { Galaxy } from '../types/galaxy';
 import { SeededRandom } from '../utils/random';
 import { generateGalaxyPalette } from '../utils/color-palette';
 
@@ -51,12 +52,36 @@ export interface MarkerConfig {
 /**
  * Complete preset including all layers and markers
  */
+export interface GalaxySceneManagerHandle {
+  generateMarkersForActiveLayer: () => void;
+  clearMarkers: () => void;
+  toggleMarkersVisibility: () => void;
+}
+
 export interface GalaxyPreset {
   name: string;
   description?: string;
   layers: [GalaxyLayer, GalaxyLayer, GalaxyLayer];
   markers: MarkerConfig;
   markerPositions: THREE.Vector3[];
+}
+
+type SerializedGalaxyConfig = Omit<GalaxyConfig, 'coreColor' | 'midColor' | 'edgeColor'> & {
+  coreColor?: string;
+  midColor?: string;
+  edgeColor?: string;
+};
+
+interface SerializedGalaxyLayer extends Omit<GalaxyLayer, 'config'> {
+  config: SerializedGalaxyConfig;
+}
+
+interface SerializedGalaxyPreset {
+  name: string;
+  description?: string;
+  layers: [SerializedGalaxyLayer, SerializedGalaxyLayer, SerializedGalaxyLayer];
+  markers: MarkerConfig;
+  markerPositions: Array<[number, number, number]>;
 }
 
 // ============================================================================
@@ -218,7 +243,7 @@ interface GalaxyStoreState {
    * Reference to scene manager (for marker operations from UI)
    * Set by CanvasContainer on mount
    */
-  sceneManagerRef: any | null;
+  sceneManagerRef: GalaxySceneManagerHandle | null;
 
   // ============================================================================
   // Preset System
@@ -265,7 +290,7 @@ interface GalaxyStoreState {
    * Each layer is a visual variation of the same procedural galaxy
    * @param galaxy - The procedurally generated galaxy to visualize
    */
-  initializeFromProceduralGalaxy: (galaxy: any) => void; // TODO: import Galaxy type
+  initializeFromProceduralGalaxy: (galaxy: Galaxy) => void;
 
   /**
    * Deactivate all visual galaxy layers (called when galaxy is cleared)
@@ -324,7 +349,7 @@ interface GalaxyStoreState {
   /**
    * Set scene manager reference (called from CanvasContainer)
    */
-  setSceneManagerRef: (ref: any) => void;
+  setSceneManagerRef: (ref: GalaxySceneManagerHandle | null) => void;
 }
 
 // ============================================================================
@@ -390,7 +415,7 @@ export const useGalaxyStore = create<GalaxyStoreState>((set, get) => ({
     });
   },
 
-  initializeFromProceduralGalaxy: (galaxy: any) => {
+  initializeFromProceduralGalaxy: (galaxy: Galaxy) => {
     // Configure all 3 layers based on procedural galaxy type AND parameters
     // Each layer is a visual variation of the same galaxy
     const galaxyType = galaxy.type; // 'Spiral', 'Elliptical', or 'Irregular'
@@ -616,7 +641,7 @@ export const useGalaxyStore = create<GalaxyStoreState>((set, get) => ({
   /**
    * Set scene manager reference (called from CanvasContainer)
    */
-  setSceneManagerRef: (ref: any) => {
+  setSceneManagerRef: (ref: GalaxySceneManagerHandle | null) => {
     set({ sceneManagerRef: ref });
   },
 }));
@@ -788,6 +813,26 @@ function savePresetsToStorage(presets: Map<string, GalaxyPreset>): void {
   }
 }
 
+function isSerializedGalaxyPreset(value: unknown): value is SerializedGalaxyPreset {
+  if (!value || typeof value !== 'object') return false;
+
+  const candidate = value as Record<string, unknown>;
+  return (
+    typeof candidate.name === 'string'
+    && Array.isArray(candidate.layers)
+    && candidate.layers.length === 3
+    && candidate.layers.every((layer) => Boolean(layer) && typeof layer === 'object')
+    && Boolean(candidate.markers)
+    && typeof candidate.markers === 'object'
+    && Array.isArray(candidate.markerPositions)
+    && candidate.markerPositions.every(
+      (position) => Array.isArray(position)
+        && position.length === 3
+        && position.every((coordinate) => typeof coordinate === 'number' && Number.isFinite(coordinate)),
+    )
+  );
+}
+
 /**
  * Load presets from localStorage
  */
@@ -796,28 +841,37 @@ function loadPresetsFromStorage(): Map<string, GalaxyPreset> {
     const stored = localStorage.getItem('khora-galaxy-presets');
     if (!stored) return new Map();
 
-    const serialized = JSON.parse(stored);
+    const parsed: unknown = JSON.parse(stored);
+    if (!Array.isArray(parsed) || !parsed.every(isSerializedGalaxyPreset)) {
+      throw new Error('Stored galaxy presets have an invalid shape');
+    }
 
     // Deserialize presets (convert arrays to Map, hex strings to THREE.Color, arrays to THREE.Vector3)
     const presets = new Map<string, GalaxyPreset>(
-      serialized.map((item: any) => [
-        item.name,
-        {
-          name: item.name,
-          description: item.description,
-          layers: item.layers.map((layer: any) => ({
-            ...layer,
-            config: {
-              ...layer.config,
-              coreColor: layer.config.coreColor ? new THREE.Color(`#${layer.config.coreColor}`) : undefined,
-              midColor: layer.config.midColor ? new THREE.Color(`#${layer.config.midColor}`) : undefined,
-              edgeColor: layer.config.edgeColor ? new THREE.Color(`#${layer.config.edgeColor}`) : undefined,
-            },
-          })),
-          markers: item.markers,
-          markerPositions: item.markerPositions.map((arr: number[]) => new THREE.Vector3(...arr)),
-        },
-      ])
+      parsed.map((item) => {
+        const layers = item.layers.map((layer) => ({
+          ...layer,
+          config: {
+            ...layer.config,
+            coreColor: layer.config.coreColor ? new THREE.Color(`#${layer.config.coreColor}`) : undefined,
+            midColor: layer.config.midColor ? new THREE.Color(`#${layer.config.midColor}`) : undefined,
+            edgeColor: layer.config.edgeColor ? new THREE.Color(`#${layer.config.edgeColor}`) : undefined,
+          },
+        })) as [GalaxyLayer, GalaxyLayer, GalaxyLayer];
+
+        return [
+          item.name,
+          {
+            name: item.name,
+            description: item.description,
+            layers,
+            markers: item.markers,
+            markerPositions: item.markerPositions.map(
+              ([x, y, z]) => new THREE.Vector3(x, y, z),
+            ),
+          },
+        ];
+      }),
     );
 
     return presets;

@@ -455,7 +455,9 @@ function generateVisualProperties(
     const bandColors = generateGasGiantPalette(rng, bandCount);
 
     props.bandCount = bandCount;
-    props.bandColors = bandColors.map(color => [color.r, color.g, color.b]) as any;
+    props.bandColors = bandColors.map(
+      (color) => [color.r, color.g, color.b],
+    ) as PlanetVisualProperties['bandColors'];
 
     // Set base color to first band color
     props.baseColor = [bandColors[0].r, bandColors[0].g, bandColors[0].b];

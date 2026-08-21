@@ -110,13 +110,11 @@ function temperatureToColor(temperature: number): THREE.Color {
  *
  * @param star - Star data
  * @param scale - Visual scale factor (default: 1.0)
- * @param camera - Camera for view-dependent effects (required)
  * @returns THREE.Mesh for the star
  */
 export function createStarMesh(
   star: Star,
   scale: number = 1.0,
-  camera?: THREE.Camera
 ): THREE.Mesh {
   // Star-relative scaling system:
   // All celestial body sizes are calculated relative to the star
@@ -130,8 +128,7 @@ export function createStarMesh(
   const geometry = new THREE.SphereGeometry(visualRadius, 32, 32);
 
   // Get temperature-based shader uniforms from spectral type mapping
-  const cameraRef = camera || new THREE.PerspectiveCamera(); // Fallback camera
-  const uniforms = deriveStarUniforms(star, cameraRef);
+  const uniforms = deriveStarUniforms(star);
 
   console.log(`[StarRenderer] Temperature-based star ${star.name} (${star.spectralType}-type): highTemp=${uniforms.u_highTemp.value}K, lowTemp=${uniforms.u_lowTemp.value}K, sunspots=${uniforms.u_sunspotIntensity.value.toFixed(2)}`);
 
@@ -139,7 +136,7 @@ export function createStarMesh(
   const material = new THREE.ShaderMaterial({
     vertexShader: starVertShader,
     fragmentShader: starFragShader,
-    uniforms: uniforms as any, // THREE.js uniforms type compatibility
+    uniforms: uniforms as unknown as Record<string, THREE.IUniform>,
     // No lights needed - shader is fully emissive
     side: THREE.FrontSide,
     transparent: false
@@ -259,7 +256,6 @@ export function createStarLight(star: Star, intensity: number = 3.0): THREE.Grou
  *
  * @param star - Star data
  * @param scale - Visual scale factor
- * @param camera - Camera for view-dependent shader effects
  * @param includeGlow - Whether to add glow sprite (default: true)
  * @param includeLight - Whether to add point light (default: true)
  * @returns THREE.Group containing all star elements
@@ -267,14 +263,13 @@ export function createStarLight(star: Star, intensity: number = 3.0): THREE.Grou
 export function createStarObject(
   star: Star,
   scale: number = 1.0,
-  camera?: THREE.Camera,
   includeGlow: boolean = true,
   includeLight: boolean = true
 ): THREE.Group {
   const group = new THREE.Group();
 
   // Add star mesh with enhanced shader
-  const mesh = createStarMesh(star, scale, camera);
+  const mesh = createStarMesh(star, scale);
   group.add(mesh);
 
   // Add glow sprite

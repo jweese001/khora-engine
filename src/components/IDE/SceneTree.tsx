@@ -39,9 +39,18 @@ export function SceneTree() {
     return selectedObject?.data?.id === id;
   };
 
-  const handleSelect = (type: 'star' | 'planet' | 'moon', data: Star | Planet | Moon) => {
-    selectObject({ type, data });
-  };
+  function handleSelect(type: 'star', data: Star): void;
+  function handleSelect(type: 'planet', data: Planet): void;
+  function handleSelect(type: 'moon', data: Moon): void;
+  function handleSelect(type: 'star' | 'planet' | 'moon', data: Star | Planet | Moon): void {
+    if (type === 'star') {
+      selectObject({ type, data: data as Star });
+    } else if (type === 'planet') {
+      selectObject({ type, data: data as Planet });
+    } else {
+      selectObject({ type, data: data as Moon });
+    }
+  }
 
   return (
     <div style={styles.container}>

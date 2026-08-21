@@ -9,6 +9,7 @@
 import { useState } from 'react';
 import { HexColorPicker } from 'react-colorful';
 import type { Star, Planet, Moon } from '../../types/celestial-bodies';
+import type { UniformOverrideValue } from '../../types/scene';
 import { PlanetType } from '../../types/celestial-bodies';
 import { useSystemStore } from '../../store/system-store';
 
@@ -19,7 +20,7 @@ import { useSystemStore } from '../../store/system-store';
 interface ShaderControlsProps {
   objectType: 'star' | 'planet' | 'moon';
   objectData: Star | Planet | Moon;
-  onUniformChange: (uniformName: string, value: any) => void;
+  onUniformChange: (uniformName: string, value: UniformOverrideValue) => void;
   onReset: () => void;
   embedded?: boolean;
 }

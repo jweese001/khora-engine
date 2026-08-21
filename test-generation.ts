@@ -118,7 +118,7 @@ function displaySystem(system: StarSystem) {
 
     if (planet.moons.length > 0) {
       console.log(`     Moons: ${planet.moons.length}`);
-      planet.moons.forEach((moon, j) => {
+      planet.moons.forEach((moon) => {
         console.log(`       - ${moon.name} (${moon.radius.toFixed(0)} km, ${moon.orbitDistance.toFixed(0)} km orbit)`);
       });
     }

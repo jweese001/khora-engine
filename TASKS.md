@@ -6,7 +6,7 @@
 **Current Reality:** Active post-Phase-1 integration and stabilization work
 **Current Priority Order:** A) Stabilization → B) Star System Customization + Orbit Systems → C) Galaxy Sandbox
 **Status:** ⚠️ **NOT currently production-ready on this branch**
-**Last Updated:** May 17, 2026 - Orbit drawer pass and Orbit V1 UI polish
+**Last Updated:** August 6, 2026 - Cleanup program started; physics verification repaired
 
 **Working Copy:** This file is synchronized from Obsidian vault
 **Source of Truth:** This file (code repo) - sync back to Obsidian weekly
@@ -47,6 +47,7 @@
 **Intent:** Restore repo trust and make Khora safe for measured, verifiable feature delivery with `pi-dev-team`.
 
 **Primary reference docs:**
+- `docs/plans/2026-08-06-project-cleanup-plan.md`
 - `docs/specs/2026-05-13-phase-a-stabilization-plan.md`
 - `docs/specs/2026-05-13-phase-a-execution-tickets.md`
 - `docs/specs/2026-05-13-orbit-systems-design-spec.md`
@@ -67,7 +68,35 @@
    - keep compatible and documented
    - treat as secondary/experimental until A is healthy and B is underway
 
-### Phase A Ticket Queue
+### Current Cleanup Ticket Queue
+- [x] **CLEAN-01 (P0):** Repair physics validator false-positive path and quiet moon-generation verification output
+  - corrected stale `moon.orbitDistanceKM` checks to current `moon.orbitDistance`
+  - added finite/positive-value guards and generated-orbit compatibility checks
+  - added `npm run validate-physics:self-test` to prove malformed moon data is rejected
+  - verified 100 systems / 590 planets / 2248 moons with zero violations
+- [x] **CLEAN-02 (P0):** Add Vitest and focused RNG/orbit/system-generation tests
+  - added focused tests across seeded RNG, orbit solver, generated orbit contracts, and disposal utilities
+  - verified `npm test` passes in under one second
+- [x] **CLEAN-03 (P1):** Remove obsolete galaxy-config bridge
+  - removed duplicate galaxy configuration state/actions from `system-store`
+  - removed the `CanvasContainer` effect and deprecated no-op scene-manager method
+  - kept active visual configuration exclusively in `galaxy-store`
+- [x] **CLEAN-04 (P1):** Type selection, shader override, galaxy initialization, and scene-manager boundaries
+  - added typed selection/uniform contracts and a narrow galaxy scene-manager handle
+  - removed loose types from marker placement, registry, preset deserialization, and renderer boundaries
+- [x] **CLEAN-05 (P1):** Resolve remaining lint errors and React hook warnings
+  - reduced the baseline from 37 errors / 2 warnings to a clean `npm run lint`
+  - repaired DiceRoller callback/ref lifecycle warnings without rebuilding the scene on callback changes
+- [x] **CLEAN-06 (P1):** Promote lint and tests into the default verification gate
+  - `npm run verify` now runs lint, 20 focused tests, build, physics validation, and determinism
+- [x] **CLEAN-07–10 (P2):** Incremental scene containment
+  - [x] CLEAN-07: shared disposal utilities with duplicate-resource protection and focused tests
+  - [x] CLEAN-08: camera controller extraction with transition, focus, framing, interruption, and lifecycle tests
+  - [x] CLEAN-09: orbit runtime manager extraction with absolute-time position, spin/tilt override, trail visibility, and reset tests
+  - [x] CLEAN-10: selection controller extraction with celestial selection, galaxy marker, disabled-marker, fallback, and listener lifecycle coverage
+- [ ] **CLEAN-11–14 (P2):** Logging, bundle splitting, docs alignment, and repository hygiene
+
+### Historical Phase A Ticket Queue
 - [x] **A-01 (P0):** Build Repair — Scene/Store Contract Mismatches
 - [x] **A-02 (P0):** Build Repair — Galaxy Type Contract
 - [x] **A-03 (P0):** Build Repair — Galaxy Rendering Typing and Disposal
@@ -100,34 +129,34 @@ For non-trivial work, use a measured pipeline:
 - **A-07 complete:** extracted the marker system into `src/components/Canvas/MarkerSystemManager.ts` and converted `ThreeSceneManager` marker APIs into thin delegators while preserving existing marker behavior and UI wiring
 - **A-08 complete:** added a concise README stability-status label that separates stabilized core system work from experimental galaxy sandbox and marker workflows without changing runtime behavior
 - **Post-Phase-A smoke follow-ups complete:** manual browser smoke testing exposed and fixed several galaxy/marker UX regressions, including marker distribution using the active visual layer shape, core exclusion/falloff control effectiveness, marker pulse-speed wiring/default tuning, stable galaxy particles across non-structural control edits, and prevention of galaxy reshuffling when editing marker-only controls
-+
-+### Current Verified Reality
-+- `npm run build` passes
-+- `npm run verify` passes on stabilized mainline milestone
-+- orbit worktree has repeatedly passed `npm run build` and `npm run check:determinism` during Orbit V1 implementation slices
-+- manual smoke test on stabilized mainline covered galaxy render, marker generation, marker visibility toggle, marker click into system, and return-to-galaxy flow
-+- current caveat: galaxy sandbox remains experimental even though the primary marker and inspector flows are now manually smoke-validated on the stabilized branch
-+
-+### Orbit V1 Progress Snapshot
-+- [x] deterministic generated orbit data for planets and moons
-+- [x] pure orbit solver and global simulation time foundation
-+- [x] live orbital motion in system view
-+- [x] orbit trail rendering from orbital elements
-+- [x] orbit trail visibility toggle
-+- [x] wider temporal control range with presets + logarithmic slider
-+- [x] left-controls / right-inspector drawer split established
-+- [x] drawer scrolling and accordion behavior repaired for single-scroll ownership
-+- [x] orbit panel trimmed by removing low-value paused status pill
-+- [x] selected-object control card simplified to name + type only
-+- [x] deterministic planet spin + axial tilt runtime added
-+- [x] planet rotation / tilt controls added in left drawer Controls layout
-+- [x] motion controls moved to bottom of Controls stack near Orbit controls
-+- [x] rotation-period input simplified to whole hours with 1-9999 range
-+- [x] scene-inspector auto-focus selection toggle added and user-validated
-+- [>] remaining Orbit V1 follow-up: expose orbit data/state in inspector surfaces
-+- [x] fresh live smoke pass completed on drawer-based system-view UX
-+- [x] GitHub Pages deployment workflow added and live site confirmed
-+- [x] removed dead orbit-panel remnants (`showOrbitPanel`, `toggleOrbitPanel`, `OrbitCommandPod`)
+
+### Current Verified Reality
+- `npm run build` passes
+- `npm run verify` passes on stabilized mainline milestone
+- orbit worktree has repeatedly passed `npm run build` and `npm run check:determinism` during Orbit V1 implementation slices
+- manual smoke test on stabilized mainline covered galaxy render, marker generation, marker visibility toggle, marker click into system, and return-to-galaxy flow
+- current caveat: galaxy sandbox remains experimental even though the primary marker and inspector flows are now manually smoke-validated on the stabilized branch
+
+### Orbit V1 Progress Snapshot
+- [x] deterministic generated orbit data for planets and moons
+- [x] pure orbit solver and global simulation time foundation
+- [x] live orbital motion in system view
+- [x] orbit trail rendering from orbital elements
+- [x] orbit trail visibility toggle
+- [x] wider temporal control range with presets + logarithmic slider
+- [x] left-controls / right-inspector drawer split established
+- [x] drawer scrolling and accordion behavior repaired for single-scroll ownership
+- [x] orbit panel trimmed by removing low-value paused status pill
+- [x] selected-object control card simplified to name + type only
+- [x] deterministic planet spin + axial tilt runtime added
+- [x] planet rotation / tilt controls added in left drawer Controls layout
+- [x] motion controls moved to bottom of Controls stack near Orbit controls
+- [x] rotation-period input simplified to whole hours with 1-9999 range
+- [x] scene-inspector auto-focus selection toggle added and user-validated
+- [>] remaining Orbit V1 follow-up: expose orbit data/state in inspector surfaces
+- [x] fresh live smoke pass completed on drawer-based system-view UX
+- [x] GitHub Pages deployment workflow added and live site confirmed
+- [x] removed dead orbit-panel remnants (`showOrbitPanel`, `toggleOrbitPanel`, `OrbitCommandPod`)
 
 ---
 

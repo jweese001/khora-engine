@@ -22,7 +22,6 @@ export function CanvasContainer() {
   const currentGalaxy = useSystemStore((state) => state.currentGalaxy);
   const viewMode = useSystemStore((state) => state.viewMode);
   const uniformOverrides = useSystemStore((state) => state.uniformOverrides);
-  const galaxyConfig = useSystemStore((state) => state.galaxyConfig);
   const ideOpen = useSystemStore((state) => state.ideOpen);
   const controlDrawerOpen = useSystemStore((state) => state.controlDrawerOpen);
   const selectedObject = useSystemStore((state) => state.selectedObject);
@@ -51,11 +50,7 @@ export function CanvasContainer() {
           }
 
           // Handle regular object selection (planets, moons, stars)
-          selectObject({
-            type: userData.type,
-            data: userData.data,
-            material: userData.material
-          });
+          selectObject(userData);
         } else {
           selectObject(null);
         }
@@ -140,16 +135,6 @@ export function CanvasContainer() {
       });
     });
   }, [uniformOverrides]);
-
-  // Apply galaxy config changes to particle system (Phase 2: Galaxy customization)
-  useEffect(() => {
-    if (!sceneManagerRef.current) return;
-    if (viewMode !== 'galaxy') return;
-    if (!galaxyConfig) return;
-
-    console.log('[CanvasContainer] Applying galaxy config changes:', galaxyConfig);
-    sceneManagerRef.current.updateGalaxyConfig(galaxyConfig);
-  }, [galaxyConfig, viewMode]);
 
   useEffect(() => {
     if (!sceneManagerRef.current) return;

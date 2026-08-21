@@ -4,6 +4,7 @@ import { GalaxyParticleSystem } from '../../rendering/GalaxyParticleSystem';
 import { useGalaxyStore, type MarkerConfig, generateMarkerPositions } from '../../store/galaxy-store';
 import { useSystemStore } from '../../store/system-store';
 import { SeededRandom } from '../../utils/random';
+import type { GalaxySystemPlacement } from '../../types/galaxy';
 
 interface MarkerSystemManagerDeps {
   scene: THREE.Scene;
@@ -100,7 +101,7 @@ export class MarkerSystemManager {
       console.log('[MarkerSystemManager] Using seed:', seed);
 
       const positions = generateMarkerPositions(markers.count, visualConfig);
-      const systemPlacements: any[] = [];
+      const systemPlacements: GalaxySystemPlacement[] = [];
 
       positions.forEach((position) => {
         const systemSeed = Math.floor(rng.random() * 1000000);

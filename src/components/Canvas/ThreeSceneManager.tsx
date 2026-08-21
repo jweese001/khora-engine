@@ -12,8 +12,9 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
-import type { Moon, Planet, RotationalElements, StarSystem } from '../../types/celestial-bodies';
+import type { Planet, StarSystem } from '../../types/celestial-bodies';
 import type { Galaxy, GalaxySystemPlacement } from '../../types/galaxy';
+import type { SceneSelectionPayload, UniformOverrideValue } from '../../types/scene';
 import type { GalaxyConfig } from '../../rendering/GalaxyParticleSystem';
 import { createStarMesh, createStarLight, calculateSceneUnitsPerSolarRadius } from '../../rendering/StarRenderer';
 import { createOrbitLineFromElements, getOrbitLineStyle } from '../../rendering/OrbitRenderer';
@@ -23,23 +24,15 @@ import { GalaxyParticleSystem } from '../../rendering/GalaxyParticleSystem';
 import { useGalaxyStore, type GalaxyLayer } from '../../store/galaxy-store';
 import { useSystemStore } from '../../store/system-store';
 import { MarkerSystemManager } from './MarkerSystemManager';
+import { CameraController } from './CameraController';
+import { SelectionController } from './SelectionController';
+import {
+  OrbitRuntimeManager,
+  type MoonOrbitBinding,
+  type PlanetOrbitBinding,
+} from './OrbitRuntimeManager';
+import { disposeObjectResources, disposeObjectTree } from '../../rendering/dispose';
 import { sampleOrbitPosition } from '../../orbits/orbit-solver';
-
-interface MoonOrbitBinding {
-  moon: Moon;
-  object: THREE.Object3D;
-  minSceneRadius: number;
-  maxSceneRadius: number;
-}
-
-interface PlanetOrbitBinding {
-  planet: Planet;
-  group: THREE.Group;
-  tiltGroup: THREE.Group;
-  planetObject: THREE.Object3D;
-  orbitScale: number;
-  moons: MoonOrbitBinding[];
-}
 
 // ============================================================================
 // ThreeSceneManager Class
@@ -52,6 +45,8 @@ export class ThreeSceneManager {
   private renderer: THREE.WebGLRenderer;
   private composer: EffectComposer;
   private controls: OrbitControls;
+  private cameraController: CameraController;
+  private selectionController: SelectionController;
 
   // Animation loop
   private animationFrameId: number | null = null;
@@ -60,16 +55,11 @@ export class ThreeSceneManager {
   private container: HTMLElement;
 
   // Callbacks
-  private onObjectSelected?: (object: any) => void;
-
-  // Raycasting for object selection
-  private raycaster: THREE.Raycaster;
-  private mouse: THREE.Vector2;
+  private onObjectSelected?: (object: SceneSelectionPayload) => void;
 
   // Galaxy rendering (Phase 2)
   private galaxyRenderer: GalaxyRenderer;
   private currentViewMode: 'system' | 'galaxy' = 'system';
-  private hasAnimatedToGalaxyView: boolean = false; // Track if initial galaxy animation has played
 
   // Multi-layer galaxy particle system (Phase 2.5)
   // Array of exactly 3 independent galaxy particle systems for visual composition
@@ -85,28 +75,15 @@ export class ThreeSceneManager {
 
   // Material tracking (Phase 3: Architect Mode)
   // Maps object ID -> THREE.Material for live uniform updates
-  private materialRegistry: Map<string, THREE.Material> = new Map();
+  private materialRegistry: Map<string, THREE.Material | CelestialBodyLOD> = new Map();
   private objectRegistry: Map<string, THREE.Object3D> = new Map();
-  private orbitingPlanets: PlanetOrbitBinding[] = [];
-  private orbitTrailObjects: THREE.Object3D[] = [];
-  private lastOrbitTrailVisibility: boolean = true;
+  private orbitRuntimeManager = new OrbitRuntimeManager();
 
   // Debug mode (toggle with D key)
   private debugMode: number = 0; // 0=normal, 1-7=debug visualizations
 
   // Time tracking for delta calculations
   private lastTime: number = 0;
-
-  // Camera animation for smooth transitions
-  private cameraAnimation: {
-    active: boolean;
-    startPosition: THREE.Vector3;
-    targetPosition: THREE.Vector3;
-    startTarget: THREE.Vector3;
-    targetTarget: THREE.Vector3;
-    progress: number;
-    duration: number;
-  } | null = null;
 
   /**
    * Initialize Three.js scene manager
@@ -116,20 +93,10 @@ export class ThreeSceneManager {
    */
   constructor(
     container: HTMLElement,
-    onObjectSelected?: (object: any) => void
+    onObjectSelected?: (object: SceneSelectionPayload) => void
   ) {
     this.container = container;
     this.onObjectSelected = onObjectSelected;
-
-    // Initialize raycasting
-    this.raycaster = new THREE.Raycaster();
-    this.mouse = new THREE.Vector2();
-
-    // Set threshold for Points raycasting (markers)
-    // This determines how close the mouse needs to be to a point for it to register as a hit
-    // Value is in scene units (NOT light-years - those are converted to scene units)
-    // Smaller values require more precise clicking
-    this.raycaster.params.Points.threshold = 0.4; // 0.4 scene units - requires clicking close to visible marker
 
     // Create scene
     this.scene = this.createScene();
@@ -146,8 +113,9 @@ export class ThreeSceneManager {
     // Create post-processing composer with bloom
     this.composer = this.createComposer();
 
-    // Create controls
+    // Create controls and camera transition controller
     this.controls = this.createControls();
+    this.cameraController = new CameraController(this.camera, this.controls);
 
     // Initialize galaxy renderer (Phase 2)
     this.galaxyRenderer = new GalaxyRenderer();
@@ -167,6 +135,30 @@ export class ThreeSceneManager {
       setCustomMarkersSet: (value: boolean) => {
         this.customMarkersSet = value;
       }
+    });
+
+    this.selectionController = new SelectionController({
+      domElement: this.renderer.domElement,
+      scene: this.scene,
+      camera: this.camera,
+      getViewMode: () => this.currentViewMode,
+      areMarkersClickable: () => useGalaxyStore.getState().markers.clickable,
+      getMarkerPointObjects: () => {
+        const markerObjects: THREE.Points[] = [];
+        const independentMarkers = this.markerManager.getMarkerPoints();
+        if (independentMarkers) markerObjects.push(independentMarkers);
+
+        for (const layer of this.galaxyLayers) {
+          const layerMarkers = layer?.getGroup().getObjectByName('systemMarkers');
+          if (layerMarkers instanceof THREE.Points) markerObjects.push(layerMarkers);
+        }
+        return markerObjects;
+      },
+      getFallbackSystem: (markerIndex) => (
+        useSystemStore.getState().currentGalaxy?.systems[markerIndex]?.system
+      ),
+      onSystemSelected: (system) => this.transitionToSystem(system),
+      onSelection: (selection) => this.onObjectSelected?.(selection),
     });
 
     // Register this scene manager with the galaxy store for UI access
@@ -300,12 +292,6 @@ export class ThreeSceneManager {
     // Optional: Set target to center of solar system
     controls.target.set(0, 0, 0);
 
-    controls.addEventListener('start', () => {
-      if (this.cameraAnimation?.active) {
-        this.cameraAnimation.active = false;
-      }
-    });
-
     return controls;
   }
 
@@ -362,14 +348,12 @@ export class ThreeSceneManager {
   // ==========================================================================
 
   /**
-   * Set up event listeners for window resize, object selection, and debug controls
+   * Set up event listeners for window resize and debug controls.
+   * Pointer selection is owned by SelectionController.
    */
   private setupEventListeners(): void {
     // Window resize
     window.addEventListener('resize', this.handleResize);
-
-    // Object selection (click)
-    this.renderer.domElement.addEventListener('click', this.handleClick);
 
     // Debug mode toggle (press D key)
     window.addEventListener('keydown', this.handleKeyDown);
@@ -394,151 +378,10 @@ export class ThreeSceneManager {
   };
 
   /**
-   * Handle click for object selection via raycasting
-   */
-  private handleClick = (event: MouseEvent): void => {
-    // Calculate mouse position in normalized device coordinates (-1 to +1)
-    const rect = this.renderer.domElement.getBoundingClientRect();
-    this.mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-    this.mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-
-    // Update raycaster
-    this.raycaster.setFromCamera(this.mouse, this.camera);
-
-    console.log('[ThreeSceneManager] Click detected - viewMode:', this.currentViewMode, 'mouse:', this.mouse);
-
-    // In galaxy view, raycast against marker systems
-    if (this.currentViewMode === 'galaxy') {
-      // Check if markers are clickable
-      const { markers } = useGalaxyStore.getState();
-      console.log('[ThreeSceneManager] Markers clickable?', markers.clickable);
-
-      if (!markers.clickable) {
-        console.log('[ThreeSceneManager] Click ignored - markers not clickable');
-        return; // Skip marker click detection when disabled
-      }
-
-      let intersects: THREE.Intersection[] = [];
-
-      // Check BOTH marker systems:
-      // 1. Independent marker system (from control panel)
-      const independentMarkerPoints = this.markerManager.getMarkerPoints();
-      if (independentMarkerPoints && independentMarkerPoints.visible) {
-        console.log('[ThreeSceneManager] Raycasting against independent marker system...');
-        intersects = this.raycaster.intersectObject(independentMarkerPoints, false);
-        console.log('[ThreeSceneManager] Independent markers raycast result:', {
-          intersectCount: intersects.length,
-          markerCount: independentMarkerPoints.geometry.attributes.position.count
-        });
-      }
-
-      // 2. Galaxy layer system markers (check ALL visible layers, not just layer 0)
-      if (intersects.length === 0) {
-        // Check all galaxy layers for markers
-        for (let i = 0; i < this.galaxyLayers.length; i++) {
-          const layer = this.galaxyLayers[i];
-          if (!layer) continue;
-
-          const galaxyGroup = layer.getGroup();
-          const galaxyMarkers = galaxyGroup.getObjectByName('systemMarkers');
-
-          if (galaxyMarkers) {
-            console.log(`[ThreeSceneManager] Raycasting against Layer ${i} markers...`);
-            const layerIntersects = this.raycaster.intersectObject(galaxyMarkers, false);
-
-            if (layerIntersects.length > 0) {
-              intersects = layerIntersects;
-              console.log(`[ThreeSceneManager] Found marker in Layer ${i}:`, {
-                intersectCount: intersects.length,
-                markerData: galaxyMarkers.userData
-              });
-              break; // Found a hit, stop checking other layers
-            }
-          }
-        }
-      }
-
-      if (intersects.length > 0) {
-        // Found an intersection with marker points
-        const intersection = intersects[0];
-        const markerIndex = intersection.index;
-
-        console.log('[ThreeSceneManager] Marker clicked at index:', markerIndex);
-
-        // Try to get system data from marker's userData first (works for both auto and custom markers)
-        const markerPoints = intersection.object as THREE.Points;
-        const markers = markerPoints.userData?.markers;
-
-        let clickedSystem = null;
-
-        // Method 1: Get from marker userData (always try this first)
-        if (markers && markerIndex !== undefined && markerIndex < markers.length) {
-          const markerData = markers[markerIndex];
-          clickedSystem = markerData?.data || markerData?.system;
-        }
-
-        // Method 2: Fallback to galaxy.systems array (for backward compatibility)
-        if (!clickedSystem) {
-          const store = useSystemStore.getState();
-          const currentGalaxy = store.currentGalaxy;
-          if (currentGalaxy && markerIndex !== undefined && markerIndex < currentGalaxy.systems.length) {
-            clickedSystem = currentGalaxy.systems[markerIndex].system;
-          }
-        }
-
-        if (clickedSystem) {
-          console.log('[ThreeSceneManager] Star system selected:', clickedSystem.star?.name || 'Unknown');
-          this.transitionToSystem(clickedSystem);
-        } else {
-          console.warn('[ThreeSceneManager] No system data found for marker at index:', markerIndex);
-        }
-      }
-      return;
-    }
-
-    // In system view, raycast against celestial bodies
-    // Check for intersections (exclude starfield and orbit lines)
-    const intersects = this.raycaster.intersectObjects(
-      this.scene.children.filter((obj) =>
-        obj.name !== 'starfield' && !obj.name.startsWith('orbit-')
-      ),
-      true // Recursive
-    );
-
-    if (intersects.length > 0) {
-      // Find the first object with userData
-      let selectedObject = intersects[0].object;
-      let meshObject = intersects[0].object as THREE.Mesh;
-
-      // Walk up the hierarchy to find object with userData
-      while (selectedObject && !selectedObject.userData?.type) {
-        selectedObject = selectedObject.parent as THREE.Object3D;
-      }
-
-      if (selectedObject?.userData?.type && this.onObjectSelected) {
-        console.log('[ThreeSceneManager] Object selected:', selectedObject.userData);
-
-        // Get material from the actual mesh
-        const material = (meshObject as THREE.Mesh).material;
-
-        this.onObjectSelected({
-          ...selectedObject.userData,
-          material: material
-        });
-      }
-    } else {
-      // Clicked on empty space - deselect
-      if (this.onObjectSelected) {
-        this.onObjectSelected(null);
-      }
-    }
-  };
-
-  /**
    * Transition from galaxy view to system view
    * Zooms camera to the selected star system and renders it
    */
-  private transitionToSystem(system: any): void {
+  private transitionToSystem(system: StarSystem): void {
     console.log('[ThreeSceneManager] Transitioning to system:', system.star?.name || 'Unknown');
 
     // Find the index of this system in the current galaxy
@@ -584,11 +427,7 @@ export class ThreeSceneManager {
   private handleKeyDown = (event: KeyboardEvent): void => {
     // Press P to print current camera position
     if (event.key === 'p' || event.key === 'P') {
-      console.log('═══════════════════════════════════════');
-      console.log('CAMERA POSITION:');
-      console.log(`  position: new THREE.Vector3(${this.camera.position.x.toFixed(2)}, ${this.camera.position.y.toFixed(2)}, ${this.camera.position.z.toFixed(2)})`);
-      console.log(`  lookAt: new THREE.Vector3(${this.controls.target.x.toFixed(2)}, ${this.controls.target.y.toFixed(2)}, ${this.controls.target.z.toFixed(2)})`);
-      console.log('═══════════════════════════════════════');
+      this.cameraController.printDebugPosition();
       return;
     }
 
@@ -665,16 +504,16 @@ export class ThreeSceneManager {
       });
     }
 
-    this.updateSystemOrbitalPositions(systemStore.simulationTimeDays);
-    this.updateOrbitTrailVisibility(systemStore.showOrbitTrails);
+    this.orbitRuntimeManager.update(
+      systemStore.simulationTimeDays,
+      systemStore.planetMotionOverrides,
+    );
+    this.orbitRuntimeManager.setTrailVisibility(systemStore.showOrbitTrails);
 
     // Update independent marker system
     this.markerManager.updateFrame(time, this.currentViewMode);
 
-    // Update camera animation if active
-    if (this.cameraAnimation && this.cameraAnimation.active) {
-      this.updateCameraAnimation(deltaTime);
-    }
+    this.cameraController.update(deltaTime);
 
     // Update shader uniforms for all celestial bodies
     // CRITICAL: Camera position must be updated every frame for correct lighting and atmosphere
@@ -730,76 +569,6 @@ export class ThreeSceneManager {
   // Camera Animation
   // ==========================================================================
 
-  /**
-   * Animate camera to a new position smoothly
-   * @param targetPosition - Target camera position
-   * @param targetLookAt - Target look-at point
-   * @param duration - Animation duration in seconds (default: 1.5s)
-   */
-  private animateCamera(
-    targetPosition: THREE.Vector3,
-    targetLookAt: THREE.Vector3,
-    duration: number = 1.5
-  ): void {
-    this.cameraAnimation = {
-      active: true,
-      startPosition: this.camera.position.clone(),
-      targetPosition: targetPosition.clone(),
-      startTarget: this.controls.target.clone(),
-      targetTarget: targetLookAt.clone(),
-      progress: 0,
-      duration
-    };
-  }
-
-  /**
-   * Update camera animation (called every frame)
-   * @param deltaTime - Time since last frame in seconds
-   */
-  private updateCameraAnimation(deltaTime: number): void {
-    if (!this.cameraAnimation) return;
-
-    // Update progress
-    this.cameraAnimation.progress += deltaTime / this.cameraAnimation.duration;
-
-    if (this.cameraAnimation.progress >= 1.0) {
-      // Animation complete - snap to final position
-      this.camera.position.copy(this.cameraAnimation.targetPosition);
-      this.controls.target.copy(this.cameraAnimation.targetTarget);
-      this.controls.update();
-      this.cameraAnimation.active = false;
-      console.log('[ThreeSceneManager] Camera animation complete');
-    } else {
-      // Ease-in-out interpolation for smooth motion
-      const t = this.easeInOutCubic(this.cameraAnimation.progress);
-
-      // Lerp position
-      this.camera.position.lerpVectors(
-        this.cameraAnimation.startPosition,
-        this.cameraAnimation.targetPosition,
-        t
-      );
-
-      // Lerp target
-      this.controls.target.lerpVectors(
-        this.cameraAnimation.startTarget,
-        this.cameraAnimation.targetTarget,
-        t
-      );
-
-      this.controls.update();
-    }
-  }
-
-  /**
-   * Ease-in-out cubic function for smooth camera motion
-   * @param t - Progress from 0 to 1
-   * @returns Eased value from 0 to 1
-   */
-  private easeInOutCubic(t: number): number {
-    return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
-  }
-
   public focusObjectById(objectId: string): void {
     const targetObject = this.objectRegistry.get(objectId);
     if (!targetObject) {
@@ -807,129 +576,12 @@ export class ThreeSceneManager {
       return;
     }
 
-    const worldPosition = new THREE.Vector3();
-    targetObject.getWorldPosition(worldPosition);
-
-    const bounds = new THREE.Box3().setFromObject(targetObject);
-    const size = new THREE.Vector3();
-    const sphere = new THREE.Sphere();
-    bounds.getSize(size);
-    bounds.getBoundingSphere(sphere);
-
-    const radius = Number.isFinite(sphere.radius) && sphere.radius > 0
-      ? sphere.radius
-      : Math.max(size.length() * 0.25, 1.5);
-
-    const direction = this.camera.position.clone().sub(this.controls.target);
-    if (direction.lengthSq() === 0) {
-      direction.set(1, 0.35, 1);
-    }
-    direction.normalize();
-
-    const focusDistance = THREE.MathUtils.clamp(radius * 5, 12, 220);
-    const targetPosition = worldPosition.clone().add(direction.multiplyScalar(focusDistance));
-
-    this.animateCamera(targetPosition, worldPosition, 0.85);
+    this.cameraController.focusObject(targetObject);
   }
 
   // ==========================================================================
   // System Rendering
   // ==========================================================================
-
-  private mapMoonOrbitRadiusToScene(
-    moon: Moon,
-    minSceneRadius: number,
-    maxSceneRadius: number,
-    sampledRadius: number
-  ): number {
-    const orbit = moon.generatedOrbit;
-    const minOrbitRadius = orbit.semiMajorAxis * (1 - orbit.eccentricity);
-    const maxOrbitRadius = orbit.semiMajorAxis * (1 + orbit.eccentricity);
-
-    if (Math.abs(maxOrbitRadius - minOrbitRadius) < 1e-6) {
-      return (minSceneRadius + maxSceneRadius) * 0.5;
-    }
-
-    const normalized = (sampledRadius - minOrbitRadius) / (maxOrbitRadius - minOrbitRadius);
-    return minSceneRadius + THREE.MathUtils.clamp(normalized, 0, 1) * (maxSceneRadius - minSceneRadius);
-  }
-
-  private resolvePlanetRotation(planet: Planet): RotationalElements {
-    const override = useSystemStore.getState().planetMotionOverrides.get(planet.id);
-
-    return {
-      ...planet.generatedRotation,
-      ...override,
-      rotationPeriodHours: Math.max(0.1, override?.rotationPeriodHours ?? planet.generatedRotation.rotationPeriodHours),
-      axialTiltDegrees: THREE.MathUtils.clamp(
-        override?.axialTiltDegrees ?? planet.generatedRotation.axialTiltDegrees,
-        0,
-        180
-      ),
-      rotationDirection: override?.rotationDirection ?? planet.generatedRotation.rotationDirection,
-      spinPhaseDegrees: override?.spinPhaseDegrees ?? planet.generatedRotation.spinPhaseDegrees,
-    };
-  }
-
-  private applyPlanetRotation(binding: PlanetOrbitBinding, simulationTimeDays: number): void {
-    const rotation = this.resolvePlanetRotation(binding.planet);
-    const direction = rotation.rotationDirection === 'retrograde' ? -1 : 1;
-    const elapsedHours = simulationTimeDays * 24;
-    const revolutions = elapsedHours / rotation.rotationPeriodHours;
-    const spinDegrees = rotation.spinPhaseDegrees + (revolutions * 360 * direction);
-
-    binding.tiltGroup.rotation.z = THREE.MathUtils.degToRad(rotation.axialTiltDegrees);
-    binding.planetObject.rotation.y = THREE.MathUtils.degToRad(spinDegrees);
-  }
-
-  private updateSystemOrbitalPositions(simulationTimeDays: number): void {
-    this.orbitingPlanets.forEach((binding) => {
-      const { planet, group, orbitScale, moons } = binding;
-      const planetSample = sampleOrbitPosition(planet.generatedOrbit, simulationTimeDays);
-      group.position.set(
-        planetSample.localPosition.x * orbitScale,
-        planetSample.localPosition.y * orbitScale,
-        planetSample.localPosition.z * orbitScale
-      );
-
-      this.applyPlanetRotation(binding, simulationTimeDays);
-
-      moons.forEach(({ moon, object, minSceneRadius, maxSceneRadius }) => {
-        const moonSample = sampleOrbitPosition(moon.generatedOrbit, simulationTimeDays);
-        const direction = new THREE.Vector3(
-          moonSample.localPosition.x,
-          moonSample.localPosition.y,
-          moonSample.localPosition.z
-        );
-
-        if (direction.lengthSq() === 0) {
-          object.position.set((minSceneRadius + maxSceneRadius) * 0.5, 0, 0);
-          return;
-        }
-
-        const mappedRadius = this.mapMoonOrbitRadiusToScene(
-          moon,
-          minSceneRadius,
-          maxSceneRadius,
-          moonSample.radius
-        );
-
-        direction.normalize().multiplyScalar(mappedRadius);
-        object.position.copy(direction);
-      });
-    });
-  }
-
-  private updateOrbitTrailVisibility(showOrbitTrails: boolean): void {
-    if (this.lastOrbitTrailVisibility === showOrbitTrails) {
-      return;
-    }
-
-    this.lastOrbitTrailVisibility = showOrbitTrails;
-    this.orbitTrailObjects.forEach((trail) => {
-      trail.visible = showOrbitTrails;
-    });
-  }
 
   /**
    * Render a star system in the scene
@@ -957,7 +609,7 @@ export class ThreeSceneManager {
     const SOLAR_RADIUS_IN_EARTH_RADII = 109;
 
     // Helper function to calculate planet visual radius (matches PlanetRenderer)
-    const calcPlanetVisualRadius = (planet: any) => {
+    const calcPlanetVisualRadius = (planet: Planet) => {
       const planetRadiusInSolarRadii = planet.radius / SOLAR_RADIUS_IN_EARTH_RADII;
       const planetBaseRadius = planetRadiusInSolarRadii * sceneUnitsPerSolarRadius;
       return Math.max(planetBaseRadius, MIN_BASE_RADIUS) * PLANET_VISIBILITY_SCALE;
@@ -1024,7 +676,7 @@ export class ThreeSceneManager {
     // Moon orbits now calculated from planet visual size (no scale constant needed)
 
     // Create star with enhanced shader (use mesh only - shader handles bloom, no glow sprite needed)
-    const starMesh = createStarMesh(system.star, 1.0, this.camera);
+    const starMesh = createStarMesh(system.star, 1.0);
     starMesh.name = 'star';
     this.scene.add(starMesh);
 
@@ -1045,7 +697,6 @@ export class ThreeSceneManager {
     const orbitingPlanets: PlanetOrbitBinding[] = [];
     const orbitTrailObjects: THREE.Object3D[] = [];
     const { simulationTimeDays: initialSimulationTimeDays, showOrbitTrails } = useSystemStore.getState();
-    this.lastOrbitTrailVisibility = showOrbitTrails;
 
     // Create planets, their orbits, and moons (with LOD)
     system.star.planets.forEach((planet, planetIndex) => {
@@ -1104,7 +755,7 @@ export class ThreeSceneManager {
       planetSystemGroup.add(tiltGroup);
 
       // Register planet LOD for Phase 3 live editing
-      this.materialRegistry.set(planet.id, planetLOD as any); // Store LOD object, not material
+      this.materialRegistry.set(planet.id, planetLOD);
       console.log(`[ThreeSceneManager] Registered planet LOD: ${planet.id}`);
 
       // Calculate planet visual radius using the helper function (ensures consistency)
@@ -1151,7 +802,7 @@ export class ThreeSceneManager {
           initialMoonSample.localPosition.y,
           initialMoonSample.localPosition.z
         );
-        const initialMoonRadius = this.mapMoonOrbitRadiusToScene(
+        const initialMoonRadius = this.orbitRuntimeManager.mapMoonOrbitRadiusToScene(
           moon,
           moonOrbitSceneUnits,
           maxMoonOrbitSceneUnits,
@@ -1168,7 +819,7 @@ export class ThreeSceneManager {
         planetSystemGroup.add(moonLOD.object);
 
         // Register moon LOD for Phase 3 live editing
-        this.materialRegistry.set(moon.id, moonLOD as any); // Store LOD object, not material
+        this.materialRegistry.set(moon.id, moonLOD);
         this.objectRegistry.set(moon.id, moonLOD.object);
         console.log(`[ThreeSceneManager] Registered moon LOD: ${moon.id}`);
 
@@ -1188,7 +839,6 @@ export class ThreeSceneManager {
         orbitScale: ORBIT_SCALE,
         moons: moonBindings,
       };
-      this.applyPlanetRotation(binding, initialSimulationTimeDays);
 
       orbitingPlanets.push(binding);
 
@@ -1201,8 +851,15 @@ export class ThreeSceneManager {
       );
     });
 
-    this.orbitingPlanets = orbitingPlanets;
-    this.orbitTrailObjects = orbitTrailObjects;
+    this.orbitRuntimeManager.configure(
+      orbitingPlanets,
+      orbitTrailObjects,
+      showOrbitTrails,
+    );
+    this.orbitRuntimeManager.update(
+      initialSimulationTimeDays,
+      useSystemStore.getState().planetMotionOverrides,
+    );
 
     // Adjust camera to view the whole system
     this.focusOnSystem(system, ORBIT_SCALE);
@@ -1216,31 +873,7 @@ export class ThreeSceneManager {
    * @param orbitScale - Scene units per AU (calculated in renderSystem)
    */
   private focusOnSystem(system: StarSystem, orbitScale: number): void {
-    // Find the outermost planet
-    let maxOrbitDistance = 0;
-    system.star.planets.forEach((planet) => {
-      if (planet.orbitDistance > maxOrbitDistance) {
-        maxOrbitDistance = planet.orbitDistance;
-      }
-    });
-
-    // Position camera to view the whole system
-    const systemRadius = maxOrbitDistance * orbitScale;
-    const cameraDistance = systemRadius * 2.5; // View from a comfortable distance
-
-    const targetPosition = new THREE.Vector3(
-      cameraDistance * 0.5,
-      cameraDistance * 0.5,
-      cameraDistance
-    );
-    const targetLookAt = new THREE.Vector3(0, 0, 0);
-
-    // Animate camera to new position (1.2s duration)
-    this.animateCamera(targetPosition, targetLookAt, 1.2);
-
-    console.log(
-      `[ThreeSceneManager] Camera focusing on system (radius: ${systemRadius.toFixed(2)} units)`
-    );
+    this.cameraController.focusSystem(system, orbitScale);
   }
 
   // ==========================================================================
@@ -1359,18 +992,6 @@ export class ThreeSceneManager {
     this.focusOnGalaxy(galaxy, wasInSystemView);
 
     console.log('[ThreeSceneManager] Galaxy view activated (multi-layer rendering)');
-  }
-
-  /**
-   * Update galaxy particle system configuration
-   * Phase 2.5: This method is DEPRECATED - use galaxy-store actions instead
-   * Multi-layer system automatically updates via store subscription
-   * @param config - Partial galaxy config to apply
-   */
-  public updateGalaxyConfig(_config: Partial<GalaxyConfig>): void {
-    console.log('[ThreeSceneManager] DEPRECATED: updateGalaxyConfig called (use galaxy-store instead)');
-    // Legacy method - multi-layer system uses store-based updates now
-    // This is kept for backward compatibility but does nothing
   }
 
   // ==========================================================================
@@ -1532,68 +1153,7 @@ export class ThreeSceneManager {
    * @param returningFromSystemView - True if returning from system view (reposition without animation)
    */
   private focusOnGalaxy(galaxy: Galaxy, returningFromSystemView: boolean = false): void {
-    // Determine galaxy bounding radius based on type
-    let galaxyRadius = 100; // Default
-
-    if (galaxy.spiralParams) {
-      galaxyRadius = galaxy.spiralParams.diskRadius;
-    } else if (galaxy.ellipticalParams) {
-      galaxyRadius = galaxy.ellipticalParams.majorAxis;
-    } else if (galaxy.irregularParams) {
-      galaxyRadius = galaxy.irregularParams.boundingRadius;
-    }
-
-    // Rest position (after animation, and when returning from system view)
-    const targetPosition = new THREE.Vector3(13.26, 81.14, 56.30);
-    const targetLookAt = new THREE.Vector3(2.31, 0.00, 6.86);
-
-    // Update controls limits for galaxy scale
-    this.controls.minDistance = galaxyRadius * 0.1;
-    this.controls.maxDistance = galaxyRadius * 5;
-
-    // Determine what to do based on current state
-    if (this.hasAnimatedToGalaxyView && !returningFromSystemView) {
-      // Already animated once AND we're not returning from system view
-      // This is a regeneration - keep camera where it is
-      console.log('[ThreeSceneManager] Regeneration detected - camera stays in place');
-      return;
-    }
-
-    if (returningFromSystemView && this.hasAnimatedToGalaxyView) {
-      // Returning from system view - animate from close-up to rest position
-      console.log('[ThreeSceneManager] Returning from system view - animating camera pull-back to rest position');
-
-      const returnStartPosition = new THREE.Vector3(3.58, 9.41, 12.59);
-      const returnStartLookAt = new THREE.Vector3(2.31, 0.00, 6.86);
-
-      // Set camera to close-up starting position
-      this.camera.position.copy(returnStartPosition);
-      this.controls.target.copy(returnStartLookAt);
-      this.controls.update();
-
-      // Animate pull-back to rest position (0.8s duration for smooth transition)
-      this.animateCamera(targetPosition, targetLookAt, 0.8);
-      return;
-    }
-
-    // First generation: Start camera farther back and fly IN dramatically
-    const startPosition = new THREE.Vector3(65.23, 286.34, 311.32);
-    const startLookAt = new THREE.Vector3(0.00, 0.00, 0.00);
-
-    // Set camera to distant starting position
-    this.camera.position.copy(startPosition);
-    this.controls.target.copy(startLookAt);
-    this.controls.update();
-
-    // Animate camera flying INTO the galaxy view (quick and dramatic: 1.0s)
-    this.animateCamera(targetPosition, targetLookAt, 1.0);
-
-    // Mark that we've done the initial animation
-    this.hasAnimatedToGalaxyView = true;
-
-    console.log(
-      `[ThreeSceneManager] Camera flying into galaxy (radius: ${galaxyRadius.toFixed(2)} light-years)`
-    );
+    this.cameraController.focusGalaxy(galaxy, returningFromSystemView);
   }
 
   /**
@@ -1619,8 +1179,7 @@ export class ThreeSceneManager {
     });
 
     // Reset camera controls for system scale
-    this.controls.minDistance = 5;
-    this.controls.maxDistance = 5000;
+    this.cameraController.setDistanceLimits(5, 5000);
 
     // Switch view mode
     this.currentViewMode = 'system';
@@ -1648,46 +1207,15 @@ export class ThreeSceneManager {
     // Remove and recursively dispose
     objectsToRemove.forEach((object) => {
       this.scene.remove(object);
-      this.disposeObjectRecursive(object);
+      disposeObjectTree(object);
     });
 
     // Clear material and object registries (Phase 3)
     this.materialRegistry.clear();
     this.objectRegistry.clear();
-    this.orbitingPlanets = [];
-    this.orbitTrailObjects = [];
+    this.orbitRuntimeManager.reset();
 
     console.log('[ThreeSceneManager] System objects cleared');
-  }
-
-  /**
-   * Recursively dispose of object and all its children
-   */
-  private disposeObjectRecursive(object: THREE.Object3D): void {
-    // Dispose children first
-    object.children.forEach((child) => {
-      this.disposeObjectRecursive(child);
-    });
-
-    // Then dispose this object
-    this.disposeObject(object);
-  }
-
-  /**
-   * Dispose of Three.js object (prevent memory leaks)
-   */
-  private disposeObject(object: THREE.Object3D): void {
-    if (object instanceof THREE.Mesh) {
-      object.geometry?.dispose();
-
-      if (object.material) {
-        if (Array.isArray(object.material)) {
-          object.material.forEach((material) => material.dispose());
-        } else {
-          object.material.dispose();
-        }
-      }
-    }
   }
 
   // ==========================================================================
@@ -1740,7 +1268,7 @@ export class ThreeSceneManager {
    * @param uniformName - Name of the shader uniform to update
    * @param value - New value for the uniform
    */
-  public updateObjectUniforms(objectId: string, uniformName: string, value: any): void {
+  public updateObjectUniforms(objectId: string, uniformName: string, value: UniformOverrideValue): void {
     const entry = this.materialRegistry.get(objectId);
 
     if (!entry) {
@@ -1790,9 +1318,10 @@ export class ThreeSceneManager {
     // Remove event listeners
     window.removeEventListener('resize', this.handleResize);
     window.removeEventListener('keydown', this.handleKeyDown);
-    this.renderer.domElement.removeEventListener('click', this.handleClick);
+    this.selectionController.dispose();
 
-    // Dispose controls
+    // Dispose camera controller and controls
+    this.cameraController.dispose();
     this.controls.dispose();
 
     // Dispose galaxy renderer (Phase 2)
@@ -1810,7 +1339,7 @@ export class ThreeSceneManager {
     // Dispose starfield
     const starfield = this.scene.getObjectByName('starfield');
     if (starfield) {
-      this.disposeObject(starfield);
+      disposeObjectResources(starfield);
     }
 
     // Dispose renderer

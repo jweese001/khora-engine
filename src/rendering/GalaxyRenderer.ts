@@ -10,6 +10,7 @@ import type { Galaxy, GalaxySystemPlacement } from '../types/galaxy';
 import { isSpiralGalaxy, isEllipticalGalaxy, isIrregularGalaxy } from '../types/galaxy';
 import { GalaxyParticleSystem } from './GalaxyParticleSystem';
 import type { SystemMarker, GalaxyConfig } from './GalaxyParticleSystem';
+import { disposeObjectTree } from './dispose';
 import { SpectralType } from '../types/celestial-bodies';
 
 /**
@@ -196,8 +197,10 @@ export class GalaxyRenderer {
       tempGroup.remove(raycastObject);
       raycastObject.position.copy(worldPos);
 
-      // Store system data
-      raycastObject.userData = marker.data;
+      // Store system data when the marker carries an object payload.
+      if (marker.data && typeof marker.data === 'object') {
+        Object.assign(raycastObject.userData, marker.data);
+      }
 
       this.systemObjects.push(raycastObject);
       this.galaxyGroup.add(raycastObject);
@@ -244,14 +247,9 @@ export class GalaxyRenderer {
     }
 
     // Clear system objects
-    this.systemObjects.forEach(obj => {
-      if (obj instanceof THREE.Mesh) {
-        obj.geometry.dispose();
-        if (obj.material instanceof THREE.Material) {
-          obj.material.dispose();
-        }
-      }
-      this.galaxyGroup.remove(obj);
+    this.systemObjects.forEach((object) => {
+      disposeObjectTree(object);
+      this.galaxyGroup.remove(object);
     });
     this.systemObjects = [];
 

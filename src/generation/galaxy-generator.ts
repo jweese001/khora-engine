@@ -21,10 +21,8 @@ import type {
 /**
  * Default galaxy generation parameters
  */
-const DEFAULT_PARAMS: Required<GalaxyGenerationParams> = {
-  seed: 0,
+const DEFAULT_PARAMS: { systemCount: number; minSystemDistance: number } = {
   systemCount: 12,
-  preferredType: undefined as any,
   minSystemDistance: 25, // Light-years
 };
 
@@ -33,7 +31,11 @@ const DEFAULT_PARAMS: Required<GalaxyGenerationParams> = {
  * Creates a complete galaxy with multiple star systems
  */
 export function generateGalaxy(params: GalaxyGenerationParams): Galaxy {
-  const fullParams = { ...DEFAULT_PARAMS, ...params };
+  const fullParams = {
+    ...params,
+    systemCount: params.systemCount ?? DEFAULT_PARAMS.systemCount,
+    minSystemDistance: params.minSystemDistance ?? DEFAULT_PARAMS.minSystemDistance,
+  };
   const rng = new SeededRandom(fullParams.seed);
 
   // Step 1: Determine galaxy type

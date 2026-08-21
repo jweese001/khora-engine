@@ -402,9 +402,13 @@ npm run verify
 ```
 
 This runs:
+- `npm run lint`
+- `npm test`
 - `npm run build`
 - `npm run validate-physics`
 - `npm run check:determinism`
+
+Use `npm run validate-physics:self-test` when you need to prove the physics validator rejects malformed moon-orbit data.
 
 For exact expectations and the small manual smoke checklist, see `docs/verification.md`.
 

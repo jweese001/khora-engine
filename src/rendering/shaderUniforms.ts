@@ -220,41 +220,6 @@ function getAtmosphereColor(planet: Planet): THREE.Vector3 {
 }
 
 /**
- * Get band colors for gas giants
- */
-// Not currently used but kept for potential future Phase 3 architect mode presets
-// @ts-expect-error - Kept for future use
-function _getGasGiantBandColors(planet: Planet): [THREE.Vector3, THREE.Vector3, THREE.Vector3] {
-  const comp = planet.atmosphere.composition;
-
-  if (planet.type === PlanetType.IceGiant) {
-    // Ice giants (Uranus/Neptune): blue/cyan tones
-    return [
-      new THREE.Vector3(0.4, 0.6, 0.9),   // Light blue
-      new THREE.Vector3(0.2, 0.4, 0.7),   // Medium blue
-      new THREE.Vector3(0.6, 0.8, 1.0),   // Pale cyan
-    ];
-  }
-
-  // Gas giants (Jupiter/Saturn): warm tones with strong contrast, darker overall
-  if (comp.hydrogen && comp.hydrogen > 0.7) {
-    // Jupiter-like: orange/brown/cream - darker for more realistic appearance
-    return [
-      new THREE.Vector3(0.65, 0.35, 0.12),  // Deep orange (darker)
-      new THREE.Vector3(0.40, 0.25, 0.15),  // Dark brown (darker)
-      new THREE.Vector3(0.70, 0.55, 0.40),  // Light tan (darker)
-    ];
-  }
-
-  // Default gas giant: neutral tones with contrast, darker
-  return [
-    new THREE.Vector3(0.60, 0.48, 0.32),  // Medium tan (darker)
-    new THREE.Vector3(0.38, 0.30, 0.22),  // Dark brown (darker)
-    new THREE.Vector3(0.68, 0.55, 0.38),  // Light tan (darker)
-  ];
-}
-
-/**
  * Get base terrain color for moons based on parent planet and temperature
  *
  * @param moon - Moon data
@@ -444,7 +409,7 @@ export function derivePlanetUniforms(
   // ========================================================================
 
   let iceSize = 0.0;
-  let iceRoughness = 0.3;
+  const iceRoughness = 0.3;
   const iceColor = new THREE.Vector3(0.91, 0.96, 0.97); // White
 
   if (planet.type === PlanetType.Rocky && waterCoverage > 0.0) {
@@ -728,13 +693,9 @@ export function deriveMoonUniforms(
  * Based on unified demo preset data.
  *
  * @param star - Star data
- * @param camera - Camera (no longer needed but kept for compatibility)
  * @returns Uniforms object for temperature-based star shader
  */
-export function deriveStarUniforms(
-  star: Star,
-  _camera: THREE.Camera
-): StarUniforms {
+export function deriveStarUniforms(star: Star): StarUniforms {
   // Generate seed from star ID for deterministic variation
   const seed = hashString(star.id);
   const rng = new SeededRandom(seed);

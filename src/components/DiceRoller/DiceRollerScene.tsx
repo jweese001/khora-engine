@@ -70,9 +70,14 @@ export function DiceRollerScene({ onRollComplete }: DiceRollerSceneProps) {
   const currentTargetColorRef = useRef(BABYBLUE_COLOR);
   const sequenceDurationRef = useRef(0);
   const rollCompleteRef = useRef(false);
+  const onRollCompleteRef = useRef(onRollComplete);
 
   const [runningTotal, setRunningTotal] = useState(0);
   const [landedCubes, setLandedCubes] = useState<Set<number>>(new Set());
+
+  useEffect(() => {
+    onRollCompleteRef.current = onRollComplete;
+  }, [onRollComplete]);
 
   // ============================================================================
   // INITIALIZATION
@@ -252,7 +257,7 @@ export function DiceRollerScene({ onRollComplete }: DiceRollerSceneProps) {
 
       // Report result after short delay for dramatic effect
       setTimeout(() => {
-        onRollComplete(result);
+        onRollCompleteRef.current(result);
       }, 1000);
     }
 
@@ -406,8 +411,8 @@ export function DiceRollerScene({ onRollComplete }: DiceRollerSceneProps) {
       if (animationIdRef.current) {
         cancelAnimationFrame(animationIdRef.current);
       }
-      if (renderer && containerRef.current?.contains(renderer.domElement)) {
-        containerRef.current.removeChild(renderer.domElement);
+      if (renderer && container.contains(renderer.domElement)) {
+        container.removeChild(renderer.domElement);
       }
       renderer?.dispose();
       controls?.dispose();

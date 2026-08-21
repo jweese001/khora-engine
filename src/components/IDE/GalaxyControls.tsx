@@ -17,13 +17,10 @@ import { useGalaxyStore } from '../../store/galaxy-store';
 import { LayerSelector } from './LayerSelector';
 
 interface GalaxyControlsProps {
-  // Legacy props (optional for backward compatibility)
   galaxy?: Galaxy;
-  onConfigChange?: (config: Partial<GalaxyConfig>) => void;
-  onReset?: () => void;
 }
 
-export function GalaxyControls({ galaxy, onConfigChange, onReset }: GalaxyControlsProps) {
+export function GalaxyControls({ galaxy }: GalaxyControlsProps) {
   const [activeColorPicker, setActiveColorPicker] = useState<string | null>(null);
 
   // Multi-layer galaxy system (Phase 2.5)
@@ -59,15 +56,9 @@ export function GalaxyControls({ galaxy, onConfigChange, onReset }: GalaxyContro
     return new THREE.Color(hex);
   };
 
-  // Apply config change to active layer (with legacy support)
+  // Visual layer configuration is owned exclusively by galaxy-store.
   const applyConfigChange = (config: Partial<GalaxyConfig>) => {
-    // Use multi-layer store
     updateLayerConfig(activeLayerId, config);
-
-    // Also call legacy callback if provided
-    if (onConfigChange) {
-      onConfigChange(config);
-    }
   };
 
   const handleColorChange = (colorName: string, hex: string) => {
@@ -84,16 +75,8 @@ export function GalaxyControls({ galaxy, onConfigChange, onReset }: GalaxyContro
   };
 
   const handleReset = () => {
-    // Reset active layer
     resetLayer(activeLayerId);
-
-    // Reset local state
     setCurrentType(activeLayer.config.type || 'spiral');
-
-    // Call legacy callback if provided
-    if (onReset) {
-      onReset();
-    }
   };
 
   return (

@@ -10,7 +10,7 @@ import { create } from 'zustand';
 import type * as THREE from 'three';
 import type { RotationalElements, StarSystem } from '../types/celestial-bodies';
 import type { Galaxy } from '../types/galaxy';
-import type { GalaxyConfig } from '../rendering/GalaxyParticleSystem';
+import type { SelectedObject, UniformOverrideValue } from '../types/scene';
 import { generateSystem as buildSystem } from '../generation/system-generator';
 import { generateGalaxy } from '../generation/galaxy-generator';
 import { useGalaxyStore } from './galaxy-store';
@@ -18,15 +18,6 @@ import { useGalaxyStore } from './galaxy-store';
 // ============================================================================
 // Store State Interface
 // ============================================================================
-
-/**
- * Selected object information for IDE display
- */
-interface SelectedObject {
-  type: 'star' | 'planet' | 'moon';
-  data: any; // Will be Star, Planet, or Moon
-  material?: THREE.Material; // Reference to Three.js material (for shader inspection)
-}
 
 /**
  * View mode for the application
@@ -42,7 +33,7 @@ export type AppMode = 'landing' | 'diceRoll' | 'architect' | 'explorer';
  * Uniform override for a celestial body (Phase 3: Architect Mode)
  */
 export interface UniformOverrides {
-  [uniformName: string]: any;
+  [uniformName: string]: UniformOverrideValue;
 }
 
 export type PlanetMotionOverrides = Partial<RotationalElements>;
@@ -80,9 +71,6 @@ interface SystemStore {
 
   /** Currently focused system within galaxy (for system-detail view) */
   focusedSystemIndex: number | null;
-
-  /** Custom galaxy particle system configuration (overrides procedural defaults) */
-  galaxyConfig: Partial<GalaxyConfig> | null;
 
   // ===== Simulation Time State =====
 
@@ -214,17 +202,6 @@ interface SystemStore {
   toggleControlDrawer: () => void;
 
   /**
-   * Update galaxy particle system configuration
-   * @param config - Partial galaxy config to merge with current settings
-   */
-  updateGalaxyConfig: (config: Partial<GalaxyConfig>) => void;
-
-  /**
-   * Reset galaxy configuration to procedural defaults
-   */
-  resetGalaxyConfig: () => void;
-
-  /**
    * Toggle IDE panel open/closed
    */
   toggleIDE: () => void;
@@ -265,7 +242,7 @@ interface SystemStore {
    * @param uniformName - Name of the uniform to update
    * @param value - New value for the uniform
    */
-  updateUniform: (objectId: string, uniformName: string, value: any) => void;
+  updateUniform: (objectId: string, uniformName: string, value: UniformOverrideValue) => void;
 
   /**
    * Reset all shader uniforms for an object to procedural defaults
@@ -304,7 +281,6 @@ export const useSystemStore = create<SystemStore>((set, get) => ({
   currentGalaxy: null,
   viewMode: 'system',
   focusedSystemIndex: null,
-  galaxyConfig: null,
   simulationTimeDays: 0,
   timeScale: 1,
   isTimePaused: true,
@@ -575,24 +551,9 @@ export const useSystemStore = create<SystemStore>((set, get) => ({
     set((state) => ({ controlDrawerOpen: !state.controlDrawerOpen }));
   },
 
-  updateGalaxyConfig: (config: Partial<GalaxyConfig>) => {
-    const { galaxyConfig } = get();
-
-    // Merge with existing config
-    const newConfig = { ...galaxyConfig, ...config };
-
-    console.log('[Store] Updating galaxy config:', config);
-    set({ galaxyConfig: newConfig });
-  },
-
-  resetGalaxyConfig: () => {
-    console.log('[Store] Resetting galaxy config to defaults');
-    set({ galaxyConfig: null });
-  },
-
   // ===== Phase 3: Architect Mode Actions =====
 
-  updateUniform: (objectId: string, uniformName: string, value: any) => {
+  updateUniform: (objectId: string, uniformName: string, value: UniformOverrideValue) => {
     const { uniformOverrides } = get();
 
     // Get existing overrides for this object or create new map
